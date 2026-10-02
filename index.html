@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SafeSync는 Windows 파일을 로컬, 네트워크 드라이브 또는 Google Drive에 안전하게 백업하는 개인용 애플리케이션입니다.">
+  <title>SafeSync | 개인용 Windows 자동 백업</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --background: #f6f8fc;
+      --surface: #ffffff;
+      --surface-soft: #eef4ff;
+      --text: #152033;
+      --muted: #5d687a;
+      --line: #dfe5ee;
+      --primary: #2563eb;
+      --primary-dark: #1748b8;
+      --success: #13795b;
+      --shadow: 0 18px 50px rgba(28, 45, 77, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+        "Apple SD Gothic Neo", sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      width: min(1080px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: color-mix(in srgb, var(--background) 88%, transparent);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(14px);
+    }
+
+    nav {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      color: var(--text);
+      font-weight: 750;
+      text-decoration: none;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 36px;
+      height: 36px;
+      place-items: center;
+      color: white;
+      background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+      border-radius: 11px;
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .nav-links a { text-decoration: none; }
+    .nav-links a:hover { color: var(--primary); }
+
+    .hero {
+      padding: 96px 0 72px;
+      text-align: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding: 7px 12px;
+      color: var(--primary-dark);
+      background: var(--surface-soft);
+      border: 1px solid #cddcff;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+
+    .eyebrow::before {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      content: "";
+    }
+
+    h1, h2, h3 { line-height: 1.3; letter-spacing: -0.035em; }
+
+    h1 {
+      max-width: 820px;
+      margin: 0 auto;
+      font-size: clamp(2.5rem, 7vw, 4.8rem);
+    }
+
+    .hero p {
+      max-width: 700px;
+      margin: 24px auto 0;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+    }
+
+    .hero-actions {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 34px;
+    }
+
+    .button {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      padding: 0 20px;
+      border-radius: 11px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .button-primary { color: white; background: var(--primary); }
+    .button-primary:hover { background: var(--primary-dark); }
+    .button-secondary { background: var(--surface); border: 1px solid var(--line); }
+
+    section { padding: 72px 0; }
+    .section-head { max-width: 700px; margin-bottom: 32px; }
+    .section-head h2 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.7rem); }
+    .section-head p { margin: 12px 0 0; color: var(--muted); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+
+    .card {
+      padding: 26px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 7px 24px rgba(28, 45, 77, 0.055);
+    }
+
+    .card-icon {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      margin-bottom: 18px;
+      color: var(--primary);
+      background: var(--surface-soft);
+      border-radius: 11px;
+      font-weight: 800;
+    }
+
+    .card h3 { margin: 0 0 8px; font-size: 1.12rem; }
+    .card p { margin: 0; color: var(--muted); font-size: 0.96rem; }
+
+    .drive-panel {
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 42px;
+      align-items: center;
+      padding: 44px;
+      background: linear-gradient(145deg, #12213e, #1d3260);
+      color: white;
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .drive-panel h2 { margin: 0; font-size: clamp(1.9rem, 4vw, 2.6rem); }
+    .drive-panel p { color: #cfdaee; }
+
+    .permission-list {
+      display: grid;
+      gap: 13px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .permission-list li {
+      position: relative;
+      padding: 16px 16px 16px 46px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+    }
+
+    .permission-list li::before {
+      position: absolute;
+      left: 17px;
+      top: 16px;
+      color: #78e1bd;
+      font-weight: 900;
+      content: "✓";
+    }
+
+    .privacy-box {
+      padding: 40px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .privacy-box h2 { margin-top: 0; }
+    .privacy-box p { color: var(--muted); }
+    .privacy-points { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0; }
+
+    .pill {
+      padding: 7px 11px;
+      color: var(--success);
+      background: color-mix(in srgb, var(--success) 9%, var(--surface));
+      border: 1px solid color-mix(in srgb, var(--success) 28%, var(--surface));
+      border-radius: 999px;
+      font-size: 0.89rem;
+      font-weight: 700;
+    }
+
+    footer {
+      padding: 32px 0 44px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 0.92rem;
+    }
+
+    .footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    footer a { color: var(--primary); }
+
+    @media (max-width: 820px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+      .drive-panel { grid-template-columns: 1fr; padding: 32px; }
+    }
+
+    @media (max-width: 600px) {
+      .wrap { width: min(100% - 28px, 1080px); }
+      .nav-links a:not(:last-child) { display: none; }
+      .hero { padding: 72px 0 50px; }
+      section { padding: 52px 0; }
+      .grid { grid-template-columns: 1fr; }
+      .privacy-box { padding: 28px 22px; }
+      .footer-row { align-items: flex-start; flex-direction: column; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #0f1521;
+        --surface: #171f2e;
+        --surface-soft: #192945;
+        --text: #edf2fb;
+        --muted: #aeb8ca;
+        --line: #303a4d;
+        --primary: #6ea0ff;
+        --primary-dark: #91b7ff;
+        --success: #65d8af;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+      }
+      .eyebrow { border-color: #294778; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="wrap" aria-label="주요 메뉴">
+      <a class="brand" href="./" aria-label="SafeSync 홈">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>SafeSync</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">주요 기능</a>
+        <a href="#google-drive">Google Drive</a>
+        <a href="privacy.html">개인정보처리방침</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero wrap">
+      <span class="eyebrow">개인용 Windows 백업 도구</span>
+      <h1>중요한 파일을<br>필요한 곳에 안전하게</h1>
+      <p>
+        SafeSync는 지정한 폴더의 변경을 감지하거나 정해진 시간에 백업을 실행하고,
+        로컬·네트워크 드라이브와 Google Drive에 파일을 보관하도록 설계된 개인용
+        애플리케이션입니다.
+      </p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="#features">기능 살펴보기</a>
+        <a class="button button-secondary" href="privacy.html">개인정보처리방침</a>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>백업은 자동으로, 판단은 투명하게</h2>
+          <p>백업이 필요한 순간을 감지하고 파일 상태를 비교해 필요한 작업만 수행합니다.</p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">01</div>
+            <h3>자동 실행</h3>
+            <p>파일시스템 변경 감지 또는 사용자가 정한 일정에 따라 백업 작업을 자동으로 실행합니다.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">02</div>
+            <h3>파일 비교</h3>
+            <p>만든 시간, 수정 시간과 크기를 비교해 최신 파일만 복사하고 같은 파일은 건너뜁니다.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">03</div>
+            <h3>충돌 알림</h3>
+            <p>같은 파일로 보이지만 크기가 다르면 사용자에게 알리고, 다른 파일의 백업은 계속합니다.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">04</div>
+            <h3>다양한 저장 위치</h3>
+            <p>로컬 드라이브, 네트워크 드라이브 또는 사용자가 연결한 Google Drive를 선택할 수 있습니다.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">05</div>
+            <h3>백업 휴지통</h3>
+            <p>삭제되는 백업 파일을 별도 휴지통에 보관하고 최대 100일 후 정리하도록 설계했습니다.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon" aria-hidden="true">06</div>
+            <h3>개인 중심 설계</h3>
+            <p>사용자가 지정한 위치만 처리하며, 광고나 행동 추적을 목적으로 파일 정보를 사용하지 않습니다.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="google-drive">
+      <div class="wrap">
+        <div class="drive-panel">
+          <div>
+            <h2>Google Drive 권한을 요청하는 이유</h2>
+            <p>
+              SafeSync는 사용자가 Google Drive 백업을 선택한 경우에만 Google 계정 연결을
+              요청합니다. 승인된 권한은 백업 파일을 만들고, 갱신하고, 복원하거나 정리하는
+              목적으로만 사용됩니다.
+            </p>
+          </div>
+          <ul class="permission-list">
+            <li>사용자가 선택한 Google 계정에 백업 파일 업로드</li>
+            <li>SafeSync가 만든 백업 파일과 폴더의 상태 확인 및 갱신</li>
+            <li>사용자가 요청한 복원·삭제·휴지통 보존 작업 수행</li>
+            <li>광고, 판매 또는 사용자 프로파일링 목적으로 사용하지 않음</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="privacy">
+      <div class="wrap">
+        <div class="privacy-box">
+          <h2>파일과 인증 정보는 사용자가 통제합니다</h2>
+          <p>
+            SafeSync는 별도의 중앙 서버를 통해 사용자의 파일 내용이나 Google 인증 정보를
+            수집하지 않습니다. 설정과 실행 기록은 사용자 PC에 저장되고, 백업 파일은 사용자가
+            선택한 저장 위치로 직접 전송됩니다. Google 계정 접근 권한은 언제든지 철회할 수 있습니다.
+          </p>
+          <div class="privacy-points" aria-label="개인정보 보호 원칙">
+            <span class="pill">광고 없음</span>
+            <span class="pill">행동 추적 없음</span>
+            <span class="pill">파일 판매 없음</span>
+            <span class="pill">권한 철회 가능</span>
+          </div>
+          <a class="button button-primary" href="privacy.html">개인정보처리방침 전문 보기</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-row">
+      <span>&copy; 2026 SafeSync. 개인용 Windows 자동 백업 애플리케이션.</span>
+      <a href="privacy.html">개인정보처리방침</a>
+    </div>
+  </footer>
+</body>
+</html>
