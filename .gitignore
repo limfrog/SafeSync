@@ -1,0 +1,28 @@
+# User-specific runtime data, credentials, snapshots, logs and test output
+error.log
+*.log
+*.tmp
+*.safesync-test-sandbox
+secrets.key
+config.json
+manifests/
+progress/
+results/
+
+# Locally generated app/installer output (versioned handoff binaries live in dist/)
+outputs/SafeSync/*.exe
+outputs/SafeSync/*.dll
+outputs/SafeSync-Setup*.exe
+outputs/SafeSync-Windows*.zip
+work/packaging/*.exe
+work/packaging/*.zip
+work/packaging/*.sha256
+work/packaging/*-preview.png
+work/packaging/work/
+
+# Keep handoff source and functional tests; exclude local scratch/fixture folders
+work/*/
+!work/packaging/
+work/packaging/*/
+work/safesync-*-preview.*
+work/safesync-tray-*.png
