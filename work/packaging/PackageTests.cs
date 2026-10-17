@@ -96,7 +96,7 @@ internal static class PackageTests
             sandbox = Path.GetFullPath(args[1]); Directory.CreateDirectory(sandbox);
             File.WriteAllText(Path.Combine(sandbox, ".safesync-test-sandbox"), "SafeSync isolated packaging test");
             package = File.ReadAllBytes(Path.Combine(build, "payload.zip")); manifest = File.ReadAllText(Path.Combine(build, "payload.sha256"));
-            Check(InstallerCore.ReadHashes(manifest).Count == 10, "Hash manifest missing files");
+            Check(InstallerCore.ReadHashes(manifest).Count == InstallerCore.PayloadNames.Length, "Hash manifest missing files");
             string settings = Path.Combine(sandbox, "preserved-settings.json"); File.WriteAllText(settings, "{\"secret\":\"test-only\",\"jobs\":[1]}");
             string backups = Path.Combine(sandbox, "preserved-backup.txt"); File.WriteAllText(backups, "DO NOT TOUCH");
             string settingsHash = InstallerCore.Hash(settings), backupHash = InstallerCore.Hash(backups);

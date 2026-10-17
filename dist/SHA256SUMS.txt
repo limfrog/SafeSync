@@ -1,2 +1,4 @@
 71c8e12bdd3012c549fd5bc2faa97df814ecc58c4faf1b5177ef1e48a4172657  SafeSync-Setup-1.9.10.exe
 fc4f3152ed71693427f33553ad9e8a0a3d371ca83641889f3dfe811a9dd768a0  SafeSync-Windows-1.9.10.zip
+64886892d62cfd6d9aa1abadeaf2f5d863d9e364cf7fe8fb095654631be3d261  SafeSync-Setup-1.9.11.exe
+686ecd920a5f497fc85018563e25a59a95ada17660cb5390ea431f9d2e0a9cda  SafeSync-Windows-1.9.11.zip

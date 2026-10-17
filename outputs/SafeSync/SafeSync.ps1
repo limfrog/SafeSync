@@ -16,7 +16,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $script:AppName = 'SafeSync'
-$script:AppVersion = '1.9.10'
+$script:AppVersion = '1.9.11'
 $script:ScriptPath = $MyInvocation.MyCommand.Path
 if (-not [string]::IsNullOrWhiteSpace($WorkerJobId) -or -not [string]::IsNullOrWhiteSpace($ReconcileJobId)) {
     # The OS keeps this shared named object alive until every detached worker exits.
@@ -168,6 +168,146 @@ function Save-Config([object]$Config) {
     $tempPath = "$($script:ConfigPath).tmp"
     $Config | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $tempPath -Encoding UTF8
     Move-Item -LiteralPath $tempPath -Destination $script:ConfigPath -Force
+}
+
+function New-SafeSyncJobListDocument([object[]]$Jobs) {
+    $portableJobs = @(
+        foreach ($job in @($Jobs)) {
+            [pscustomobject]@{
+                Id = [string]$job.Id; Name = [string]$job.Name
+                Source = [string]$job.Source; DestinationType = if ($null -ne $job.PSObject.Properties['DestinationType']) { [string]$job.DestinationType } else { 'Local' }
+                Destination = [string]$job.Destination
+                CloudFolderId = if ($null -ne $job.PSObject.Properties['CloudFolderId']) { [string]$job.CloudFolderId } else { '' }
+                TriggerType = [string]$job.TriggerType; ScheduleTime = [string]$job.ScheduleTime
+                MirrorDeletes = [bool]$job.MirrorDeletes; Paused = [bool]$job.Paused
+            }
+        }
+    )
+    return [pscustomobject]@{ Format = 'SafeSyncJobList'; Version = 1; ExportedAtUtc = [datetime]::UtcNow.ToString('o'); Jobs = [object[]]$portableJobs }
+}
+
+function Save-SafeSyncJobListDocument([object[]]$Jobs, [string]$Path) {
+    $document = New-SafeSyncJobListDocument $Jobs
+    $parent = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) { throw '저장할 폴더에 접근할 수 없습니다.' }
+    $tempPath = Join-Path $parent ('.safesync-jobs-' + [guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        $document | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $tempPath -Encoding UTF8
+        Move-Item -LiteralPath $tempPath -Destination $Path -Force
+    }
+    finally { if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue } }
+}
+
+function Read-SafeSyncJobListDocument([string]$Path) {
+    $file = Get-Item -LiteralPath $Path -ErrorAction Stop
+    if ($file.Length -gt 10MB) { throw '작업 목록 파일이 너무 큽니다(최대 10 MB).' }
+    $document = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($null -eq $document -or [string]$document.Format -cne 'SafeSyncJobList' -or [string]$document.Version -ne '1' -or $null -eq $document.PSObject.Properties['Jobs'] -or $null -eq $document.Jobs -or $document.Jobs -isnot [array]) {
+        throw 'SafeSync 작업 목록 파일 형식이 아닙니다.'
+    }
+    if (@($document.Jobs).Count -gt 1000) { throw '작업은 최대 1000개까지 가져올 수 있습니다.' }
+    $ids = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $validated = New-Object System.Collections.Generic.List[object]
+    foreach ($job in @($document.Jobs)) {
+        if ($null -eq $job) { throw '빈 작업 항목이 있습니다.' }
+        foreach ($field in @('Id','Name','Source','DestinationType','Destination','CloudFolderId','TriggerType','ScheduleTime','MirrorDeletes','Paused')) {
+            if ($null -eq $job.PSObject.Properties[$field]) { throw "작업에 '$field' 항목이 없습니다." }
+        }
+        $id = [string]$job.Id
+        if ($id -notmatch '^[a-zA-Z0-9_.-]{1,128}$' -or -not $ids.Add($id)) { throw "작업 ID가 잘못되었거나 중복되었습니다: $id" }
+        $name = [string]$job.Name
+        if ([string]::IsNullOrWhiteSpace($name) -or $name.Length -gt 200) { throw '작업 이름이 비어 있거나 너무 깁니다.' }
+        $source = [string]$job.Source
+        $destination = [string]$job.Destination
+        $type = [string]$job.DestinationType
+        if (@('Local','Dropbox','GoogleDrive') -cnotcontains $type) { throw "지원하지 않는 백업 위치입니다: $type" }
+        if ([string]::IsNullOrWhiteSpace($source) -or -not [System.IO.Path]::IsPathRooted($source)) { throw "원본 경로가 잘못되었습니다: $name" }
+        if ([string]::IsNullOrWhiteSpace($destination)) { throw "백업 위치가 비어 있습니다: $name" }
+        if ($type -eq 'Local') {
+            if (-not [System.IO.Path]::IsPathRooted($destination) -or (Test-PathRelationship $source $destination)) { throw "백업 경로가 잘못되었거나 원본과 겹칩니다: $name" }
+        }
+        elseif ([string]::IsNullOrWhiteSpace([string]$job.CloudFolderId)) { throw "클라우드 폴더 ID가 없습니다: $name" }
+        if (@('Realtime','Scheduled') -cnotcontains [string]$job.TriggerType) { throw "실행 방식이 잘못되었습니다: $name" }
+        if ([string]$job.ScheduleTime -notmatch '^([01]\d|2[0-3]):[0-5]\d$') { throw "예약 시간이 잘못되었습니다: $name" }
+        if ($job.MirrorDeletes -isnot [bool] -or $job.Paused -isnot [bool]) { throw "작업 설정의 참/거짓 값이 잘못되었습니다: $name" }
+        $validated.Add([pscustomobject]@{
+            Id=$id; Name=$name; Source=$source; DestinationType=$type; Destination=$destination
+            CloudFolderId=[string]$job.CloudFolderId; TriggerType=[string]$job.TriggerType
+            ScheduleTime=[string]$job.ScheduleTime; MirrorDeletes=[bool]$job.MirrorDeletes
+            Paused=[bool]$job.Paused; LastScheduledRun=''
+        })
+    }
+    return $validated.ToArray()
+}
+
+function Show-SafeSyncJobListExport {
+    $dialog = New-Object Microsoft.Win32.SaveFileDialog
+    $dialog.Title = '작업 목록 내보내기'
+    $dialog.Filter = 'SafeSync 작업 목록 (*.safesync-jobs.json)|*.safesync-jobs.json|JSON 파일 (*.json)|*.json'
+    $dialog.FileName = 'SafeSync-jobs-' + (Get-Date -Format 'yyyyMMdd') + '.safesync-jobs.json'
+    if ($dialog.ShowDialog($script:Window) -ne $true) { return }
+    try {
+        Save-SafeSyncJobListDocument @($script:Config.Jobs) ([string]$dialog.FileName)
+        Add-Activity "작업 목록 $(@($script:Config.Jobs).Count)개를 내보냈습니다."
+        [System.Windows.MessageBox]::Show($script:Window, "작업 목록을 저장했습니다.`r`n`r`n$($dialog.FileName)`r`n`r`n클라우드 인증 정보, 스냅샷, 실제 백업 파일은 포함되지 않습니다.", '내보내기 완료', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+    }
+    catch { [System.Windows.MessageBox]::Show($script:Window, $_.Exception.Message, '내보내기 오류', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null }
+}
+
+function Show-SafeSyncJobListImport {
+    if ($script:RunningJobs.Count -gt 0 -or $script:ReconciliationJobs.Count -gt 0) {
+        [System.Windows.MessageBox]::Show($script:Window, '백업이나 시작 시 확인 작업이 끝난 뒤 작업 목록을 가져오세요.', '가져오기 대기', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+        return
+    }
+    $dialog = New-Object Microsoft.Win32.OpenFileDialog
+    $dialog.Title = '작업 목록 가져오기'
+    $dialog.Filter = 'SafeSync 작업 목록 (*.safesync-jobs.json)|*.safesync-jobs.json|JSON 파일 (*.json)|*.json'
+    if ($dialog.ShowDialog($script:Window) -ne $true) { return }
+    try {
+        $imported = @(Read-SafeSyncJobListDocument ([string]$dialog.FileName))
+        $answer = [System.Windows.MessageBox]::Show($script:Window, "작업 $($imported.Count)개를 가져와 현재 작업 $(@($script:Config.Jobs).Count)개를 교체할까요?`r`n`r`n현재 목록은 교체 전에 자동 보관됩니다. 환경설정과 클라우드 계정은 그대로 유지됩니다. 원본·백업 경로와 클라우드 연결 상태는 가져온 후 확인하세요.", '작업 목록 가져오기', [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
+        if ($answer -ne [System.Windows.MessageBoxResult]::Yes) { return }
+        if ($script:RunningJobs.Count -gt 0 -or $script:ReconciliationJobs.Count -gt 0) { throw '작업이 시작되었습니다. 완료된 뒤 다시 가져오세요.' }
+        $backupFolder = Join-Path $script:DataRoot 'job-list-backups'
+        [void][System.IO.Directory]::CreateDirectory($backupFolder)
+        $backupPath = Join-Path $backupFolder ('SafeSync-jobs-before-import-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8) + '.safesync-jobs.json')
+        Save-SafeSyncJobListDocument @($script:Config.Jobs) $backupPath
+        # A snapshot belongs to a particular source and destination. Reuse its ID
+        # only when the same job is still present with the same endpoints.
+        $existing = @{}
+        foreach ($job in @($script:Config.Jobs)) { $existing[[string]$job.Id] = $job }
+        $newJobCount = 0
+        foreach ($job in $imported) {
+            $same = $false
+            if ($existing.ContainsKey([string]$job.Id)) {
+                $old = $existing[[string]$job.Id]
+                $oldType = if ($null -ne $old.PSObject.Properties['DestinationType']) { [string]$old.DestinationType } else { 'Local' }
+                $oldCloudFolderId = if ($null -ne $old.PSObject.Properties['CloudFolderId']) { [string]$old.CloudFolderId } else { '' }
+                $same = ($oldType -eq [string]$job.DestinationType -and [string]$old.Source -eq [string]$job.Source -and [string]$old.Destination -eq [string]$job.Destination -and $oldCloudFolderId -eq [string]$job.CloudFolderId)
+                if ($same -and $null -ne $old.PSObject.Properties['LastScheduledRun']) { $job.LastScheduledRun = [string]$old.LastScheduledRun }
+            }
+            if (-not $same) { $job.Id = [guid]::NewGuid().ToString(); $newJobCount++ }
+        }
+        $previousJobs = @($script:Config.Jobs)
+        Stop-Watchers
+        try {
+            $script:Config.Jobs = [object[]]$imported
+            Save-Config $script:Config
+        }
+        catch {
+            $script:Config.Jobs = $previousJobs
+            Start-Watchers
+            throw
+        }
+        foreach ($key in @($script:PendingChanges.Keys)) { $value = [datetime]::MinValue; $script:PendingChanges.TryRemove($key, [ref]$value) | Out-Null }
+        foreach ($key in @($script:ChangedPaths.Keys)) { $value = [datetime]::MinValue; $script:ChangedPaths.TryRemove($key, [ref]$value) | Out-Null }
+        $script:LastStatus = @{}
+        Refresh-JobsGrid
+        Start-Watchers
+        Add-Activity "작업 목록 $($imported.Count)개를 가져왔습니다. 새 작업 $newJobCount개는 새 스냅샷으로 시작합니다."
+        [System.Windows.MessageBox]::Show($script:Window, "작업 목록을 가져왔습니다.`r`n`r`n기존 목록 보관 위치: $backupPath`r`n`r`n새로 등록된 작업은 처음 실행할 때 파일을 다시 확인합니다. 클라우드 작업은 이 PC에서 계정을 연결해야 합니다.", '가져오기 완료', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+    }
+    catch { [System.Windows.MessageBox]::Show($script:Window, $_.Exception.Message, '가져오기 오류', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error) | Out-Null }
 }
 
 function Get-SafeSyncLayoutNumber([object]$Layout, [string]$Name, [double]$Default, [double]$Minimum, [double]$Maximum) {
@@ -1974,7 +2114,10 @@ $mainXaml = @'
     <Grid.RowDefinitions><RowDefinition Height="29"/><RowDefinition Height="Auto"/><RowDefinition x:Name="MainJobsRow" Height="*" MinHeight="110"/><RowDefinition Height="8"/><RowDefinition x:Name="MainActivityRow" Height="155" MinHeight="56"/><RowDefinition Height="26"/></Grid.RowDefinitions>
     <Menu Grid.Row="0" Background="{DynamicResource SafeSyncHeadingBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" BorderBrush="{DynamicResource SafeSyncBorderBrush}" BorderThickness="1">
       <MenuItem Header="파일" Style="{StaticResource MenuHeaderItem}">
-        <MenuItem x:Name="MenuAddJobItem" Header="새 백업 작업"/><Separator/><MenuItem x:Name="MenuExitItem" Header="프로그램 종료"/>
+        <MenuItem x:Name="MenuAddJobItem" Header="새 백업 작업"/><Separator/>
+        <MenuItem x:Name="MenuExportJobsItem" Header="작업 목록 내보내기..."/>
+        <MenuItem x:Name="MenuImportJobsItem" Header="작업 목록 가져오기..."/>
+        <Separator/><MenuItem x:Name="MenuExitItem" Header="프로그램 종료"/>
       </MenuItem>
       <MenuItem Header="작업" Style="{StaticResource MenuHeaderItem}">
         <MenuItem x:Name="EditButton" Header="작업 수정"/><MenuItem x:Name="DeleteButton" Header="작업 삭제"/><Separator/>
@@ -4109,6 +4252,8 @@ $script:ProgressButton.Add_Click({ Toggle-SafeSyncProgressWindow })
     $button = Find-Control 'AddButton'
     if ($null -ne $button -and $button.IsEnabled) { $button.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)) }
 })
+(Find-Control 'MenuExportJobsItem').Add_Click({ Show-SafeSyncJobListExport })
+(Find-Control 'MenuImportJobsItem').Add_Click({ Show-SafeSyncJobListImport })
 (Find-Control 'MenuProgressItem').Add_Click({ Toggle-SafeSyncProgressWindow })
 (Find-Control 'MenuMessagesItem').Add_Click({ Show-SafeSyncPendingNotices })
 (Find-Control 'MenuCloudAccountsItem').Add_Click({ Show-CloudAccountSettings })
