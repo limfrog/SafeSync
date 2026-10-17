@@ -16,7 +16,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $script:AppName = 'SafeSync'
-$script:AppVersion = '1.9.13'
+$script:AppVersion = '1.9.14'
 $script:ScriptPath = $MyInvocation.MyCommand.Path
 if (-not [string]::IsNullOrWhiteSpace($WorkerJobId) -or -not [string]::IsNullOrWhiteSpace($ReconcileJobId)) {
     # The OS keeps this shared named object alive until every detached worker exits.
@@ -2093,24 +2093,49 @@ $mainXaml = @'
       <Setter Property="Padding" Value="12,7"/><Setter Property="Margin" Value="0,0,6,0"/>
       <Setter Property="MinWidth" Value="84"/>
     </Style>
-    <Style x:Key="MenuHeaderItem" TargetType="MenuItem">
+    <Style x:Key="SafeSyncMenuItemStyle" TargetType="MenuItem">
+      <Setter Property="OverridesDefaultStyle" Value="True"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
       <Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/>
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="10,4"/><Setter Property="MinHeight" Value="28"/>
-    </Style>
-    <Style TargetType="MenuItem">
-      <Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/>
-      <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource SafeSyncMenuBorderBrush}"/>
-      <Setter Property="Padding" Value="8,3"/><Setter Property="MinWidth" Value="124"/><Setter Property="MinHeight" Value="27"/>
+      <Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FontSize" Value="13"/><Setter Property="Padding" Value="10,5"/><Setter Property="MinWidth" Value="124"/><Setter Property="MinHeight" Value="28"/>
       <Setter Property="HorizontalContentAlignment" Value="Left"/>
-      <Style.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter Property="Background" Value="{DynamicResource SafeSyncSubtleBrush}"/></Trigger></Style.Triggers>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type MenuItem}">
+        <Grid SnapsToDevicePixels="True">
+          <Border x:Name="MenuItemSurface" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <Grid x:Name="IconSlot" Width="18" Margin="0,0,6,0"><ContentPresenter x:Name="IconPresenter" ContentSource="Icon" VerticalAlignment="Center" HorizontalAlignment="Center"/><Path x:Name="MenuCheckMark" Data="M 1,5 L 4,8 L 10,1" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5" Width="11" Height="9" Visibility="Collapsed" VerticalAlignment="Center"/></Grid>
+              <ContentPresenter x:Name="MenuHeaderPresenter" Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+              <TextBlock x:Name="GestureText" Grid.Column="2" Text="{TemplateBinding InputGestureText}" Foreground="{TemplateBinding Foreground}" Opacity="0.72" Margin="18,0,0,0" VerticalAlignment="Center"/>
+              <Path x:Name="SubmenuArrow" Grid.Column="3" Data="M 0,0 L 4,4 L 0,8" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4" Width="5" Height="9" Margin="14,0,0,0" Visibility="Collapsed" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+          <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-1" VerticalOffset="-6" IsOpen="{Binding IsSubmenuOpen,RelativeSource={RelativeSource TemplatedParent}}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+            <Border x:Name="SubmenuSurface" Margin="6" Padding="5" MinWidth="160" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncMenuBorderBrush}" BorderThickness="1" CornerRadius="8">
+              <Border.Effect><DropShadowEffect Color="Black" BlurRadius="10" ShadowDepth="2" Opacity="0.16"/></Border.Effect>
+              <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" KeyboardNavigation.TabNavigation="Cycle"/></ScrollViewer>
+            </Border>
+          </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+          <Trigger Property="Icon" Value="{x:Null}"><Setter TargetName="IconSlot" Property="Visibility" Value="Collapsed"/></Trigger>
+          <Trigger Property="IsCheckable" Value="True"><Setter TargetName="IconSlot" Property="Visibility" Value="Visible"/></Trigger>
+          <Trigger Property="IsChecked" Value="True"><Setter TargetName="MenuCheckMark" Property="Visibility" Value="Visible"/><Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/></Trigger>
+          <Trigger Property="InputGestureText" Value=""><Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/></Trigger>
+          <Trigger Property="HasItems" Value="True"><Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/></Trigger>
+          <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsHighlighted" Value="True"/><Condition Property="IsEnabled" Value="True"/></MultiTrigger.Conditions><Setter Property="Background" Value="{DynamicResource SafeSyncAccentDarkBrush}"/><Setter Property="Foreground" Value="White"/></MultiTrigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource SafeSyncMutedBrush}"/><Setter TargetName="MenuItemSurface" Property="Opacity" Value="0.5"/></Trigger>
+          <Trigger Property="Role" Value="TopLevelHeader"><Setter TargetName="PART_Popup" Property="Placement" Value="Bottom"/><Setter TargetName="PART_Popup" Property="HorizontalOffset" Value="-6"/><Setter TargetName="PART_Popup" Property="VerticalOffset" Value="0"/><Setter TargetName="SubmenuArrow" Property="Visibility" Value="Collapsed"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="MenuItem" BasedOn="{StaticResource SafeSyncMenuItemStyle}"/>
+    <Style x:Key="MenuHeaderItem" TargetType="MenuItem" BasedOn="{StaticResource SafeSyncMenuItemStyle}">
+      <Setter Property="Padding" Value="10,4"/><Setter Property="MinWidth" Value="0"/>
     </Style>
     <Style TargetType="Menu"><Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/></Style>
-    <Style TargetType="ContextMenu"><Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncMenuBorderBrush}"/><Setter Property="BorderThickness" Value="1"/></Style>
-    <Style TargetType="Separator"><Setter Property="Background" Value="{DynamicResource SafeSyncBorderBrush}"/></Style>
+    <Style TargetType="ContextMenu"><Setter Property="OverridesDefaultStyle" Value="True"/><Setter Property="HasDropShadow" Value="False"/><Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncMenuBorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type ContextMenu}"><Border x:Name="MenuPopupSurface" Margin="6" Padding="5" MinWidth="160" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="10" ShadowDepth="2" Opacity="0.16"/></Border.Effect><ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" KeyboardNavigation.TabNavigation="Cycle"/></ScrollViewer></Border></ControlTemplate></Setter.Value></Setter></Style>
+    <Style TargetType="Separator"><Setter Property="OverridesDefaultStyle" Value="True"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type Separator}"><Border Height="1" Background="{DynamicResource SafeSyncBorderSoftBrush}" Margin="8,4"/></ControlTemplate></Setter.Value></Setter></Style>
     <Style TargetType="DataGridColumnHeader">
       <Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/><Setter Property="BorderThickness" Value="0,0,1,1"/><Setter Property="Padding" Value="10,7"/><Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type DataGridColumnHeader}"><Grid SnapsToDevicePixels="True"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" ContentStringFormat="{TemplateBinding ContentStringFormat}" RecognizesAccessKey="True"/></Border><Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"><Thumb.Template><ControlTemplate TargetType="{x:Type Thumb}"><Border Background="{TemplateBinding Background}"/></ControlTemplate></Thumb.Template></Thumb><Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"><Thumb.Template><ControlTemplate TargetType="{x:Type Thumb}"><Border Background="{TemplateBinding Background}"/></ControlTemplate></Thumb.Template></Thumb><Border HorizontalAlignment="Right" Width="1" Background="{DynamicResource SafeSyncBorderSoftBrush}"/></Grid></ControlTemplate></Setter.Value></Setter>
@@ -2148,6 +2173,7 @@ $mainXaml = @'
     </Grid>
     <DockPanel Grid.Row="2" LastChildFill="True" Margin="0,0,0,12">
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0">
+          <Button x:Name="TrashShortcutButton" Content="휴지통 관리" MinWidth="100" ToolTip="선택한 백업 작업의 휴지통을 엽니다."/>
           <Button x:Name="JobActionsButton" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사, 휴지통 관리 및 삭제">
             <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><MenuItem Header="휴지통 관리" Tag="TrashButton"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
           </Button>
@@ -2377,7 +2403,13 @@ function Update-SafeSyncMainPaneLimit {
     foreach ($row in $root.RowDefinitions) {
         if ($row -ne $script:MainJobsRow -and $row -ne $script:MainActivityRow) { $reserved += $row.ActualHeight }
     }
-    $script:MainActivityRow.MaxHeight = [Math]::Max($script:MainActivityRow.MinHeight, $root.ActualHeight - $reserved - $script:MainJobsRow.MinHeight)
+    $available = $root.ActualHeight
+    $parent = [System.Windows.Media.VisualTreeHelper]::GetParent($root)
+    if ($parent -is [System.Windows.FrameworkElement] -and $parent.ActualHeight -gt 0) {
+        $available = [Math]::Min($available, [Math]::Max(0, $parent.ActualHeight - $root.Margin.Top - $root.Margin.Bottom))
+    }
+    $limit = [Math]::Max($script:MainActivityRow.MinHeight, $available - $reserved - $script:MainJobsRow.MinHeight)
+    if ([Math]::Abs($script:MainActivityRow.MaxHeight - $limit) -gt 0.5) { $script:MainActivityRow.MaxHeight = $limit }
 }
 
 $script:LayoutSaveTimer.Add_Tick({ $script:LayoutSaveTimer.Stop(); Save-SafeSyncWindowLayout })
@@ -2944,6 +2976,7 @@ function Update-JobActionButtons {
     $script:RunButton.IsEnabled = $hasSelection -and -not $paused
     $script:FullScanButton.IsEnabled = $hasSelection -and -not $paused
     $script:TrashButton.IsEnabled = $hasSelection
+    (Find-Control 'TrashShortcutButton').IsEnabled = $hasSelection
     (Find-Control 'JobActionsButton').IsEnabled = $hasSelection
     foreach ($item in (Find-Control 'JobActionsButton').ContextMenu.Items) {
         if ($item -is [System.Windows.Controls.MenuItem]) { $item.IsEnabled = (Find-Control ([string]$item.Tag)).IsEnabled }
@@ -2952,6 +2985,9 @@ function Update-JobActionButtons {
 
 function Initialize-SafeSyncMainShortcuts {
     (Find-Control 'SettingsShortcutButton').Add_Click({ Show-ApplicationSettings })
+    (Find-Control 'TrashShortcutButton').Add_Click({
+        if ($script:TrashButton.IsEnabled) { $script:TrashButton.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.MenuItem]::ClickEvent)) }
+    })
     (Find-Control 'JobActionsButton').Add_Click({
         $button = Find-Control 'JobActionsButton'
         Update-JobActionButtons
@@ -4453,7 +4489,7 @@ $script:Window.Add_StateChanged({
 $script:Window.Add_IsVisibleChanged({ Request-SafeSyncProgressRefresh })
 $script:Window.Add_Activated({ if ($script:ProgressWindow.IsVisible) { $script:ProgressWindow.Topmost = $false } })
 $script:Window.Add_SizeChanged({ Request-SafeSyncWindowLayoutSave })
-$script:Window.FindName('MainLayoutRoot').Add_SizeChanged({ Update-SafeSyncMainPaneLimit })
+$script:Window.FindName('MainLayoutRoot').Add_LayoutUpdated({ Update-SafeSyncMainPaneLimit })
 $script:ProgressWindow.Add_SizeChanged({ Request-SafeSyncWindowLayoutSave })
 $script:MainLayoutSplitter.Add_DragCompleted({ Request-SafeSyncWindowLayoutSave })
 $script:ProgressLayoutSplitter.Add_DragCompleted({ Request-SafeSyncWindowLayoutSave })
