@@ -16,7 +16,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $script:AppName = 'SafeSync'
-$script:AppVersion = '1.9.12'
+$script:AppVersion = '1.9.13'
 $script:ScriptPath = $MyInvocation.MyCommand.Path
 if (-not [string]::IsNullOrWhiteSpace($WorkerJobId) -or -not [string]::IsNullOrWhiteSpace($ReconcileJobId)) {
     # The OS keeps this shared named object alive until every detached worker exits.
@@ -111,7 +111,7 @@ function New-DefaultConfig {
         SoundOnBackupComplete = $false
         ThemeMode = 'Light'
         WindowLayout = [pscustomobject]@{
-            MainWidth = 1080; MainHeight = 720; MainActivityHeight = 155
+            MainWidth = 1180; MainHeight = 720; MainActivityHeight = 155
             ProgressWidth = 1180; ProgressHeight = 720; ProgressLockedHeight = 125
         }
         Jobs = @()
@@ -1747,7 +1747,7 @@ function Update-SafeSyncNoticeIndicator {
     }
     $buttonVariable=Get-Variable -Name NotificationsButton -Scope Script -ErrorAction SilentlyContinue
     if($null -ne $buttonVariable -and $null -ne $script:NotificationsButton){
-        $script:NotificationsButton.Content=if($count -gt 0){"확인할 메시지 ($count)"}else{'확인할 메시지'}
+        $script:NotificationsButton.Content="확인할 메시지 $count"
         $script:NotificationsButton.IsEnabled=$count -gt 0
     }
 }
@@ -1852,6 +1852,9 @@ function Test-SafeSyncTrayWorkRunning {
 function Update-SafeSyncTrayIcon {
     if ($null -eq $script:NotifyIcon) { return }
     $count = @($script:PendingNotices).Count
+    $mainWindow = Get-Variable -Name Window -Scope Script -ErrorAction SilentlyContinue
+    $badge = if ($null -ne $mainWindow -and $null -ne $mainWindow.Value) { $mainWindow.Value.FindName('ServiceBadge') } else { $null }
+    if ($null -ne $badge) { $badge.Text = if (Test-SafeSyncTrayWorkRunning) { '● 백업 중' } else { '● 자동 검사 대기' } }
     if (Test-SafeSyncTrayWorkRunning) {
         Initialize-SafeSyncTrayAnimation
         if ($script:TrayAnimationFrames.Count -gt 0) {
@@ -2051,6 +2054,9 @@ function Apply-SafeSyncThemeToWindow([System.Windows.Window]$Window) {
         catch { }
     }
 
+    # The main screen uses dynamic resources throughout. Rewriting its visual
+    # children would replace row-selection bindings and style triggers locally.
+    if ($null -ne $Window.FindName('BrandImage')) { return }
     $queue = New-Object 'System.Collections.Generic.Queue[System.Windows.DependencyObject]'
     $queue.Enqueue($Window)
     while ($queue.Count -gt 0) {
@@ -2073,23 +2079,25 @@ function Apply-SafeSyncTheme {
 
 $mainXaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SafeSync 백업" Width="1080" Height="720" MinWidth="800" MinHeight="540"
-        WindowStartupLocation="CenterScreen" Background="{DynamicResource SafeSyncWindowBrush}" FontFamily="Segoe UI, Malgun Gothic">
+        Title="SafeSync 백업" Width="1180" Height="720" MinWidth="800" MinHeight="540"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource SafeSyncWindowBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" FontFamily="Segoe UI, Malgun Gothic">
   <Window.Resources>
     <Style TargetType="Button">
-      <Setter Property="Padding" Value="10,6"/><Setter Property="Margin" Value="0,0,4,0"/>
+      <Setter Property="Padding" Value="12,7"/><Setter Property="Margin" Value="0,0,6,0"/>
       <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/><Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="MinHeight" Value="30"/>
+      <Setter Property="MinHeight" Value="34"/><Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type Button}"><Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonBorder" Property="Opacity" Value="0.86"/></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonBorder" Property="Opacity" Value="0.70"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource SafeSyncAccentBrush}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="CommandButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-      <Setter Property="Padding" Value="11,6"/><Setter Property="Margin" Value="0,0,4,0"/>
+      <Setter Property="Padding" Value="12,7"/><Setter Property="Margin" Value="0,0,6,0"/>
       <Setter Property="MinWidth" Value="84"/>
     </Style>
     <Style x:Key="MenuHeaderItem" TargetType="MenuItem">
       <Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/>
-      <Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/>
+      <Setter Property="Background" Value="Transparent"/>
       <Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="0"/>
       <Setter Property="Padding" Value="10,4"/><Setter Property="MinHeight" Value="28"/>
     </Style>
     <Style TargetType="MenuItem">
@@ -2105,14 +2113,16 @@ $mainXaml = @'
     <Style TargetType="Separator"><Setter Property="Background" Value="{DynamicResource SafeSyncBorderBrush}"/></Style>
     <Style TargetType="DataGridColumnHeader">
       <Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/><Setter Property="BorderThickness" Value="0,0,1,1"/><Setter Property="Padding" Value="10,7"/><Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type DataGridColumnHeader}"><Grid SnapsToDevicePixels="True"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" ContentStringFormat="{TemplateBinding ContentStringFormat}" RecognizesAccessKey="True"/></Border><Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"/><Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"/><Border HorizontalAlignment="Right" Width="1" Background="{DynamicResource SafeSyncBorderSoftBrush}"/></Grid></ControlTemplate></Setter.Value></Setter>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type DataGridColumnHeader}"><Grid SnapsToDevicePixels="True"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" ContentStringFormat="{TemplateBinding ContentStringFormat}" RecognizesAccessKey="True"/></Border><Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"><Thumb.Template><ControlTemplate TargetType="{x:Type Thumb}"><Border Background="{TemplateBinding Background}"/></ControlTemplate></Thumb.Template></Thumb><Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"><Thumb.Template><ControlTemplate TargetType="{x:Type Thumb}"><Border Background="{TemplateBinding Background}"/></ControlTemplate></Thumb.Template></Thumb><Border HorizontalAlignment="Right" Width="1" Background="{DynamicResource SafeSyncBorderSoftBrush}"/></Grid></ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style TargetType="DataGridCell"><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/><Setter Property="BorderThickness" Value="0,0,1,1"/></Style>
+    <Style TargetType="DataGridRow"><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SafeSyncAccentDarkBrush}"/><Setter Property="Foreground" Value="White"/></Trigger></Style.Triggers></Style>
+    <Style TargetType="DataGridCell"><Setter Property="Foreground" Value="{Binding Foreground,RelativeSource={RelativeSource AncestorType={x:Type DataGridRow}}}"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type DataGridCell}"><Border Background="{TemplateBinding Background}"><ContentPresenter VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SafeSyncAccentDarkBrush}"/><Setter Property="Foreground" Value="White"/></Trigger></Style.Triggers></Style>
+    <Style x:Key="JobCellText" TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="8,0"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Text,RelativeSource={RelativeSource Self}}"/></Style>
     <Style TargetType="DataGridColumnHeadersPresenter"><Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/></Style>
   </Window.Resources>
-  <Grid Margin="14">
-    <Grid.RowDefinitions><RowDefinition Height="29"/><RowDefinition Height="Auto"/><RowDefinition x:Name="MainJobsRow" Height="*" MinHeight="110"/><RowDefinition Height="8"/><RowDefinition x:Name="MainActivityRow" Height="155" MinHeight="56"/><RowDefinition Height="26"/></Grid.RowDefinitions>
-    <Menu Grid.Row="0" Background="{DynamicResource SafeSyncHeadingBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" BorderBrush="{DynamicResource SafeSyncBorderBrush}" BorderThickness="1">
+  <Grid x:Name="MainLayoutRoot" Margin="16">
+    <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition x:Name="MainJobsRow" Height="*" MinHeight="110"/><RowDefinition Height="8"/><RowDefinition x:Name="MainActivityRow" Height="155" MinHeight="56"/><RowDefinition Height="26"/></Grid.RowDefinitions>
+    <Menu Grid.Row="0" Background="Transparent" Foreground="{DynamicResource SafeSyncTextBrush}" BorderThickness="0">
       <MenuItem Header="파일" Style="{StaticResource MenuHeaderItem}">
         <MenuItem x:Name="MenuAddJobItem" Header="새 백업 작업"/><Separator/>
         <MenuItem x:Name="MenuExportJobsItem" Header="작업 목록 내보내기..."/>
@@ -2127,49 +2137,68 @@ $mainXaml = @'
       <MenuItem Header="도구" Style="{StaticResource MenuHeaderItem}"><MenuItem x:Name="SettingsButton" Header="환경설정"/><MenuItem x:Name="MenuCloudAccountsItem" Header="클라우드 계정"/></MenuItem>
       <MenuItem Header="도움말" Style="{StaticResource MenuHeaderItem}"><MenuItem x:Name="MenuAboutItem" Header="SafeSync 정보"/></MenuItem>
     </Menu>
-    <Border Grid.Row="1" Background="{DynamicResource SafeSyncSubtleBrush}" BorderBrush="{DynamicResource SafeSyncBorderBrush}" BorderThickness="1,0,1,1" Padding="7" Margin="0,0,0,10">
-      <DockPanel LastChildFill="False">
-        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+    <Grid Grid.Row="1" Margin="8,10,8,18">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Image x:Name="BrandImage" Width="48" Height="48" Margin="0,0,12,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+      <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="SafeSync" FontSize="27" FontWeight="Bold" Foreground="{DynamicResource SafeSyncTextBrush}"/><TextBlock Text="파일을 안전하게, 백업은 자동으로" FontSize="13" Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,2,0,0"/></StackPanel>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock x:Name="ServiceBadge" Text="● 자동 검사 대기" Foreground="{DynamicResource SafeSyncSuccessTextBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
+        <Button x:Name="NotificationsButton" Content="확인할 메시지 0" IsEnabled="False" Margin="0"/>
+      </StackPanel>
+    </Grid>
+    <DockPanel Grid.Row="2" LastChildFill="True" Margin="0,0,0,12">
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0">
+          <Button x:Name="JobActionsButton" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사, 휴지통 관리 및 삭제">
+            <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><MenuItem Header="휴지통 관리" Tag="TrashButton"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
+          </Button>
+          <Button x:Name="SettingsShortcutButton" Width="36" Padding="8" Margin="0" ToolTip="환경설정" AutomationProperties.Name="환경설정"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16"/></Button>
+        </StackPanel>
+        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
           <Button x:Name="AddButton" Style="{StaticResource CommandButton}" Content="＋ 새 작업" Background="{DynamicResource SafeSyncSurfaceBrush}"/>
           <Button x:Name="RunButton" Style="{StaticResource CommandButton}" Content="▶ 지금 백업" ToolTip="저장된 변경 목록만 빠르게 확인하여 백업합니다." Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/>
-          <Button x:Name="PauseButton" Style="{StaticResource CommandButton}" Content="Ⅱ 일시정지"/>
+          <Button x:Name="PauseButton" Style="{StaticResource CommandButton}" Content="Ⅱ 일시정지" MinWidth="104"/>
           <Button x:Name="RunAllButton" Style="{StaticResource CommandButton}" Content="▶▶ 모든 작업" ToolTip="모든 작업에서 변경된 파일만 빠르게 백업합니다."/>
-          <Border Width="1" Height="24" Background="{DynamicResource SafeSyncBorderBrush}" Margin="5,3,8,3"/>
+          <Border Width="1" Height="22" Background="{DynamicResource SafeSyncBorderBrush}" Margin="5,6,11,6"/>
           <Button x:Name="ProgressButton" Style="{StaticResource CommandButton}" Content="동기화 상태" ToolTip="독립적인 동기화 상태 창을 열거나 닫습니다."/>
-        </StackPanel>
-        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-          <Border Background="{DynamicResource SafeSyncSuccessSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncSuccessSurfaceBrush}" BorderThickness="1" Padding="9,5" Margin="0,0,8,0">
-            <TextBlock x:Name="ServiceBadge" Text="● 자동 감시 중" Foreground="{DynamicResource SafeSyncSuccessTextBrush}" FontWeight="SemiBold"/>
-          </Border>
-          <Button x:Name="NotificationsButton" Content="확인할 메시지" IsEnabled="False"/>
-        </StackPanel>
-      </DockPanel>
-    </Border>
-    <Border Grid.Row="2" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="1" Padding="1">
-      <DataGrid x:Name="JobsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" GridLinesVisibility="Horizontal" BorderThickness="0" RowHeight="42" HeadersVisibility="Column" Background="{DynamicResource SafeSyncSurfaceBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" RowBackground="{DynamicResource SafeSyncSurfaceBrush}" AlternatingRowBackground="{DynamicResource SafeSyncSubtleBrush}" HorizontalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}" VerticalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}">
+        </WrapPanel>
+    </DockPanel>
+    <Border Grid.Row="3" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="1" CornerRadius="6" Padding="1" ClipToBounds="True">
+     <Grid>
+      <DataGrid x:Name="JobsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" CanUserAddRows="False" CanUserResizeColumns="True" GridLinesVisibility="Horizontal" BorderThickness="0" RowHeight="36" ColumnHeaderHeight="32" HeadersVisibility="Column" Background="{DynamicResource SafeSyncSurfaceBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" RowBackground="{DynamicResource SafeSyncSurfaceBrush}" AlternatingRowBackground="{DynamicResource SafeSyncSubtleBrush}" HorizontalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}" VerticalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}">
         <DataGrid.Columns>
-          <DataGridTextColumn Header="작업 이름" Binding="{Binding Name}" Width="1.2*"/>
-          <DataGridTextColumn Header="원본 위치" Binding="{Binding Source}" Width="2*"/>
-          <DataGridTextColumn Header="백업 위치" Binding="{Binding Destination}" Width="2*"/>
-          <DataGridTextColumn Header="실행 방식" Binding="{Binding TriggerText}" Width="1.2*"/>
-          <DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="1.1*"/>
+          <DataGridTextColumn Header="작업 이름" Binding="{Binding Name}" ElementStyle="{StaticResource JobCellText}" Width="1.5*" MinWidth="110"/>
+          <DataGridTextColumn Header="원본 위치" Binding="{Binding Source}" ElementStyle="{StaticResource JobCellText}" Width="2.6*" MinWidth="150"/>
+          <DataGridTextColumn Header="백업 위치" Binding="{Binding Destination}" ElementStyle="{StaticResource JobCellText}" Width="2.6*" MinWidth="150"/>
+          <DataGridTextColumn Header="실행 방식" Binding="{Binding TriggerText}" ElementStyle="{StaticResource JobCellText}" Width="1.2*" MinWidth="100"/>
+          <DataGridTextColumn Header="상태" Binding="{Binding Status}" ElementStyle="{StaticResource JobCellText}" Width="1.1*" MinWidth="90"/>
         </DataGrid.Columns>
       </DataGrid>
+      <StackPanel x:Name="EmptyJobsHint" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20,32,20,0">
+        <TextBlock Text="&#xE8F4;" FontFamily="Segoe MDL2 Assets" FontSize="38" Foreground="{DynamicResource SafeSyncMutedBrush}" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+        <TextBlock Text="첫 백업 작업을 추가하세요" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource SafeSyncTextBrush}" HorizontalAlignment="Center"/>
+        <TextBlock Text="원본과 백업 폴더를 선택하면 자동 백업을 시작합니다." FontSize="13" Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,6,0,0" TextAlignment="Center"/>
+      </StackPanel>
+     </Grid>
     </Border>
-    <GridSplitter x:Name="MainLayoutSplitter" Grid.Row="3" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="{DynamicResource SafeSyncBorderBrush}" ShowsPreview="True" Cursor="SizeNS"/>
-    <Grid Grid.Row="4" Margin="0,8,0,12">
-      <Border Background="{DynamicResource SafeSyncActivityBrush}" BorderBrush="{DynamicResource SafeSyncBorderBrush}" BorderThickness="1" Padding="12">
-        <DockPanel><TextBlock DockPanel.Dock="Top" Text="활동 기록" Foreground="{DynamicResource SafeSyncActivityMutedBrush}" FontWeight="SemiBold" Margin="0,0,0,8"/>
-          <TextBox x:Name="ActivityBox" Background="Transparent" Foreground="{DynamicResource SafeSyncActivityTextBrush}" BorderThickness="0" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+    <GridSplitter x:Name="MainLayoutSplitter" Grid.Row="4" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="Transparent" ShowsPreview="True" Cursor="SizeNS"/>
+    <Grid Grid.Row="5" Margin="0,4,0,8">
+      <Border Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <DockPanel><TextBlock DockPanel.Dock="Top" Text="활동 기록" Foreground="{DynamicResource SafeSyncTextBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+          <TextBox x:Name="ActivityBox" Background="Transparent" Foreground="{DynamicResource SafeSyncTextBrush}" BorderThickness="0" IsReadOnly="True" FontFamily="Consolas, Malgun Gothic" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
         </DockPanel>
       </Border>
     </Grid>
-    <TextBlock Grid.Row="5" x:Name="FooterText" Text="준비됨" Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="2,0,0,0" VerticalAlignment="Center"/>
+    <DockPanel Grid.Row="6" VerticalAlignment="Center"><TextBlock x:Name="JobCountText" DockPanel.Dock="Right" Text="작업 0개" Foreground="{DynamicResource SafeSyncMutedBrush}" FontSize="12"/><TextBlock x:Name="FooterText" Text="Windows · 로컬 · Dropbox · Google Drive" Foreground="{DynamicResource SafeSyncMutedBrush}" FontSize="12"/></DockPanel>
   </Grid>
 </Window>
 '@
 
 $script:Window = Load-Xaml $mainXaml
+$brandIconPath = Join-Path (Split-Path -Parent $script:ScriptPath) 'SafeSync.ico'
+if (Test-Path -LiteralPath $brandIconPath) {
+    $brandDecoder = [System.Windows.Media.Imaging.BitmapDecoder]::Create([uri]$brandIconPath, [System.Windows.Media.Imaging.BitmapCreateOptions]::PreservePixelFormat, [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
+    $script:Window.FindName('BrandImage').Source = @($brandDecoder.Frames | Sort-Object PixelWidth -Descending | Select-Object -First 1)[0]
+}
 
 $progressXaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -2310,9 +2339,9 @@ $script:LayoutSaveTimer = [System.Windows.Threading.DispatcherTimer]::new([Syste
 $script:LayoutSaveTimer.Interval = [TimeSpan]::FromMilliseconds(500)
 
 $layout = $script:Config.WindowLayout
-$script:Window.Width = Get-SafeSyncLayoutNumber $layout 'MainWidth' 1080 900 2400
-$script:Window.Height = Get-SafeSyncLayoutNumber $layout 'MainHeight' 720 580 1800
-$script:MainActivityRow.Height = [System.Windows.GridLength]::new((Get-SafeSyncLayoutNumber $layout 'MainActivityHeight' 155 80 900))
+$script:Window.Width = Get-SafeSyncLayoutNumber $layout 'MainWidth' 1180 800 2400
+$script:Window.Height = Get-SafeSyncLayoutNumber $layout 'MainHeight' 720 540 1800
+$script:MainActivityRow.Height = [System.Windows.GridLength]::new((Get-SafeSyncLayoutNumber $layout 'MainActivityHeight' 155 56 900))
 $script:ProgressWindow.Width = Get-SafeSyncLayoutNumber $layout 'ProgressWidth' 1180 680 2600
 $script:ProgressWindow.Height = Get-SafeSyncLayoutNumber $layout 'ProgressHeight' 720 600 1800
 $script:ProgressLockedRow.Height = [System.Windows.GridLength]::new((Get-SafeSyncLayoutNumber $layout 'ProgressLockedHeight' 125 70 900))
@@ -2339,6 +2368,16 @@ function Request-SafeSyncWindowLayoutSave {
     if ($null -eq $script:LayoutSaveTimer) { Save-SafeSyncWindowLayout; return }
     $script:LayoutSaveTimer.Stop()
     $script:LayoutSaveTimer.Start()
+}
+
+function Update-SafeSyncMainPaneLimit {
+    $root = $script:Window.FindName('MainLayoutRoot')
+    if ($null -eq $root -or $root.ActualHeight -le 0) { return }
+    $reserved = 0.0
+    foreach ($row in $root.RowDefinitions) {
+        if ($row -ne $script:MainJobsRow -and $row -ne $script:MainActivityRow) { $reserved += $row.ActualHeight }
+    }
+    $script:MainActivityRow.MaxHeight = [Math]::Max($script:MainActivityRow.MinHeight, $root.ActualHeight - $reserved - $script:MainJobsRow.MinHeight)
 }
 
 $script:LayoutSaveTimer.Add_Tick({ $script:LayoutSaveTimer.Stop(); Save-SafeSyncWindowLayout })
@@ -2748,7 +2787,10 @@ function Refresh-JobsGrid {
     if (-not [string]::IsNullOrWhiteSpace($selectedId)) {
         $script:JobsGrid.SelectedItem = @($items | Where-Object { [string]$_.Id -eq $selectedId } | Select-Object -First 1)[0]
     }
-    $script:FooterText.Text = "등록된 작업 $($items.Count)개 · 휴지통 $($script:Config.TrashRetentionDays)일 보관"
+    $script:FooterText.Text = "Windows $script:AppVersion · 로컬 · Dropbox · Google Drive"
+    $script:FooterText.ToolTip = "SafeSync 휴지통 $($script:Config.TrashRetentionDays)일 보관"
+    (Find-Control 'JobCountText').Text = "작업 $($items.Count)개"
+    (Find-Control 'EmptyJobsHint').Visibility = if ($items.Count -eq 0) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed }
     Update-JobActionButtons
 }
 
@@ -2897,11 +2939,34 @@ function Update-JobActionButtons {
     $script:EditButton.IsEnabled = $hasSelection
     $script:DeleteButton.IsEnabled = $hasSelection
     $script:PauseButton.IsEnabled = $hasSelection
-    $script:PauseButton.Content = if ($paused) { '다시 시작' } else { '일시정지' }
+    $script:PauseButton.Content = if ($paused) { '▶ 다시 시작' } else { 'Ⅱ 일시정지' }
     $script:PauseButton.ToolTip = if ($paused) { '선택한 작업의 자동·예약 백업을 다시 시작합니다.' } else { '선택한 작업의 자동·예약 백업을 멈춥니다.' }
     $script:RunButton.IsEnabled = $hasSelection -and -not $paused
     $script:FullScanButton.IsEnabled = $hasSelection -and -not $paused
     $script:TrashButton.IsEnabled = $hasSelection
+    (Find-Control 'JobActionsButton').IsEnabled = $hasSelection
+    foreach ($item in (Find-Control 'JobActionsButton').ContextMenu.Items) {
+        if ($item -is [System.Windows.Controls.MenuItem]) { $item.IsEnabled = (Find-Control ([string]$item.Tag)).IsEnabled }
+    }
+}
+
+function Initialize-SafeSyncMainShortcuts {
+    (Find-Control 'SettingsShortcutButton').Add_Click({ Show-ApplicationSettings })
+    (Find-Control 'JobActionsButton').Add_Click({
+        $button = Find-Control 'JobActionsButton'
+        Update-JobActionButtons
+        $button.ContextMenu.PlacementTarget = $button
+        $button.ContextMenu.IsOpen = $true
+    })
+    foreach ($item in (Find-Control 'JobActionsButton').ContextMenu.Items) {
+        if ($item -is [System.Windows.Controls.MenuItem]) {
+            $item.Add_Click({
+                param($sender,$eventArgs)
+                $target = Find-Control ([string]$sender.Tag)
+                if ($null -ne $target -and $target.IsEnabled) { $target.RaiseEvent([System.Windows.RoutedEventArgs]::new([System.Windows.Controls.MenuItem]::ClickEvent)) }
+            })
+        }
+    }
 }
 
 function Get-SafeSyncTrashDeletedAt([string]$BundleName, [datetime]$Fallback) {
@@ -4279,6 +4344,7 @@ $script:ProgressButton.Add_Click({ Toggle-SafeSyncProgressWindow })
 (Find-Control 'MenuProgressItem').Add_Click({ Toggle-SafeSyncProgressWindow })
 (Find-Control 'MenuMessagesItem').Add_Click({ Show-SafeSyncPendingNotices })
 (Find-Control 'MenuCloudAccountsItem').Add_Click({ Show-CloudAccountSettings })
+Initialize-SafeSyncMainShortcuts
 (Find-Control 'MenuExitItem').Add_Click({ Stop-SafeSyncApplication })
 (Find-Control 'MenuAboutItem').Add_Click({
     [System.Windows.MessageBox]::Show($script:Window, "SafeSync $script:AppVersion`r`n`r`n개인용 자동 백업 관리자`r`n제작자: 임호`r`nlimfrog75@gmail.com", 'SafeSync 정보', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
@@ -4387,6 +4453,7 @@ $script:Window.Add_StateChanged({
 $script:Window.Add_IsVisibleChanged({ Request-SafeSyncProgressRefresh })
 $script:Window.Add_Activated({ if ($script:ProgressWindow.IsVisible) { $script:ProgressWindow.Topmost = $false } })
 $script:Window.Add_SizeChanged({ Request-SafeSyncWindowLayoutSave })
+$script:Window.FindName('MainLayoutRoot').Add_SizeChanged({ Update-SafeSyncMainPaneLimit })
 $script:ProgressWindow.Add_SizeChanged({ Request-SafeSyncWindowLayoutSave })
 $script:MainLayoutSplitter.Add_DragCompleted({ Request-SafeSyncWindowLayoutSave })
 $script:ProgressLayoutSplitter.Add_DragCompleted({ Request-SafeSyncWindowLayoutSave })

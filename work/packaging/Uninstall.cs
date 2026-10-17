@@ -7,8 +7,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("SafeSync Uninstaller")]
 [assembly: AssemblyDescription("Removes SafeSync application files; preserves backup data and settings")]
-[assembly: AssemblyVersion("1.9.12.0")]
-[assembly: AssemblyFileVersion("1.9.12.0")]
+[assembly: AssemblyVersion("1.9.13.0")]
+[assembly: AssemblyFileVersion("1.9.13.0")]
 
 internal static class Uninstall
 {

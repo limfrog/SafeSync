@@ -20,7 +20,7 @@ Assert-Test (-not $source.Contains('$script:Window.Add_LocationChanged({ Sync-Pr
 Assert-Test ($source.Contains('limfrog75@gmail.com')) 'Author email is missing from settings.'
 $author=([string][char]0xC784)+([string][char]0xD638)
 Assert-Test ($source.Contains($author)) 'Author name is missing from settings.'
-Assert-Test ($source.Contains("`$script:AppVersion = '1.9.12'")) 'Displayed application version is incorrect.'
+Assert-Test ($source.Contains("`$script:AppVersion = '1.9.13'")) 'Displayed application version is incorrect.'
 Assert-Test ($source.Contains('x:Name="PauseButton"')) 'The main window has no per-job pause button.'
 Assert-Test ($source.Contains('x:Name="TrashButton"')) 'The main window has no SafeSync trash button.'
 $runClick=[regex]::Match($source,'\$script:RunButton\.Add_Click\(\{[^\r\n]+\}\)').Value
