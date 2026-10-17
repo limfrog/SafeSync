@@ -8,8 +8,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("SafeSync Setup")]
 [assembly: AssemblyDescription("SafeSync personal per-user installer")]
-[assembly: AssemblyVersion("1.9.11.0")]
-[assembly: AssemblyFileVersion("1.9.11.0")]
+[assembly: AssemblyVersion("1.9.12.0")]
+[assembly: AssemblyFileVersion("1.9.12.0")]
 
 internal static class Setup
 {

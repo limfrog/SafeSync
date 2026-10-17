@@ -1,9 +1,9 @@
 # SafeSync
 
-SafeSync는 Windows 10/11용 개인 자동 백업 프로그램입니다. 현재 소스와 배포본 버전은 **1.9.11**입니다.
+SafeSync는 Windows 10/11용 개인 자동 백업 프로그램입니다. 현재 소스와 배포본 버전은 **1.9.12**입니다.
 
-- [Windows 설치 파일](dist/SafeSync-Setup-1.9.11.exe)
-- [Windows 무설치 ZIP](dist/SafeSync-Windows-1.9.11.zip)
+- [Windows 설치 파일](dist/SafeSync-Setup-1.9.12.exe)
+- [Windows 무설치 ZIP](dist/SafeSync-Windows-1.9.12.zip)
 - [사용 및 기능 안내](outputs/SafeSync/README-ko.md)
 - [개발·macOS 이식 인계](HANDOFF.md)
 
@@ -12,7 +12,7 @@ SafeSync는 Windows 10/11용 개인 자동 백업 프로그램입니다. 현재 
 - `outputs/SafeSync/`: Windows 앱의 PowerShell 소스, 아이콘 원본 및 실행용 설정
 - `work/packaging/`: 설치 프로그램, 런처, 아이콘 및 무설치 ZIP의 빌드 소스
 - `work/safesync-*-tests.ps1`: 기능별 검증 스크립트
-- `dist/`: 검증 당시의 Windows 1.9.11 설치/무설치 배포본과 이전 버전
+- `dist/`: 검증 당시의 Windows 1.9.12 설치/무설치 배포본과 이전 버전
 - `index.html`, `privacy.html`: GitHub Pages용 안내 및 개인정보처리방침
 
 ## Windows 빌드
@@ -24,3 +24,5 @@ Windows PowerShell 5.1에서 `work/packaging/build.ps1`을 실행합니다. Wind
 개인 설정, OAuth 토큰·키, 실행 로그, 백업 데이터, 테스트용 임시 파일은 저장소에 포함하지 않습니다. 이 저장소를 맥에서 복제해도 Windows에 저장된 작업·스냅샷·클라우드 인증 상태는 자동으로 이전되지 않습니다.
 
 버전 1.9.11부터 앱의 **파일** 메뉴에서 작업 목록을 JSON으로 내보내거나 다시 가져올 수 있습니다. 내보내기에는 인증 정보와 스냅샷이 포함되지 않습니다.
+
+버전 1.9.12는 다크모드에서 새 작업·작업 수정 창의 글자, 버튼, 입력창과 백업 방식 선택 목록의 색 대비를 개선했습니다.

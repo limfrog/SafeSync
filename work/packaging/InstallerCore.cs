@@ -14,7 +14,7 @@ using Microsoft.Win32;
 internal static class InstallerCore
 {
     internal const string ProductId = "SafeSync.Personal.5ee5918b-7649-4ab0-ae49-35e598017f90";
-    internal const string Version = "1.9.11";
+    internal const string Version = "1.9.12";
     internal const string Marker = ".safesync-install";
     internal const string Inventory = "installed-files.sha256";
     internal const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\SafeSync";
