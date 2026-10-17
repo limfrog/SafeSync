@@ -41,11 +41,13 @@ enum BrandIcon {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var store = Store.shared
     @AppStorage("appearance") private var appearance = "system"
+    private var colorScheme: ColorScheme? { appearance == "dark" ? .dark : appearance == "light" ? .light : nil }
     var body: some Scene {
         Window("SafeSync", id: "main") {
             MainView().environmentObject(store).preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         }.defaultSize(width: 1180, height: 720)
         .commands {
+            AboutCommands()
             CommandGroup(after: .newItem) {
                 Button("새 백업 작업") { store.editing = BackupJob() }.keyboardShortcut("n")
                 Divider()
@@ -62,9 +64,12 @@ enum BrandIcon {
                 Button("일시정지 / 다시 시작") { store.togglePause() }
             }
         }
-        Window("백업 비교 및 충돌 처리", id: "progress") { ProgressViewScreen().environmentObject(store) }.defaultSize(width: 1080, height: 680)
-        Window("SafeSync 휴지통", id: "trash") { TrashView().environmentObject(store) }.defaultSize(width: 950, height: 600)
-        Settings { SettingsView().environmentObject(store) }
+        Window("백업 비교 및 충돌 처리", id: "progress") { ProgressViewScreen().environmentObject(store).preferredColorScheme(colorScheme) }.defaultSize(width: 1080, height: 680)
+        Window("SafeSync 휴지통", id: "trash") { TrashView().environmentObject(store).preferredColorScheme(colorScheme) }.defaultSize(width: 950, height: 600)
+        Window("About SafeSync", id: "about") {
+            AboutView().preferredColorScheme(colorScheme)
+        }.windowResizability(.contentSize).defaultPosition(.center)
+        Settings { SettingsView().environmentObject(store).preferredColorScheme(colorScheme) }
 
     }
 }
@@ -107,7 +112,7 @@ struct MainView: View {
                 Text("활동 기록").font(.headline)
                 ScrollView { VStack(alignment: .leading, spacing: 6) { ForEach(Array(store.activity.enumerated()), id: \.offset) { _, line in Text(line).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) } } }
             }.padding(12).frame(height: 145).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-            HStack { Text("macOS 개발 버전 0.2 · 로컬 · Dropbox · Google Drive"); Spacer(); Text("작업 \(store.jobs.count)개") }.font(.caption).foregroundStyle(.secondary)
+            HStack { Text("macOS \(AppInformation.version) · 로컬 · Dropbox · Google Drive"); Spacer(); Text("작업 \(store.jobs.count)개") }.font(.caption).foregroundStyle(.secondary)
         }.padding(16).frame(minWidth: 1000, minHeight: 620)
         .onAppear { store.openAppWindow = { id in openWindow(id: id) } }
         .sheet(item: $store.editing) { JobEditor(job: $0).environmentObject(store) }
@@ -234,40 +239,5 @@ struct TrashView: View {
             }
             Text("복구하면 해당 작업은 일시정지됩니다. 파일을 확인한 뒤 직접 다시 시작하세요.").font(.caption).foregroundStyle(.secondary)
         }.padding(20).frame(minWidth: 800, minHeight: 450)
-    }
-}
-struct SettingsView: View {
-    @EnvironmentObject var store: Store
-    @AppStorage("appearance") private var appearance = "system"
-    @AppStorage("trashRetentionDays") private var retention = 100
-    @AppStorage("errorSound") private var errorSound = false
-    @AppStorage("windowSound") private var windowSound = false
-    @AppStorage("completionSound") private var completionSound = false
-    @ViewState private var cloud = false
-    @ViewState private var loginEnabled = SMAppService.mainApp.status == .enabled
-    @ViewState private var error: String?
-    var body: some View {
-        Form {
-            Picker("화면 모드", selection: $appearance) { Text("시스템 설정").tag("system"); Text("라이트").tag("light"); Text("다크").tag("dark") }
-            Toggle("로그인 시 자동 시작", isOn: $loginEnabled).onChange(of: loginEnabled) { _, enabled in
-                do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
-                catch { self.error = error.localizedDescription; loginEnabled = SMAppService.mainApp.status == .enabled }
-            }
-            if SMAppService.mainApp.status == .requiresApproval {
-                Button("시스템 설정에서 자동 시작 승인") { SMAppService.openSystemSettingsLoginItems() }
-            }
-            Stepper("SafeSync 휴지통 보관기간: \(retention)일", value: $retention, in: 1...3650)
-            Toggle("백업 완료 알림음", isOn: $completionSound)
-            Toggle("백업 오류 알림음", isOn: $errorSound)
-            Toggle("창 최소화·닫기 알림음", isOn: $windowSound)
-            Button("클라우드 계정 관리") { cloud = true }
-            LabeledContent("버전", value: "0.2.4 · macOS 검증 중")
-            LabeledContent("제작자", value: "임호")
-            LabeledContent("이메일", value: "limfrog75@gmail.com")
-            Text("앱이 실행되고 Mac이 깨어 있을 때 자동 백업합니다. 휴지통 보관기간이 지난 파일은 백업 완료 후 정리됩니다. Dropbox는 서비스의 보존 정책에 따라 웹 복구 기록이 남을 수 있습니다.").font(.caption).foregroundStyle(.secondary)
-            if let error { Text(error).foregroundStyle(.red).font(.caption) }
-            Button("설정 폴더 열기") { NSWorkspace.shared.open(Storage.applicationDirectory) }
-        }.formStyle(.grouped).frame(width: 580, height: 520)
-        .sheet(isPresented: $cloud) { CloudAccountsView().environmentObject(store) }
     }
 }

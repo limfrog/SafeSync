@@ -27,8 +27,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>SafeSync</string>
 <key>CFBundleIconFile</key><string>SafeSync</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.2.4</string>
-<key>CFBundleVersion</key><string>6</string>
+<key>CFBundleShortVersionString</key><string>0.2.5</string>
+<key>CFBundleVersion</key><string>7</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSDocumentsFolderUsageDescription</key><string>선택한 문서 폴더의 파일을 백업합니다.</string>

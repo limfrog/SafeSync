@@ -1,8 +1,8 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 개인 자동 백업 프로그램입니다. Windows는 **1.9.13**, macOS는 **0.2.4 검증 중 버전**입니다.
+SafeSync는 Windows와 macOS용 개인 자동 백업 프로그램입니다. Windows는 **1.9.13**, macOS는 **0.2.5 검증 중 버전**입니다.
 
-- [macOS 0.2.4 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.2.4-universal.zip)
+- [macOS 0.2.5 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.2.5-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
@@ -20,9 +20,9 @@ SafeSync는 Windows와 macOS용 개인 자동 백업 프로그램입니다. Wind
 - `dist/`: Windows 설치/무설치 배포본과 macOS Universal 앱 ZIP
 - `index.html`, `privacy.html`: GitHub Pages용 안내 및 개인정보처리방침
 
-## macOS 0.2.4
+## macOS 0.2.5
 
-macOS 14 이상에서 ZIP을 풀고 `SafeSync.app`을 사용합니다. 기존 Windows 아이콘을 사용하며 로컬·외장·마운트된 네트워크 폴더, Dropbox·Google Drive 백업을 지원합니다. 작업 목록 내보내기·가져오기, 사용 중 파일 대기와 즉시 재시도, 수동 증분 백업, 완료 알림음, 클라우드 폴더 선택 창의 **새 폴더** 버튼을 포함합니다.
+macOS 14 이상에서 ZIP을 풀고 `SafeSync.app`을 사용합니다. 기존 Windows 아이콘을 사용하며 로컬·외장·마운트된 네트워크 폴더, Dropbox·Google Drive 백업을 지원합니다. 작업 목록 내보내기·가져오기, 사용 중 파일 대기와 즉시 재시도, 수동 증분 백업, 완료 알림음, 클라우드 폴더 선택 창의 **새 폴더** 버튼을 포함합니다. Windows를 참고한 환경설정과 별도 **About SafeSync** 정보 창을 제공합니다.
 
 이 배포본은 **ad-hoc 서명**이며 Developer ID 서명·Apple 공증 전입니다. 자동 검사 48개와 Universal 빌드가 통과했지만 실제 클라우드 전송·NAS·잠자기·Intel 실행 검증 등은 남아 있습니다. 확인한 범위는 [검증 현황](macOS/STATUS.md)과 [검사 결과](macOS/TEST-RESULTS.txt)를 참고하세요.
 

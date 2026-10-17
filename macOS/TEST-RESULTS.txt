@@ -1,5 +1,6 @@
-SafeSync macOS 0.2.4 — 2026-10-17
-48 automated scenarios passed. Cloud stores and HTTP responses are simulated; live account mutation tests remain pending.
+SafeSync macOS 0.2.5 — 2026-10-17
+
+48 existing regression scenarios passed. These cover filesystem/cloud engine behavior, not the redesigned settings UI. Cloud services and HTTP responses are simulated where noted.
 
 PASS copy, skip, verified overwrite, deletion and restore
 PASS conflict isolation and keep both
@@ -50,6 +51,6 @@ PASS unsafe/reserved folder names and collisions with existing files are rejecte
 PASS Google Drive adapter sends folder MIME type and selected parent and returns selectable folder ID (mock HTTP)
 PASS folder creation failure surfaces to picker without automatically repeating the mutation
 
-Universal arm64/x86_64 release build and ad-hoc signature verified.
-
-Native UI: existing Google account folder listing loaded; new-folder button/dialog, parent display, invalid name rejection, valid name enablement and cancel verified. No live folder creation request was submitted.
+Build: Universal arm64/x86_64 Release and ad-hoc signature verified.
+Native: app main window launched with version 0.2.5.
+Pending: About/settings visual checks and save/cancel interaction; SkyComputerUseService crashed during UI inspection and reconnection attempts. No SafeSync crash was found for this verification.
