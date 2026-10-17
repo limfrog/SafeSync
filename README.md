@@ -1,13 +1,13 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 개인 자동 백업 프로그램입니다. Windows는 **1.9.14**, macOS는 **0.2.5 검증 중 버전**입니다.
+SafeSync는 Windows와 macOS용 개인 자동 백업 프로그램입니다. Windows는 **1.9.15**, macOS는 **0.2.5 검증 중 버전**입니다.
 
 - [macOS 0.2.5 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.2.5-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 설치 파일](dist/SafeSync-Setup-1.9.14.exe)
-- [Windows 무설치 ZIP](dist/SafeSync-Windows-1.9.14.zip)
+- [Windows 설치 파일](dist/SafeSync-Setup-1.9.15.exe)
+- [Windows 무설치 ZIP](dist/SafeSync-Windows-1.9.15.zip)
 - [사용 및 기능 안내](outputs/SafeSync/README-ko.md)
 - [개발·macOS 이식 인계](HANDOFF.md)
 
@@ -51,3 +51,5 @@ Windows PowerShell 5.1에서 `work/packaging/build.ps1`을 실행합니다. Wind
 버전 1.9.13은 macOS 메인창과 같은 로고·설명·실행 상태 헤더, 주요 작업 버튼, 작업 관리 메뉴, 환경설정 바로가기와 활동 기록 패널을 Windows에 적용했습니다. 창을 좁히거나 활동 기록 높이를 조절해도 하단 표시를 확인할 수 있습니다.
 
 버전 1.9.14는 Windows 메뉴 목록의 기본 흰 테두리와 아이콘 여백을 없애고 라이트·다크 모드에 맞는 둥근 메뉴와 선택 표시를 적용했습니다. 메인창의 휴지통 관리 바로가기와 좁은 창에서의 하단 표시 보정도 포함합니다.
+
+버전 1.9.15는 클라우드 계정 창의 입력란·비밀키·설명·버튼을 라이트·다크 모드에 맞게 조정했습니다. 기본 창 크기를 넓히고 저장·닫기 버튼을 하단에 고정해 일반 크기에서는 스크롤 없이 표시합니다. 휴지통 버튼에도 테마에 맞는 둥근 모양과 상태별 표시를 적용하고, 작업 관리 메뉴의 중복 휴지통 항목은 제거했습니다.

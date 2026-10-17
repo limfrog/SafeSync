@@ -16,7 +16,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $script:AppName = 'SafeSync'
-$script:AppVersion = '1.9.14'
+$script:AppVersion = '1.9.15'
 $script:ScriptPath = $MyInvocation.MyCommand.Path
 if (-not [string]::IsNullOrWhiteSpace($WorkerJobId) -or -not [string]::IsNullOrWhiteSpace($ReconcileJobId)) {
     # The OS keeps this shared named object alive until every detached worker exits.
@@ -2174,8 +2174,8 @@ $mainXaml = @'
     <DockPanel Grid.Row="2" LastChildFill="True" Margin="0,0,0,12">
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0">
           <Button x:Name="TrashShortcutButton" Content="휴지통 관리" MinWidth="100" ToolTip="선택한 백업 작업의 휴지통을 엽니다."/>
-          <Button x:Name="JobActionsButton" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사, 휴지통 관리 및 삭제">
-            <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><MenuItem Header="휴지통 관리" Tag="TrashButton"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
+          <Button x:Name="JobActionsButton" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사 및 삭제">
+            <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
           </Button>
           <Button x:Name="SettingsShortcutButton" Width="36" Padding="8" Margin="0" ToolTip="환경설정" AutomationProperties.Name="환경설정"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16"/></Button>
         </StackPanel>
@@ -3321,7 +3321,20 @@ function Show-SelectedSafeSyncTrashBrowser {
         Title="SafeSync 휴지통" Width="1040" Height="650" MinWidth="820" MinHeight="460"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource SafeSyncWindowBrush}" FontFamily="Segoe UI, Malgun Gothic">
   <Window.Resources>
-    <Style TargetType="Button"><Setter Property="Padding" Value="16,8"/><Setter Property="Margin" Value="8,0,0,0"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/></Style>
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="16,8"/><Setter Property="Margin" Value="8,0,0,0"/><Setter Property="MinHeight" Value="34"/><Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type Button}">
+        <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/></Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.86"/></Trigger>
+          <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.70"/></Trigger>
+          <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource SafeSyncAccentBrush}"/></Trigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{DynamicResource SafeSyncSubtleBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncMutedBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/><Setter Property="Opacity" Value="0.65"/><Setter Property="Cursor" Value="Arrow"/><Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource SafeSyncSubtleBrush}"/><Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/></Style>
     <Style TargetType="DataGrid"><Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/></Style>
     <Style TargetType="DataGridRow"><Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/></Style>
@@ -3629,32 +3642,64 @@ function Find-CloudFolders {
 
 function Show-CloudAccountSettings {
     $xaml = @'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="클라우드 계정" Width="720" Height="590" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" Background="#F7F9FC" FontFamily="Segoe UI, Malgun Gothic">
- <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24">
-  <TextBlock Text="클라우드 API 계정" FontSize="23" FontWeight="Bold" Foreground="#172033"/>
-  <TextBlock Text="인증 정보는 Windows 사용자 계정으로 암호화되어 이 PC에만 저장됩니다." Foreground="#64748B" Margin="0,5,0,18"/>
-  <GroupBox Header="Dropbox — Full Dropbox" Padding="14" Margin="0,0,0,14">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="클라우드 계정" Width="800" Height="700" MinWidth="700" MinHeight="480" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="{DynamicResource SafeSyncWindowBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" FontFamily="Segoe UI, Malgun Gothic" FontSize="13" UseLayoutRounding="True">
+ <Window.Resources>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  <Style TargetType="TextBox"><Setter Property="Background" Value="{DynamicResource SafeSyncInputBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/><Setter Property="CaretBrush" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="Padding" Value="8,6"/><Setter Property="MinHeight" Value="32"/></Style>
+  <Style TargetType="PasswordBox"><Setter Property="Background" Value="{DynamicResource SafeSyncInputBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/><Setter Property="CaretBrush" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="Padding" Value="8,6"/><Setter Property="MinHeight" Value="32"/></Style>
+  <Style TargetType="Button">
+   <Setter Property="Padding" Value="14,7"/><Setter Property="Margin" Value="0,0,8,0"/><Setter Property="MinHeight" Value="34"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/>
+   <Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type Button}">
+    <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.86"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.70"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource SafeSyncAccentBrush}"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/><Setter Property="Cursor" Value="Arrow"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="GroupBox">
+   <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/><Setter Property="BorderThickness" Value="1"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type GroupBox}"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}"><StackPanel><ContentPresenter ContentSource="Header" TextElement.FontSize="16" TextElement.FontWeight="SemiBold" Margin="0,0,0,10"/><ContentPresenter ContentSource="Content"/></StackPanel></Border></ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </Window.Resources>
+ <Grid x:Name="CloudAccountsLayout" Margin="24">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <StackPanel Margin="0,0,0,18"><TextBlock Text="클라우드 API 계정" FontSize="23" FontWeight="Bold"/><TextBlock Text="인증 정보는 Windows 사용자 계정으로 암호화되어 이 PC에만 저장됩니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,5,0,0"/></StackPanel>
+  <ScrollViewer x:Name="AccountsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+  <GroupBox Header="Dropbox — Full Dropbox" Padding="16" Margin="0,0,0,14">
    <StackPanel>
-    <TextBlock Text="Dropbox App Console에서 Scoped access와 Full Dropbox를 선택하고 아래 Redirect URI를 등록하세요." TextWrapping="Wrap"/>
-    <TextBlock Text="Redirect URI: http://127.0.0.1:53682/" FontFamily="Consolas" Margin="0,5,0,10" Foreground="#334155"/>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="App Key" VerticalAlignment="Center"/><TextBox x:Name="DropboxKey" Grid.Column="1" Padding="7"/></Grid>
-    <StackPanel Orientation="Horizontal" Margin="0,10,0,0"><Button x:Name="DropboxConnect" Content="Dropbox 연결" Padding="13,7"/><Button x:Name="DropboxDisconnect" Content="연결 해제" Padding="13,7"/><TextBlock x:Name="DropboxStatus" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#475569"/></StackPanel>
+    <TextBlock Text="Dropbox App Console에서 Scoped access / Full Dropbox를 선택하고 아래 URI를 등록하세요."/>
+    <TextBlock Text="Redirect URI: http://127.0.0.1:53682/" FontFamily="Consolas" Margin="0,5,0,10" Foreground="{DynamicResource SafeSyncMutedBrush}"/>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="App Key" VerticalAlignment="Center"/><TextBox x:Name="DropboxKey" Grid.Column="1"/></Grid>
+    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="DropboxConnect" Content="Dropbox 연결"/><Button x:Name="DropboxDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="DropboxStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
    </StackPanel>
   </GroupBox>
-  <GroupBox Header="Google Drive — 전체 Drive" Padding="14">
+  <GroupBox Header="Google Drive — 전체 Drive" Padding="16">
    <StackPanel>
-    <TextBlock Text="Google Cloud에서 Drive API를 켜고 OAuth 클라이언트 유형을 데스크톱 앱으로 생성하세요. OAuth 동의 화면에는 본인 계정을 테스트 사용자로 등록합니다." TextWrapping="Wrap"/>
-    <Grid Margin="0,10,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client ID" VerticalAlignment="Center"/><TextBox x:Name="GoogleClientId" Grid.Column="1" Padding="7"/></Grid>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client Secret" VerticalAlignment="Center"/><PasswordBox x:Name="GoogleSecret" Grid.Column="1" Padding="7"/></Grid>
-    <TextBlock Text="Client Secret을 비워 두면 기존에 암호화 저장된 값을 유지합니다." Foreground="#64748B" Margin="110,4,0,0"/>
-    <StackPanel Orientation="Horizontal" Margin="0,10,0,0"><Button x:Name="GoogleConnect" Content="Google Drive 연결" Padding="13,7"/><Button x:Name="GoogleDisconnect" Content="연결 해제" Padding="13,7"/><TextBlock x:Name="GoogleStatus" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#475569"/></StackPanel>
+    <TextBlock Text="Drive API를 켜고 OAuth 클라이언트를 ‘데스크톱 앱’으로 생성하세요.&#10;테스트 중인 앱은 OAuth 동의 화면에 본인 계정을 테스트 사용자로 등록합니다."/>
+    <Grid Margin="0,10,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client ID" VerticalAlignment="Center"/><TextBox x:Name="GoogleClientId" Grid.Column="1"/></Grid>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client Secret" VerticalAlignment="Center"/><PasswordBox x:Name="GoogleSecret" Grid.Column="1"/></Grid>
+    <TextBlock Text="Client Secret을 비워 두면 기존에 암호화 저장된 값을 유지합니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="110,4,0,0" FontSize="12"/>
+    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="GoogleConnect" Content="Google Drive 연결"/><Button x:Name="GoogleDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="GoogleStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
    </StackPanel>
   </GroupBox>
-  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0"><Button x:Name="SaveCredentials" Content="입력값 저장" Padding="16,8"/><Button x:Name="CloseButton" Content="닫기" Padding="20,8" Background="#246BFD" Foreground="White" BorderBrush="#246BFD"/></StackPanel>
- </StackPanel></ScrollViewer>
+  </StackPanel></ScrollViewer>
+  <Border Grid.Row="2" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="0,1,0,0" Padding="0,14,0,0" Margin="0,16,0,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="SaveCredentials" Content="입력값 저장"/><Button x:Name="CloseButton" Content="닫기" MinWidth="80" Margin="0" Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/></StackPanel></Border>
+ </Grid>
 </Window>
 '@
     $dialog = Load-Xaml $xaml; Apply-SafeSyncThemeToWindow $dialog; $dialog.Owner = $script:Window
+    # Keep the footer reachable on smaller/high-DPI desktops; scroll only when
+    # the available working area is genuinely smaller than the normal layout.
+    $workArea = [System.Windows.SystemParameters]::WorkArea
+    $dialog.MinHeight = [Math]::Min($dialog.MinHeight, $workArea.Height)
+    $dialog.Height = [Math]::Min($dialog.Height, $workArea.Height)
+    $dialog.MinWidth = [Math]::Min($dialog.MinWidth, $workArea.Width)
+    $dialog.Width = [Math]::Min($dialog.Width, $workArea.Width)
     $dropboxKey = $dialog.FindName('DropboxKey'); $dropboxStatus = $dialog.FindName('DropboxStatus')
     $googleId = $dialog.FindName('GoogleClientId'); $googleSecret = $dialog.FindName('GoogleSecret'); $googleStatus = $dialog.FindName('GoogleStatus')
     $dropboxKey.Text = [string]$script:Config.CloudAccounts.Dropbox.AppKey

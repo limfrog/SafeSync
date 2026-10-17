@@ -8,8 +8,8 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("SafeSync")]
 [assembly: AssemblyDescription("SafeSync personal Windows backup launcher")]
-[assembly: AssemblyVersion("1.9.14.0")]
-[assembly: AssemblyFileVersion("1.9.14.0")]
+[assembly: AssemblyVersion("1.9.15.0")]
+[assembly: AssemblyFileVersion("1.9.15.0")]
 
 internal static class Launcher
 {

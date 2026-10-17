@@ -21,7 +21,7 @@ Assert-Layout ($errors.Count -eq 0) 'Application source does not parse.'
 $names=@('Load-Xaml','Get-SafeSyncThemeMode','Get-SafeSyncThemePalette','New-SafeSyncThemeBrush','Get-SafeSyncThemeBrushRole','Set-SafeSyncThemeElementBrush','Apply-SafeSyncThemeToWindow','Find-Control','Refresh-JobsGrid','Get-TriggerText','Test-SafeSyncJobPaused','Get-SelectedJob','Update-JobActionButtons','Update-SafeSyncMainPaneLimit','Initialize-SafeSyncMainShortcuts')
 foreach($node in $ast.FindAll({param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst]},$true)) { if($names -contains $node.Name) { Invoke-Expression $node.Extent.Text } }
 $xaml=@($ast.FindAll({param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -and $n.Value.TrimStart().StartsWith('<Window') -and $n.Value.Contains('x:Name="JobsGrid"')},$true))[0].Value
-$script:AppVersion='1.9.14'
+$script:AppVersion='1.9.15'
 $script:RunningJobs=@{}; $script:LastStatus=@{}
 $script:SettingsOpened=0
 function Show-ApplicationSettings { $script:SettingsOpened++ }
@@ -47,6 +47,7 @@ foreach($mode in @('Light','Dark')) {
         $script:JobsGrid.SelectedIndex=0
         Update-JobActionButtons
         Assert-Layout ((Find-Control 'JobActionsButton').IsEnabled -and $script:RunButton.IsEnabled) "$mode selected job does not enable actions."
+        Assert-Layout (@((Find-Control 'JobActionsButton').ContextMenu.Items | Where-Object { $_ -is [System.Windows.Controls.MenuItem] -and $_.Tag -eq 'TrashButton' }).Count -eq 0) "$mode task-management menu still duplicates the trash shortcut."
         $script:Forwarded=0
         $script:EditButton.Add_Click({$script:Forwarded++})
         $edit=@((Find-Control 'JobActionsButton').ContextMenu.Items | Where-Object { $_ -is [System.Windows.Controls.MenuItem] -and $_.Tag -eq 'EditButton' })[0]
