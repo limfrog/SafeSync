@@ -1,5 +1,9 @@
 # SafeSync 개발 인계 — Windows 1.9.12
 
+## macOS 진행 현황 — 2026-10-17
+
+macOS 0.2.4 구현은 `macOS/`에 있으며 배포본은 `dist/SafeSync-macOS-0.2.4-universal.zip`입니다. 아래 Windows 인계 내용은 초기 기준 자료입니다. 현재 맥의 사용·빌드·검증 범위는 [macOS 안내](macOS/README-ko.md)와 [검증 현황](macOS/STATUS.md)을 우선 참고하세요. Windows 실행 코드와 배포본은 그대로 보존합니다.
+
 ## 기준과 범위
 
 이 저장소의 Windows 앱은 `outputs/SafeSync/SafeSync.ps1`의 `AppVersion = '1.9.12'`를 기준으로 합니다. 소스는 Windows PowerShell 5.1, WPF/XAML 및 .NET Framework 기반이며, `work/packaging/`의 C# 런처·설치 도구로 배포합니다. 이 코드는 macOS에서 그대로 실행되지 않습니다.

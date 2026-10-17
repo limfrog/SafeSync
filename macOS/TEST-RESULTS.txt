@@ -1,0 +1,55 @@
+SafeSync macOS 0.2.4 — 2026-10-17
+48 automated scenarios passed. Cloud stores and HTTP responses are simulated; live account mutation tests remain pending.
+
+PASS copy, skip, verified overwrite, deletion and restore
+PASS conflict isolation and keep both
+PASS unavailable source preserves backup
+PASS destination symlink containment
+PASS nested roots rejected
+PASS mirror off preserves deleted backup
+PASS externally deleted backup preserved
+PASS interrupted atomic exchange recovery
+PASS corrupt manifest stops deletion
+PASS changed roots cannot reuse manifest
+PASS Dropbox API: copy, skip, overwrite, remote trash and restore
+PASS Google Drive API: copy, skip, overwrite, remote trash and restore
+PASS Dropbox API: checksum failure preserves original
+PASS Google Drive API: checksum failure preserves original
+PASS Dropbox API: interrupted publish recovers after engine restart
+PASS Google Drive API: interrupted publish recovers after engine restart
+PASS Dropbox API: conflict keep-both, deletion and retention cleanup
+PASS Google Drive API: conflict keep-both, deletion and retention cleanup
+PASS Dropbox API: remote change during upload is preserved
+PASS Google Drive API: remote change during upload is preserved
+PASS durable change queue retains events received during a running backup and falls back after seven days
+PASS incremental nested change, directory deletion and no-change run without unrelated file comparisons
+PASS local retention removes only expired trash after recovery
+PASS OAuth PKCE and anti-forgery parameters
+PASS job list: Windows v1 schema, Korean settings round-trip and credential/runtime exclusion
+PASS job list: Windows UTF-8 BOM, empty array and fresh identities for unknown jobs
+PASS job list: only unchanged ID/endpoints reuse snapshots, schedule state and local account binding
+PASS job list: duplicate IDs, malformed arrays, null jobs, unknown version and size/count limits rejected
+PASS job list: missing fields, unsafe IDs/paths, nested roots, invalid times and non-boolean flags rejected
+PASS job list: Windows paths require explicit Mac mapping and cross-job source/target overlap is rejected
+PASS job list: previous list archived before atomic replacement; accounts and snapshots unchanged
+PASS job list: archive/commit failure preserves existing settings; empty import keeps a recoverable prior list
+PASS locked source waits without blocking independent files or overwriting prior backup
+PASS deferred automatic retry and immediate retry after source unlock
+PASS locked destination preserves previous backup
+PASS persistent per-file wait history, capped backoff and previous issue format compatibility
+PASS manual incremental policy retains explicit, history-loss and network full-scan fallbacks
+PASS Google Drive small binary/Unicode file uses one multipart request
+PASS Google Drive large files retain resumable upload path
+PASS Google Drive bounded parallel uploads preserve identical-content files with separate snapshots
+PASS parallel upload failure isolates one file and preserves its previous version
+PASS parallel cancellation waits for children, releases lease and permits safe retry
+PASS incremental directory deletion clears stale issues without discarding untracked backups or unrelated conflicts
+PASS unavailable FSEvents service requests full scan (live event delivery unavailable in this shell)
+PASS cloud folder creation uses current parent, trims Korean names and rejects duplicate folders
+PASS unsafe/reserved folder names and collisions with existing files are rejected
+PASS Google Drive adapter sends folder MIME type and selected parent and returns selectable folder ID (mock HTTP)
+PASS folder creation failure surfaces to picker without automatically repeating the mutation
+
+Universal arm64/x86_64 release build and ad-hoc signature verified.
+
+Native UI: existing Google account folder listing loaded; new-folder button/dialog, parent display, invalid name rejection, valid name enablement and cancel verified. No live folder creation request was submitted.
