@@ -23,9 +23,9 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     public async Task InitializeAsync(CancellationToken token)
     {
         var profile=await http.JsonAsync(HttpMethod.Get,Api+"about?fields=user",null,token);
-        if(profile.GetProperty("user").String("permissionId")!=accountId)throw new InvalidOperationException("백업 작업에 연결된 Google 계정과 현재 계정이 다릅니다.");
+        if(profile.GetProperty("user").String("permissionId")!=accountId)throw new CloudBindingException("백업 작업에 연결된 Google 계정과 현재 계정이 다릅니다.");
         var metadata=await Metadata(Root,token);
-        if(metadata==null || metadata.Value.True("trashed") || !Parse(metadata.Value).Folder)throw new DirectoryNotFoundException("Google Drive 백업 폴더에 접근할 수 없습니다.");
+        if(metadata==null || metadata.Value.True("trashed") || !Parse(metadata.Value).Folder)throw new CloudBindingException("Google Drive 백업 폴더가 삭제·이동되었거나 접근할 수 없습니다. 사용할 폴더를 다시 선택하세요.");
         rootId=metadata.Value.String("id");Id(rootId);
     }
     private async Task<List<JsonElement>> Children(string parent,CancellationToken token)
@@ -50,11 +50,12 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         if(rootId.Length==0)throw new InvalidOperationException("Cloud store is not initialized.");
         var rootMetadata=await Metadata(rootId,token);
         if(rootMetadata==null || rootMetadata.Value.True("trashed") || !Parse(rootMetadata.Value).Folder)throw new IOException("Google Drive 백업 루트에 접근할 수 없습니다.");
-        string current=rootId;
+        string current=rootId,relative="";
         foreach(var part in directory.Split('/',StringSplitOptions.RemoveEmptyEntries))
         {
+            relative=relative.Length==0 ? part : relative+"/"+part;
             var matches=(await Children(current,token)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
-            if(matches.Length>1)throw new IOException("Google Drive에 이름이 중복된 폴더/파일이 있습니다: "+part);
+            if(matches.Length>1)throw new CloudDuplicateNameException(relative);
             if(matches.Length==1)
             {
                 if(!Parse(matches[0]).Folder)throw new IOException("폴더 경로에 일반 파일이 있습니다: "+part);
@@ -74,7 +75,7 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         if(relative.Length==0)return await Metadata(rootId,token);
         var parent=await Folder(RemotePath.Parent(relative),false,token);if(parent==null)return null;
         var matches=(await Children(parent,token)).Where(f=>f.String("name").Equals(RemotePath.Name(relative),StringComparison.OrdinalIgnoreCase)).ToArray();
-        if(matches.Length>1)throw new IOException("Google Drive에 이름이 중복된 파일이 있습니다: "+relative);
+        if(matches.Length>1)throw new CloudDuplicateNameException(relative);
         return matches.Length==0 ? null : matches[0];
     }
     public async Task<RemoteItem?> StatAsync(string relative,CancellationToken token)
@@ -83,8 +84,19 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     }
     public async Task<IReadOnlyList<RemoteItem>> ListAsync(string directory,CancellationToken token)
     {
-        var folder=await Folder(directory,false,token) ?? throw new DirectoryNotFoundException("클라우드 폴더가 없습니다.");
-        return (await Children(folder,token)).Select(Parse).ToArray();
+        try
+        {
+            var folder=await Folder(directory,false,token) ?? throw new DirectoryNotFoundException("클라우드 폴더가 없습니다.");
+            return (await Children(folder,token)).Select(Parse).ToArray();
+        }
+        catch(CloudDuplicateNameException)
+        {
+            var folders=await CandidatesAsync(directory,token);
+            if(folders.Count==0 || folders.Any(f=>!f.Folder))throw;
+            var merged=new Dictionary<string,RemoteItem>(StringComparer.Ordinal);
+            foreach(var folder in folders)foreach(var child in await Children(folder.Id,token)){var item=Parse(child);merged[item.Id]=item;}
+            return merged.Values.ToArray();
+        }
     }
     public async Task EnsureFolderAsync(string directory,CancellationToken token){await Folder(directory,true,token);}
     private async Task<HttpResponseMessage> Put(string uri,byte[] bytes,long? start,long total,CancellationToken token)

@@ -38,11 +38,12 @@ internal sealed partial class DesktopController
         bool SaveInputs()
         {
             if(scheduler.RunningCount>0){Tell("진행 중인 백업이 끝난 뒤 계정 설정을 변경하세요.");return false;}
-            var appKey=window.Find<TextBox>("DropboxKey").Text.Trim();var clientId=window.Find<TextBox>("GoogleClientId").Text.Trim();
+            var appKey=PublicCloudRegistration.ResolveDropboxAppKey(window.Find<TextBox>("DropboxKey").Text);var clientId=window.Find<TextBox>("GoogleClientId").Text.Trim();
             if(appKey.Length>1024 || clientId.Length>1024)throw new InvalidDataException("클라이언트 ID/키가 너무 깁니다.");
             if(accounts.Dropbox.AppKey!=appKey){accounts.Dropbox.RefreshTokenProtected="";accounts.Dropbox.AccountId="";accounts.Dropbox.AccountName="";}
             if(accounts.GoogleDrive.ClientId!=clientId){accounts.GoogleDrive.RefreshTokenProtected="";accounts.GoogleDrive.AccountId="";accounts.GoogleDrive.AccountName="";accounts.GoogleDrive.ClientSecretProtected="";}
             accounts.Dropbox.AppKey=appKey;accounts.GoogleDrive.ClientId=clientId;
+            window.Find<TextBox>("DropboxKey").Text=appKey;
             var secret=window.Find<PasswordBox>("GoogleSecret");
             if(secret.Password.Length>0){accounts.GoogleDrive.ClientSecretProtected=cloud.Vault.Protect(secret.Password);secret.Clear();}
             accounts.Write(config);store.Save(config);Refresh();return true;

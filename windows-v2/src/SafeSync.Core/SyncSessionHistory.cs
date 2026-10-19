@@ -3,7 +3,7 @@ using System.ComponentModel;
 
 namespace SafeSync.Core;
 
-public enum SyncRunOutcome { Running, Paused, Completed, Attention, Failed, Canceled }
+public enum SyncRunOutcome { Running, Paused, Completed, Attention, Failed, Canceled, Stopping, Waiting }
 
 public sealed class SyncRun : INotifyPropertyChanged
 {
@@ -20,8 +20,9 @@ public sealed class SyncRun : INotifyPropertyChanged
     public DateTimeOffset? EndedUtc {get;private set;}
     private DateTimeOffset updatedUtc;
     public SyncRunOutcome Outcome {get;private set;}=SyncRunOutcome.Running;
-    public bool IsActive=>Outcome is SyncRunOutcome.Running or SyncRunOutcome.Paused;
+    public bool IsActive=>Outcome is SyncRunOutcome.Running or SyncRunOutcome.Paused or SyncRunOutcome.Stopping;
     public string Stage {get;private set;}="작업 준비 중";
+    public string StageText=>Outcome==SyncRunOutcome.Stopping ? "종료 중… 현재 파일을 안전하게 마무리하고 있습니다.\n"+Stage : Outcome==SyncRunOutcome.Paused ? "일시정지 · "+Stage : Stage;
     public string CurrentFile {get;private set;}="";
     public int CompletedFiles {get;private set;}
     public int TotalFiles {get;private set;}
@@ -46,21 +47,23 @@ public sealed class SyncRun : INotifyPropertyChanged
     public string StatusText=>Outcome switch
     {
         SyncRunOutcome.Running=>"진행 중",SyncRunOutcome.Paused=>"일시정지",SyncRunOutcome.Failed=>"실패",SyncRunOutcome.Canceled=>"중단됨",
+        SyncRunOutcome.Stopping=>"종료 중…",SyncRunOutcome.Waiting=>"대기 중",
         SyncRunOutcome.Attention=>Errors.Count>0 ? "오류 확인" : Conflicts.Count>0 ? "충돌 확인" : "사용 중 파일 대기",
         _=>Copied==0 && Trashed==0 ? "변경 없음" : "완료"
     };
     public string Tone=>Outcome switch {SyncRunOutcome.Failed=>"Danger",SyncRunOutcome.Attention=>Errors.Count>0 ? "Danger" : "Warning",SyncRunOutcome.Completed=>"Success",SyncRunOutcome.Running=>"Active",_=>"Muted"};
-    public string Summary=>FailureReason.Length>0 ? FailureReason : IsActive ? Stage : $"복사 {Copied:N0} · 동일 {Skipped:N0} · 휴지통 {Trashed:N0} · 사용 중 {Locked.Count:N0} · 충돌 {Conflicts.Count:N0} · 오류 {Errors.Count:N0}";
+    public string Summary=>FailureReason.Length>0 ? FailureReason : IsActive ? StageText : (Outcome==SyncRunOutcome.Waiting ? "작업을 종료하고 대기 중입니다. 남은 작업은 저장되었으며, 직접 작업을 시작할 때까지 자동 실행하지 않습니다.\n" : "")+$"복사 {Copied:N0} · 동일 {Skipped:N0} · 휴지통 {Trashed:N0} · 사용 중 {Locked.Count:N0} · 충돌 {Conflicts.Count:N0} · 오류 {Errors.Count:N0}";
     private static string Count(int? value)=>value?.ToString("N0") ?? "—";
     internal SyncRun(BackupJob job,DateTimeOffset now){JobId=job.Id;JobName=job.Name;Source=job.Source;Destination=job.Destination;DestinationType=job.DestinationType;SyncMode=job.SyncMode;StartedUtc=updatedUtc=now;}
-    internal void Update(BackupProgress progress,bool paused,DateTimeOffset now)
-    {Stage=progress.Stage;CurrentFile=progress.CurrentFile;CompletedFiles=progress.Completed;TotalFiles=progress.Total;updatedUtc=now;Outcome=paused ? SyncRunOutcome.Paused : SyncRunOutcome.Running;Changed();}
-    internal void SetPaused(bool value){if(IsActive){Outcome=value ? SyncRunOutcome.Paused : SyncRunOutcome.Running;Changed();}}
+    internal void Update(BackupProgress progress,bool paused,bool stopping,DateTimeOffset now)
+    {Stage=progress.Stage;CurrentFile=progress.CurrentFile;CompletedFiles=progress.Completed;TotalFiles=progress.Total;updatedUtc=now;Outcome=stopping || Outcome==SyncRunOutcome.Stopping ? SyncRunOutcome.Stopping : paused ? SyncRunOutcome.Paused : SyncRunOutcome.Running;Changed();}
+    internal void SetPaused(bool value){if(IsActive && Outcome!=SyncRunOutcome.Stopping){Outcome=value ? SyncRunOutcome.Paused : SyncRunOutcome.Running;Changed();}}
+    internal void SetStopping(){if(IsActive){Outcome=SyncRunOutcome.Stopping;Changed();}}
     internal void Tick(DateTimeOffset now){if(IsActive){updatedUtc=now;PropertyChanged?.Invoke(this,new(nameof(DurationText)));}}
-    internal void Finish(BackupResult result,DateTimeOffset now)
+    internal void Finish(BackupResult result,bool stopped,DateTimeOffset now)
     {
         Copied=result.Copied;Skipped=result.Skipped;Trashed=result.Trashed;Conflicts=result.Conflicts.ToArray();Locked=result.Locked.ToArray();Errors=result.Errors.ToArray();EndedUtc=updatedUtc=now;
-        Outcome=result.Canceled ? SyncRunOutcome.Canceled : Conflicts.Count+Locked.Count+Errors.Count>0 ? SyncRunOutcome.Attention : SyncRunOutcome.Completed;Changed();
+        Outcome=stopped ? SyncRunOutcome.Waiting : result.Canceled ? SyncRunOutcome.Canceled : Conflicts.Count+Locked.Count+Errors.Count>0 ? SyncRunOutcome.Attention : SyncRunOutcome.Completed;Changed();
     }
     internal void Fail(Exception exception,DateTimeOffset now){FailureReason=exception.Message;EndedUtc=updatedUtc=now;Outcome=SyncRunOutcome.Failed;Changed();}
     private void Changed()=>PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(""));
@@ -75,15 +78,16 @@ public sealed class SyncSessionHistory
     public SyncRun Begin(BackupJob job,DateTimeOffset? now=null)
     {
         if(active.TryGetValue(job.Id,out var running))return running;
-        var run=new SyncRun(job,now ?? DateTimeOffset.UtcNow);active[job.Id]=run;latest[job.Id]=run;Runs.Insert(0,run);return run;
+        var run=new SyncRun(job,now ?? DateTimeOffset.UtcNow);if(job.Stopped)run.SetStopping();active[job.Id]=run;latest[job.Id]=run;Runs.Insert(0,run);return run;
     }
     public SyncRun Progress(BackupJob job,BackupProgress progress,DateTimeOffset? now=null)
-    {var run=Begin(job,now);run.Update(progress,job.Paused,now ?? DateTimeOffset.UtcNow);return run;}
+    {var run=Begin(job,now);run.Update(progress,job.Paused,job.Stopped,now ?? DateTimeOffset.UtcNow);return run;}
     public SyncRun Complete(BackupJob job,BackupResult result,DateTimeOffset? now=null)
-    {var run=Begin(job,now);run.Finish(result,now ?? DateTimeOffset.UtcNow);active.Remove(job.Id);return run;}
+    {var run=Begin(job,now);run.Finish(result,job.Stopped,now ?? DateTimeOffset.UtcNow);active.Remove(job.Id);return run;}
     public SyncRun Fail(BackupJob job,Exception exception,DateTimeOffset? now=null)
     {var run=Begin(job,now);run.Fail(exception,now ?? DateTimeOffset.UtcNow);active.Remove(job.Id);return run;}
     public void SetPaused(string jobId,bool paused){if(active.TryGetValue(jobId,out var run))run.SetPaused(paused);}
+    public void SetStopping(string jobId){if(active.TryGetValue(jobId,out var run))run.SetStopping();}
     public void Tick(DateTimeOffset? now=null){foreach(var run in active.Values)run.Tick(now ?? DateTimeOffset.UtcNow);}
     public bool IsLatest(SyncRun run)=>latest.TryGetValue(run.JobId,out var current) && ReferenceEquals(run,current);
 }

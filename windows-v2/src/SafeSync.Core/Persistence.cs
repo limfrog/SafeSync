@@ -58,6 +58,8 @@ public sealed class ConfigStore(string dataRoot)
         if (!File.Exists(ConfigPath)) return new();
         var config = JsonFile.Read<AppConfig>(ConfigPath);
         Validate(config);
+        // preview.3 stored a compatibility pause flag on ended jobs.
+        foreach(var job in config.Jobs.Where(j=>j.Stopped))job.Paused=false;
         SetGeneration(config);
         return config;
     }

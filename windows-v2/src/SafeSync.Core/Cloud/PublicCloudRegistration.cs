@@ -9,9 +9,10 @@ public static class PublicCloudRegistration
 {
     public static string DropboxAppKey=>typeof(PublicCloudRegistration).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
         .FirstOrDefault(a=>a.Key=="SafeSyncDropboxAppKey")?.Value ?? "";
+    public static string ResolveDropboxAppKey(string? value)=>string.IsNullOrWhiteSpace(value) ? DropboxAppKey : value.Trim();
     public static CloudAccounts Apply(CloudAccounts accounts)
     {
-        if(accounts.Dropbox.AppKey.Length==0)accounts.Dropbox.AppKey=DropboxAppKey;
+        accounts.Dropbox.AppKey=ResolveDropboxAppKey(accounts.Dropbox.AppKey);
         return accounts;
     }
 }

@@ -13,15 +13,15 @@ public sealed class BackupEngine(ConfigStore store)
         ConfigStore.ValidateJob(job);
         if (job.DestinationType != "Local" && CloudFactory==null) throw new NotSupportedException("클라우드 공급자가 연결되지 않았습니다.");
         var gate = locks.GetOrAdd(job.Id, _ => new(1,1));
-        await gate.WaitAsync(token);
+        try{await pause.WaitForBoundaryAsync(gate,token);}catch(JobStoppedException){return new(){Canceled=true};}
         try
         {
+            pause.ThrowIfStopRequested();
             if(job.SyncMode=="TwoWay")
             {
                 var twoWayResult=await new TwoWayEngine(store,job.DestinationType=="Local" ? null : CloudFactory!(job)).RunAsync(job,forceFull,changed,pause,progress,token,resolutions,reconcileOffline || !observedTwoWayJobs.ContainsKey(job.Id),retentionDays);
                 if(!twoWayResult.Canceled)observedTwoWayJobs.TryAdd(job.Id,0);return twoWayResult;
             }
-            if(resolutions?.Values.Contains(ConflictAction.UseBackup)==true)throw new InvalidOperationException("백업을 원본으로 복사하는 처리는 양방향 작업에서만 가능합니다.");
             if(job.DestinationType!="Local")return await new Cloud.CloudBackupEngine(store,CloudFactory!(job)).RunAsync(job,forceFull,changed,pause,progress,token,resolutions,reconcileOffline,retentionDays);
             // Never create an absent network root: a disconnected drive must fail,
             // not turn into a successful empty scan/deletion run.
@@ -31,6 +31,7 @@ public sealed class BackupEngine(ConfigStore store)
             PathPolicy.RejectLinks(job.Destination,job.Destination);
             var publisher = new VerifiedFiles();
             progress?.Report(new(job.Id,job.Name,"중단된 파일 교체 확인", "",0,0));
+            await publisher.RecoverAsync(job.Source,token);
             await publisher.RecoverAsync(job.Destination,token);
             var state = store.LoadState(job);
             var offline=OfflineJournal.Read(job.Source,state.SourceJournal,token,OfflineJournal.TrackedIds(state.Files));
@@ -50,11 +51,12 @@ public sealed class BackupEngine(ConfigStore store)
                 foreach (var file in FileTree.Scan(job.Source,token, folder => progress?.Report(new(job.Id,job.Name,"원본 폴더 비교",folder,0,0))))
                 {
                     await pause.WaitAsync(token);
+                    pause.ThrowIfStopRequested();
                     pending.Add(PathPolicy.Relative(Path.GetRelativePath(job.Source,file.FullName)));
                 }
                 foreach (var relative in entries.Keys) pending.Add(relative);
             }
-            ChangePlanner.Add(job.Source,changed ?? [],entries,pending,token);
+            ChangePlanner.Add(job.Source,changed ?? [],entries,pending,token,pause.ThrowIfStopRequested);
             if (resolutions != null) foreach (var key in resolutions.Keys) pending.Add(PathPolicy.Relative(key));
             if(full){state.FullScanRequired=false;state.LastFullScanUtc=DateTime.UtcNow.ToString("O");}
             state.CheckpointActive = true;
@@ -67,6 +69,7 @@ public sealed class BackupEngine(ConfigStore store)
                 foreach (var relative in work)
                 {
                     await pause.WaitAsync(token);
+                    pause.ThrowIfStopRequested();
                     token.ThrowIfCancellationRequested();
                     if (PathPolicy.Internal(relative)) { pending.Remove(relative); continue; }
                     progress?.Report(new(job.Id,job.Name,"파일 비교 및 백업",relative,completed,work.Length));
@@ -76,6 +79,17 @@ public sealed class BackupEngine(ConfigStore store)
                     bool handled = false;
                     try
                     {
+                        var action = resolutions != null && resolutions.TryGetValue(relative,out var choice) ? choice : (ConflictAction?)null;
+                        if(action==ConflictAction.Ignore){entries[relative]=FileEntry.From(info,relative,"Conflict","이번 동기화에서 제외");handled=true;result.Skipped++;continue;}
+                        await FileComparisons.VerifyAsync(job,relative,null,resolutions,token);
+                        if(action==ConflictAction.UseBackup)
+                        {
+                            progress?.Report(new(job.Id,job.Name,"백업 → 원본 검증 복원",relative,completed,work.Length));
+                            await FileComparisons.RestoreAsync(store,job,relative,null,null,token,resolutions);info.Refresh();
+                            entries[relative]=FileEntry.From(info,relative);entries[relative].BackupFileId=OfflineJournal.FileIdentity(destination);
+                            result.Copied++;handled=true;continue;
+                        }
+                        if(action is ConflictAction.Overwrite or ConflictAction.KeepBoth && !info.Exists)throw new Cloud.CloudConflictException(relative,"복사할 원본 파일이 없습니다. 덮어쓰기로 삭제를 강제하지 않습니다.");
                         if (!info.Exists)
                         {
                             // Only tracked backup files are eligible for mirrored deletion.
@@ -86,16 +100,20 @@ public sealed class BackupEngine(ConfigStore store)
                         using var sourceGuard = new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.Read);
                         info.Refresh();
                         var target = new FileInfo(destination);
-                        var action = resolutions != null && resolutions.TryGetValue(relative,out var choice) ? choice : (ConflictAction?)null;
-                        if (action == ConflictAction.Ignore)
-                        {
-                            entries[relative] = FileEntry.From(info,relative,"Conflict","이번에는 변경하지 않음");
-                            handled = true; continue;
-                        }
                         bool sameModified = target.Exists && Math.Abs((info.LastWriteTimeUtc - target.LastWriteTimeUtc).TotalSeconds) <= 2;
-                        bool sameCreated = target.Exists && Math.Abs((info.CreationTimeUtc - target.CreationTimeUtc).TotalSeconds) <= 2;
                         bool sameSize = target.Exists && info.Length == target.Length;
-                        if (action is null && target.Exists && sameModified && sameCreated && sameSize)
+                        // Creation time is not a portable content identifier:
+                        // NAS/Samba and copied files may report a different birth time.
+                        bool sameContent=false;
+                        if(action is null && target.Exists && sameSize && !sameModified)
+                        {
+                            progress?.Report(new(job.Id,job.Name,"시간이 다른 파일의 내용 동일 여부 확인",relative,completed,work.Length));
+                            PathPolicy.RejectLinks(job.Destination,destination);
+                            using var targetGuard=new FileStream(destination,FileMode.Open,FileAccess.Read,FileShare.Read);
+                            target.Refresh();
+                            sameContent=info.Length==target.Length && await VerifiedFiles.HashAsync(source,token)==await VerifiedFiles.HashAsync(destination,token);
+                        }
+                        if (action is null && target.Exists && sameSize && (sameModified || sameContent))
                         { entries[relative] = FileEntry.From(info,relative);entries[relative].BackupFileId=OfflineJournal.FileIdentity(destination); result.Skipped++; handled=true; continue; }
                         if (action is null && target.Exists && info.LastWriteTimeUtc <= target.LastWriteTimeUtc.AddSeconds(2))
                         {
@@ -104,10 +122,16 @@ public sealed class BackupEngine(ConfigStore store)
                             entries[relative] = FileEntry.From(info,relative,"Conflict",reason); continue;
                         }
                         string? sibling = null;
+                        string? expectedTarget=action!=null ? target.Exists ? await VerifiedFiles.HashAsync(destination,token) : "" : null;
+                        await FileComparisons.VerifyAsync(job,relative,null,resolutions,token);
                         try
                         {
                             if (action == ConflictAction.KeepBoth && target.Exists)
                             {
+                                using var mutation=await FileMutationGate.EnterAsync(token);
+                                using var targetGuard=new FileStream(destination,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete);
+                                if(await VerifiedFiles.HashAsync(destination,token)!=expectedTarget)throw new Cloud.CloudConflictException(relative,"비교 후 백업이 변경되어 이름을 바꾸지 않았습니다.");
+                                await FileComparisons.VerifyAsync(job,relative,null,resolutions,token);
                                 sibling = destination + ".SafeSync-conflict-" + DateTime.Now.ToString("yyyyMMdd-HHmmssfff") + "-" + Guid.NewGuid().ToString("N")[..8];
                                 File.Move(destination,sibling);
                             }
@@ -117,7 +141,7 @@ public sealed class BackupEngine(ConfigStore store)
                                 await publisher.CopyAsync(source,job.Destination,Path.GetRelativePath(job.Destination,trash),token);
                                 result.Trashed++;
                             }
-                            await publisher.CopyAsync(source,job.Destination,relative,token);
+                            await publisher.CopyAsync(source,job.Destination,relative,token,expectedDestinationHash:sibling!=null ? "" : expectedTarget);
                         }
                         catch
                         {
@@ -134,9 +158,9 @@ public sealed class BackupEngine(ConfigStore store)
                         var locked = ex is IOException && ((ex.HResult & 0xFFFF) is 32 or 33);
                         var issue = Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,new FileInfo(destination));
                         var oldEntry=entries.GetValueOrDefault(relative);
-                        entries[relative] = FileEntry.From(info,relative,locked ? "Locked" : "Failed",issue.Reason);
+                        entries[relative] = FileEntry.From(info,relative,locked ? "Locked" : ex is Cloud.CloudConflictException ? "Conflict" : "Failed",issue.Reason);
                         if(locked)issue=LockTracking.Update(entries[relative],oldEntry,issue);
-                        if(locked)result.Locked.Add(issue);else result.Errors.Add(issue);
+                        if(locked)result.Locked.Add(issue);else if(ex is Cloud.CloudConflictException)result.Conflicts.Add(issue);else result.Errors.Add(issue);
                     }
                     finally
                     {
@@ -150,8 +174,9 @@ public sealed class BackupEngine(ConfigStore store)
                 if (full) state.LastFullScanUtc = DateTime.UtcNow.ToString("O");
                 state.LastRunUtc = DateTime.UtcNow.ToString("O");
                 state.FullScanRequired = false;
+                pause.ThrowIfStopRequested();
                 progress?.Report(new(job.Id,job.Name,"휴지통 보관 기간 확인", "",completed,work.Length));
-                try {result.Trashed += await Task.Run(() => new TrashService().RemoveExpired(job.Destination,retentionDays,token),token);}
+                try {result.Trashed += await Task.Run(() => new TrashService().RemoveExpired(job.Destination,retentionDays,token,pause.ThrowIfStopRequested)+new TrashService().RemoveExpired(job.Source,retentionDays,token,pause.ThrowIfStopRequested),token);}
                 catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
                 {
                     result.Errors.Add(new(job.Id,job.Name,"[휴지통 정리]",ex.Message,0,0,"",""));
@@ -170,8 +195,10 @@ public sealed class BackupEngine(ConfigStore store)
             FileIssue Issue(string path,string reason,FileInfo src,FileInfo dst) => new(job.Id,job.Name,path,reason,
                 src.Exists ? src.Length : 0,dst.Exists ? dst.Length : 0,
                 src.Exists ? src.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss") : "없음",
-                dst.Exists ? dst.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss") : "없음");
+                dst.Exists ? dst.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss") : "없음",
+                SourceCreated:src.Exists ? src.CreationTimeUtc.ToString("O") : "",BackupCreated:dst.Exists ? dst.CreationTimeUtc.ToString("O") : "",SourceExists:src.Exists,BackupExists:dst.Exists);
         }
+        catch(JobStoppedException){return new(){Canceled=true};}
         finally { gate.Release(); }
     }
 }

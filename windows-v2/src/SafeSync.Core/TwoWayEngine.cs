@@ -18,7 +18,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
         var pending=state.PendingPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var dirty=(changes ?? []).Select(PathPolicy.Relative).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var gate=remote==null ? null : CloudBackupEngine.ScopeGate(remote);
-        if(gate!=null)await gate.WaitAsync(token);
+        if(gate!=null)await pause.WaitForBoundaryAsync(gate,token);
         try
         {
             Report("양방향 동기화 폴더 및 복구 기록 확인","",0,0);
@@ -28,6 +28,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
             {
                 if(job.CloudAccountId!=remote.AccountId)throw new InvalidOperationException("작업의 클라우드 계정이 다릅니다.");
                 await remote.InitializeAsync(token);publisher=new(store,job,remote);
+                if(await FileComparisons.PrepareDuplicatesAsync(job,remote,resolutions,token))forceFull=true;
             }
             else {PathPolicy.RejectLinks(job.Destination,job.Destination);await files.RecoverAsync(job.Destination,token);}
             string leftIdentity=LocalRootIdentity(job.Source);
@@ -35,7 +36,10 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
             string rightIdentity=remote==null ? LocalRootIdentity(job.Destination) : rootItem?.Id ?? throw new DirectoryNotFoundException("클라우드 동기화 폴더가 없습니다.");
             if((state.SyncSourceIdentity.Length>0 && state.SyncSourceIdentity!=leftIdentity) ||
                 (state.SyncBackupIdentity.Length>0 && state.SyncBackupIdentity!=rightIdentity))
+            {
+                if(remote!=null)throw new CloudBindingException("동기화 루트 폴더의 식별 정보가 변경되었습니다. 삭제 전파를 중단합니다. 사용할 폴더를 다시 선택하세요.");
                 throw new IOException("동기화 루트 폴더의 식별 정보가 변경되었습니다. 삭제 전파를 중단합니다. 폴더를 확인한 뒤 새 작업으로 다시 연결하세요.");
+            }
             state.SyncSourceIdentity=leftIdentity;state.SyncBackupIdentity=rightIdentity;
             var sourceOffline=OfflineJournal.Read(job.Source,state.SourceJournal,token,OfflineJournal.TrackedIds(state.Files));
             var backupOffline=remote==null ? OfflineJournal.Read(job.Destination,state.DestinationJournal,token,OfflineJournal.TrackedIds(state.Files,true)) : null;
@@ -83,13 +87,36 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
             {
                 foreach(var relative in work)
                 {
-                    await pause.WaitAsync(token);token.ThrowIfCancellationRequested();
+                    await pause.WaitAsync(token);pause.ThrowIfStopRequested();token.ThrowIfCancellationRequested();
                     if(blocked.Contains(relative)){completed++;continue;}
                     SyncSide? a=null,b=null;
                     entries.TryGetValue(relative,out var previous);
                     try
                     {
                         Report("양쪽 파일 변경 비교",relative,completed,work.Length);
+                        if(resolutions!=null && resolutions.TryGetValue(relative,out var ignored) && ignored==ConflictAction.Ignore)
+                        {pending.Remove(relative);result.Skipped++;continue;}
+                        if(catalog?.IsAmbiguous(relative)==true)
+                        {
+                            if((resolutions==null || !resolutions.ContainsKey(relative)) && remote is IRemoteDuplicates duplicates)
+                            {
+                                var local=PathPolicy.Combine(job.Source,relative);
+                                PathPolicy.RejectLinks(job.Source,local);
+                                var identical=await RemoteDuplicates.IdenticalAsync(remote!,local,relative,token);
+                                if(identical!=null)
+                                {
+                                    // Do not grant deletion authority to one of
+                                    // several physical copies. The next changed
+                                    // or missing side still needs reconciliation.
+                                    entries[relative]=FileEntry.From(new FileInfo(local),relative);entries[relative].RemoteId=identical.Id;
+                                    pending.Remove(relative);result.ResolvedPaths.Add(relative);result.Skipped++;continue;
+                                }
+                                if(Directory.Exists(local) && (await duplicates.CandidatesAsync(relative,token)) is {Count:>0} folders && folders.All(i=>i.Folder))
+                                {entries.Remove(relative);pending.Remove(relative);result.ResolvedPaths.Add(relative);result.Skipped++;continue;}
+                            }
+                            throw new CloudDuplicateNameException(relative);
+                        }
+                        await FileComparisons.VerifyAsync(job,relative,remote,resolutions,token);
                         var sourcePath=PathPolicy.Combine(job.Source,relative);
                         var backupPath=remote==null ? PathPolicy.Combine(job.Destination,relative) : "";
                         bool rehash=full || IsDirty(relative) || previous?.Status!="BackedUp";
@@ -262,17 +289,19 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                     if(stopRemote)break;
                 }
                 state.FullScanRequired=false;if(full)state.LastFullScanUtc=DateTime.UtcNow.ToString("O");state.LastRunUtc=DateTime.UtcNow.ToString("O");
+                pause.ThrowIfStopRequested();
                 Report("양쪽 휴지통 보관 기간 확인","",completed,work.Length);
                 try
                 {
-                    new TrashService().RemoveExpired(job.Source,retentionDays,token);
-                    if(remote==null)new TrashService().RemoveExpired(job.Destination,retentionDays,token);
+                    new TrashService().RemoveExpired(job.Source,retentionDays,token,pause.ThrowIfStopRequested);
+                    if(remote==null)new TrashService().RemoveExpired(job.Destination,retentionDays,token,pause.ThrowIfStopRequested);
                     else if((await remote.StatAsync(".safesync-trash",token))?.Folder==true)
                     {
                         var protectedBatches=publisher!.ProtectedTrashBatches();
                         foreach(var batch in await remote.ListAsync(".safesync-trash",token))
                         {
                             await pause.WaitAsync(token);
+                            pause.ThrowIfStopRequested();
                             if(batch.Folder && !protectedBatches.Contains(batch.Name) && TrashDates.TryParse(batch.Name,out var date) && date<DateTime.Now.AddDays(-retentionDays))
                                 await remote.DeleteAsync(".safesync-trash/"+PathPolicy.Relative(batch.Name),token);
                         }
@@ -280,7 +309,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                 }
                 catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or HttpRequestException){result.Errors.Add(Issue("휴지통",ex.Message,null,null));}
             }
-            catch(OperationCanceledException) when(token.IsCancellationRequested){result.Canceled=true;}
+            catch(OperationCanceledException) when(token.IsCancellationRequested || pause.IsStopRequested){result.Canceled=true;}
             finally{Save();catalog?.Save();}
 
             void Commit(string relative,SyncSide? a,SyncSide? b)
@@ -302,13 +331,14 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
 
         void Save(){state.Files=entries.Values.ToList();state.PendingPaths=pending.ToList();state.CheckpointActive=pending.Count>0;store.SaveState(state);}
         void Report(string stage,string path,int done,int total)=>progress?.Report(new(job.Id,job.Name,stage,path,done,total));
-        FileIssue Issue(string path,string reason,SyncSide? a,SyncSide? b)=>new(job.Id,job.Name,path,reason,Math.Max(0,a?.Length ?? 0),Math.Max(0,b?.Length ?? 0),a?.Modified ?? "",b?.Modified ?? "");
+        FileIssue Issue(string path,string reason,SyncSide? a,SyncSide? b)=>new(job.Id,job.Name,path,reason,Math.Max(0,a?.Length ?? 0),Math.Max(0,b?.Length ?? 0),a?.Modified ?? "",b?.Modified ?? "",SourceCreated:a?.Created ?? "",BackupCreated:b?.Created ?? "",SourceExists:a!=null,BackupExists:b!=null);
         async Task<Dictionary<string,FileSystemInfo>> ScanAsync(string root,string label)
         {
             var index=new Dictionary<string,FileSystemInfo>(StringComparer.OrdinalIgnoreCase);
             foreach(var file in FileTree.Entries(root,token,folder=>Report(label,folder,0,0)))
             {
                 await pause.WaitAsync(token);
+                pause.ThrowIfStopRequested();
                 var relative=PathPolicy.Relative(Path.GetRelativePath(root,file.FullName));
                 if(!index.TryAdd(relative,file))throw new IOException("대소문자가 충돌하는 파일 경로입니다: "+relative);
             }
@@ -319,7 +349,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
             var index=new Dictionary<string,FileSystemInfo>(StringComparer.OrdinalIgnoreCase);
             foreach(var relative in paths.Distinct(StringComparer.OrdinalIgnoreCase))
             {
-                await pause.WaitAsync(token);token.ThrowIfCancellationRequested();
+                await pause.WaitAsync(token);pause.ThrowIfStopRequested();token.ThrowIfCancellationRequested();
                 if(PathPolicy.Internal(relative))continue;
                 var path=PathPolicy.Combine(root,relative);
                 // A deleted/renamed directory also carries its tracked children.
@@ -329,7 +359,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                 {
                     index[relative]=new DirectoryInfo(path);
                     foreach(var child in FileTree.Entries(path,token))
-                    {await pause.WaitAsync(token);index[PathPolicy.Relative(Path.GetRelativePath(root,child.FullName))]=child;}
+                    {await pause.WaitAsync(token);pause.ThrowIfStopRequested();index[PathPolicy.Relative(Path.GetRelativePath(root,child.FullName))]=child;}
                 }
                 for(string parent=RemotePath.Parent(relative);parent.Length>0;parent=RemotePath.Parent(parent))
                 {

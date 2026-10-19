@@ -23,6 +23,8 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     private BackupJob[] jobs = [];
     private Task? loop;
     private readonly object queueLock = new();
+    private readonly object launchLock = new();
+    public event Action<BackupJob>? StateChanged;
     public event Action<BackupProgress>? Progress;
     public event Action<BackupJob>? Started;
     public event Action<BackupJob,BackupResult>? Completed;
@@ -98,11 +100,31 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
             if (paused) current.Pause.Pause(); else current.Pause.Resume();
         }
     }
+    public void StopJob(BackupJob job)
+    {
+        lock(launchLock)
+        {
+            // Ending a run is distinct from pausing its transfer gate.
+            job.Stopped=true;job.Paused=false;
+            if(running.TryGetValue(job.Id,out var current))current.Pause.RequestStop();
+        }
+        StateChanged?.Invoke(job);
+    }
+    public bool ResumeJob(BackupJob job)
+    {
+        lock(launchLock)
+        {
+            if(IsRunning(job.Id))return false;
+            job.Stopped=false;job.Paused=false;return true;
+        }
+    }
     public Task RunAsync(BackupJob job,bool full=false,IReadOnlyDictionary<string,ConflictAction>? resolutions=null)
     {
-        if (stop.IsCancellationRequested || job.Paused || (job.DestinationType != "Local" && CloudFactory==null)) return Task.CompletedTask;
+        lock(launchLock)
+        {
+        if (stop.IsCancellationRequested || job.Paused || job.Stopped || (job.DestinationType != "Local" && CloudFactory==null)) return Task.CompletedTask;
         var current = new Running();
-        if (!running.TryAdd(job.Id,current)) return Task.CompletedTask;
+        if (!running.TryAdd(job.Id,current)) return running.TryGetValue(job.Id,out var active) ? active.Task : Task.CompletedTask;
         var captured = changed.TryGetValue(job.Id,out var changes) ? changes.ToArray() : [];
         try {PersistQueue();}catch {running.TryRemove(job.Id,out _);throw;}
         current.Task = Task.Run(async () =>
@@ -131,9 +153,10 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                 retries[job.Id]=DateTime.UtcNow.AddMinutes(1);
                 Failed?.Invoke(job,ex);
             }
-            finally { running.TryRemove(job.Id,out _); }
+            finally { running.TryRemove(job.Id,out _);StateChanged?.Invoke(job); }
         });
         return current.Task;
+        }
     }
     private async Task LoopAsync()
     {
@@ -154,7 +177,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                 RepairWatchers();PersistQueue();
                 foreach (var job in jobs)
                 {
-                    if (job.Paused || IsRunning(job.Id) || (job.DestinationType != "Local" && CloudFactory==null)) continue;
+                    if (job.Paused || job.Stopped || IsRunning(job.Id) || (job.DestinationType != "Local" && CloudFactory==null)) continue;
                     if (retries.TryGetValue(job.Id,out var due) && due > DateTime.UtcNow) continue;
                     bool retry = retries.TryGetValue(job.Id,out due) && due <= DateTime.UtcNow;
                     bool dirty = changed.TryGetValue(job.Id,out var changes) && !changes.IsEmpty &&
@@ -196,7 +219,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     }
     public async ValueTask DisposeAsync()
     {
-        stop.Cancel();
+        lock(launchLock)stop.Cancel();
         lock(watcherLock){foreach(var watcher in watchers.Values)watcher.Dispose();watchers.Clear();}
         foreach (var task in running.Values) task.Pause.Resume();
         if (loop != null) await loop;

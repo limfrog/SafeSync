@@ -181,18 +181,20 @@ public sealed class TrashService
         File.Move(source, target);
         return target;
     }
-    public IEnumerable<TrashItem> List(string root, CancellationToken token)
+    public IEnumerable<TrashItem> List(string root, CancellationToken token,Action? boundary=null)
     {
         var trashRoot = Path.Combine(root, ".safesync-trash");
         if (!Directory.Exists(trashRoot)) yield break;
         PathPolicy.RejectLinks(root, trashRoot);
         foreach (var batch in new DirectoryInfo(trashRoot).EnumerateDirectories())
         {
+            boundary?.Invoke();
             token.ThrowIfCancellationRequested();
             if ((batch.Attributes & FileAttributes.ReparsePoint) != 0) continue;
             var deleted = TrashDates.TryParse(batch.Name,out var date) ? date : batch.CreationTime;
-            foreach (var file in FileTree.Scan(batch.FullName, token))
+            foreach (var file in FileTree.Scan(batch.FullName, token,_=>boundary?.Invoke()))
             {
+                boundary?.Invoke();
                 var relative = PathPolicy.Relative(Path.GetRelativePath(batch.FullName, file.FullName));
                 yield return new(file.FullName,file.Name,deleted,PathPolicy.Combine(root,relative),relative,file.Length);
             }
@@ -210,11 +212,11 @@ public sealed class TrashService
         ValidateItem(root, item);
         File.Delete(item.StoragePath);
     }
-    public int RemoveExpired(string root, int days, CancellationToken token)
+    public int RemoveExpired(string root, int days, CancellationToken token,Action? boundary=null)
     {
         if (days is < 1 or > 3650) throw new ArgumentOutOfRangeException(nameof(days));
         int count = 0;
-        foreach (var item in List(root, token))
+        foreach (var item in List(root, token,boundary))
         {
             token.ThrowIfCancellationRequested();
             if (item.DeletedAt < DateTime.Now.AddDays(-days)) { Delete(root, item); count++; }
@@ -225,9 +227,10 @@ public sealed class TrashService
         if(Directory.Exists(trashRoot))
         foreach(var batch in new DirectoryInfo(trashRoot).EnumerateDirectories())
         {
+            boundary?.Invoke();
             token.ThrowIfCancellationRequested();
             if((batch.Attributes&FileAttributes.ReparsePoint)!=0 || !TrashDates.TryParse(batch.Name,out var deleted) || deleted>=DateTime.Now.AddDays(-days))continue;
-            foreach(var folder in FileTree.Entries(batch.FullName,token).OfType<DirectoryInfo>().OrderByDescending(f=>f.FullName.Length))
+            foreach(var folder in FileTree.Entries(batch.FullName,token,_=>boundary?.Invoke()).OfType<DirectoryInfo>().OrderByDescending(f=>f.FullName.Length))
                 if(!folder.EnumerateFileSystemInfos().Any())Directory.Delete(folder.FullName);
             if(!batch.EnumerateFileSystemInfos().Any())Directory.Delete(batch.FullName);
         }

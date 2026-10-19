@@ -33,6 +33,8 @@ try
         for(int sample=0;sample<3;sample++)Console.WriteLine(OfflineJournal.RootIdentity(args[identityIndex+1]));return;
     }
     var googleProbeIndex=Array.IndexOf(args,"--google-probe");
+    var duplicateInspectionIndex=Array.IndexOf(args,"--inspect-google-duplicates");
+    if(duplicateInspectionIndex>=0){await LiveGoogleTests.InspectDuplicatesAsync(testRoot,args[duplicateInspectionIndex+1],args[duplicateInspectionIndex+2]);return;}
     var connectDropboxIndex=Array.IndexOf(args,"--connect-dropbox");
     if(connectDropboxIndex>=0){await LiveDropboxTests.ConnectAsync(args[connectDropboxIndex+1]);return;}
     var liveDropboxIndex=Array.IndexOf(args,"--live-dropbox");
@@ -42,6 +44,8 @@ try
     var twoWayGoogleIndex=Array.IndexOf(args,"--two-way-google");
     if(twoWayGoogleIndex>=0){await LiveGoogleTests.TwoWayAsync(testRoot,args[twoWayGoogleIndex+1]);return;}
     var twoWayNasIndex=Array.IndexOf(args,"--two-way-nas");
+    var compareNasIndex=Array.IndexOf(args,"--comparison-nas");
+    if(compareNasIndex>=0){await ComparisonRegressionTests.NasAsync(testRoot,args[compareNasIndex+1]);return;}
     if(twoWayNasIndex>=0){await TwoWayTests.NasAsync(testRoot,args[twoWayNasIndex+1],Check);return;}
     if(googleProbeIndex>=0){await LiveGoogleTests.ProbeAsync(testRoot,args[googleProbeIndex+1]);return;}
     var liveGoogleIndex=Array.IndexOf(args,"--live-google");
@@ -191,6 +195,12 @@ try
     await CloudTests.RunAsync(testRoot,Check);
     await TwoWayTests.RunAsync(testRoot,Check);
     await DropboxScopeTests.RunAsync(testRoot,Check);
+    await ComparisonRegressionTests.RunAsync(testRoot,Check);
+    await GracefulStopTests.RunAsync(testRoot,Check);
+    await RecoveryRegressionTests.RunAsync(testRoot,Check);
+    await FileComparisonTests.RunAsync(testRoot,Check);
+    await DuplicateResolutionTests.RunAsync(testRoot,Check);
+    JobProblemTests.Run(testRoot,Check);
     await ParityTests.RunAsync(testRoot,Check);
     await ReleaseSafetyTests.RunAsync(testRoot,Check);
     var nasIndex=Array.IndexOf(args,"--nas");

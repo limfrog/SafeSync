@@ -11,9 +11,11 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
         if(!Directory.Exists(job.Source))throw new DirectoryNotFoundException("원본 폴더에 접근할 수 없습니다.");
         if(job.CloudAccountId.Length==0 || job.CloudAccountId!=remote.AccountId)throw new InvalidOperationException("클라우드 계정을 확인하고 작업의 백업 폴더를 다시 선택하세요.");
         Report("클라우드 계정 및 백업 폴더 확인","",0,0);await remote.InitializeAsync(token);
-        var gate=ScopeGate(remote);await gate.WaitAsync(token);
+        var gate=ScopeGate(remote);await pause.WaitForBoundaryAsync(gate,token);
         try
         {
+            if(await FileComparisons.PrepareDuplicatesAsync(job,remote,resolutions,token))forceFull=true;
+            await new VerifiedFiles().RecoverAsync(job.Source,token);
             var state=store.LoadState(job);var result=new BackupResult();
             var offline=OfflineJournal.Read(job.Source,state.SourceJournal,token,OfflineJournal.TrackedIds(state.Files));bool journalInvalid=state.SourceJournal!=null && offline.RequiresScan;state.SourceJournal=offline.Checkpoint;
             changes=(changes ?? []).Concat(offline.Paths);
@@ -36,7 +38,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             if(full)
             {
                 foreach(var file in FileTree.Scan(job.Source,token,folder=>Report("원본 폴더 비교",folder,0,0)))
-                {await pause.WaitAsync(token);pending.Add(PathPolicy.Relative(Path.GetRelativePath(job.Source,file.FullName)));}
+                {await pause.WaitAsync(token);pause.ThrowIfStopRequested();pending.Add(PathPolicy.Relative(Path.GetRelativePath(job.Source,file.FullName)));}
                 foreach(var relative in entries.Keys)pending.Add(relative);
                 
             }
@@ -47,26 +49,63 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             // still explicitly refreshes both endpoints.
             await catalog.RefreshAsync(forceFull,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);
             foreach(var path in catalog.State.Pending)if(!PathPolicy.Internal(path))pending.Add(path);
-            ChangePlanner.Add(job.Source,changes ?? [],entries,pending,token);
+            ChangePlanner.Add(job.Source,changes ?? [],entries,pending,token,pause.ThrowIfStopRequested);
             if(resolutions!=null)foreach(var relative in resolutions.Keys)pending.Add(PathPolicy.Relative(relative));
             if(full){state.FullScanRequired=false;state.LastFullScanUtc=DateTime.UtcNow.ToString("O");}
             state.CheckpointActive=true;Save();catalog.Acknowledge();var work=pending.Order(StringComparer.OrdinalIgnoreCase).ToArray();int completed=0;
-            IReadOnlyDictionary<string,RemoteItem?>? metadata=remote is IRemoteBatch batchStore ? await batchStore.StatManyAsync(tree,work,token) : null;
+            IReadOnlyDictionary<string,RemoteItem?>? metadata=null;
+            if(remote is IRemoteBatch batchStore)
+            {
+                try{metadata=await batchStore.StatManyAsync(tree,work.Where(p=>!catalog.IsAmbiguous(p)),token);}
+                catch(CloudDuplicateNameException){await catalog.RefreshAsync(true,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);}
+            }
             try
             {
                 var checkpointLock=new object();bool stopWork=false;
                 async Task ProcessAsync(string relative)
                 {
-                    await pause.WaitAsync(token);token.ThrowIfCancellationRequested();if(blocked.Contains(relative)){Interlocked.Increment(ref completed);return;}
+                    await pause.WaitAsync(token);pause.ThrowIfStopRequested();token.ThrowIfCancellationRequested();if(blocked.Contains(relative)){Interlocked.Increment(ref completed);return;}
                     var path=PathPolicy.Combine(job.Source,relative);var info=new FileInfo(path);bool handled=false;RemoteItem? target=null;
                     try
                     {
                         Report("변경 파일의 클라우드 정보 확인",relative,completed,work.Length);
-                        target=metadata!=null ? metadata.GetValueOrDefault(relative) : tree!=null ? tree.GetValueOrDefault(relative) : await remote.StatAsync(relative,token);
                         var action=resolutions!=null && resolutions.TryGetValue(relative,out var selected) ? selected : (ConflictAction?)null;
-                        if(action==ConflictAction.Ignore){handled=true;return;}
+                        if(action==ConflictAction.Ignore){entries[relative]=FileEntry.From(info,relative,"Conflict","이번 동기화에서 제외");lock(checkpointLock)result.Skipped++;handled=true;return;}
+                        if(catalog.IsAmbiguous(relative))
+                        {
+                            PathPolicy.RejectLinks(job.Source,path);
+                            if(action==null && remote is IRemoteDuplicates duplicates)
+                            {
+                                if(Directory.Exists(path) && (await duplicates.CandidatesAsync(relative,token)) is {Count:>0} folders && folders.All(i=>i.Folder))
+                                {entries.TryRemove(relative,out _);lock(checkpointLock)result.Skipped++;handled=true;return;}
+                                var identical=await RemoteDuplicates.IdenticalAsync(remote,path,relative,token);
+                                if(identical!=null)
+                                {
+                                    info.Refresh();
+                                    entries[relative]=FileEntry.From(info,relative);entries[relative].RemoteId=identical.Id;
+                                    lock(checkpointLock)result.Skipped++;handled=true;return;
+                                }
+                            }
+                            throw new CloudDuplicateNameException(relative);
+                        }
+                        target=metadata!=null ? metadata.GetValueOrDefault(relative) : tree!=null ? tree.GetValueOrDefault(relative) : await remote.StatAsync(relative,token);
+                        await FileComparisons.VerifyAsync(job,relative,remote,resolutions,token);
+                        if(action==ConflictAction.UseBackup)
+                        {
+                            Report("클라우드 백업 → 원본 검증 복원",relative,completed,work.Length);
+                            target=await remote.StatAsync(relative,token);
+                            await FileComparisons.RestoreAsync(store,job,relative,remote,target,token,resolutions);info.Refresh();
+                            entries[relative]=FileEntry.From(info,relative);entries[relative].RemoteId=target!.Id;
+                            lock(checkpointLock){catalog.Update(relative,target);result.Copied++;}handled=true;return;
+                        }
+                        if(Directory.Exists(path))
+                        {
+                            if(target!=null && !target.Folder)throw new CloudConflictException(relative,"원본 폴더와 클라우드 파일의 경로가 충돌합니다.");
+                            entries.TryRemove(relative,out _);handled=true;return;
+                        }
                         if(!info.Exists)
                         {
+                            if(action is ConflictAction.Overwrite or ConflictAction.KeepBoth)throw new CloudConflictException(relative,"복사할 원본 파일이 없습니다. 덮어쓰기로 삭제를 강제하지 않습니다.");
                             if(job.MirrorDeletes && entries.ContainsKey(relative) && target!=null)
                             {
                                 if(target.Folder || !target.Binary)throw new CloudConflictException(relative,"일반 파일이 아닌 클라우드 항목은 자동으로 삭제하지 않습니다.");
@@ -79,10 +118,20 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                         using(var guard=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read))
                         {
                             info.Refresh();
+                            await FileComparisons.VerifyAsync(job,relative,remote,resolutions,token);
                             sourceFileId=OfflineJournal.FileIdentity(path);
                             if(target!=null && (target.Folder || !target.Binary))throw new CloudConflictException(relative,"클라우드 폴더·문서·바로가기는 일반 파일로 덮어쓰지 않습니다.");
                             bool sameTime=target!=null && Math.Abs((info.LastWriteTimeUtc-target.ModifiedUtc).TotalSeconds)<=2;
-                            if(action==null && sameTime && target!.Length==info.Length)
+                            bool sameContent=false;
+                            if(action==null && target!=null && target.Length==info.Length && !sameTime && (target.Hash.Length>0 || target.Sha256.Length>0))
+                            {
+                                Report("시간이 다른 클라우드 파일의 내용 동일 여부 확인",relative,completed,work.Length);
+                                string hash,sha256="";
+                                if(remote.Provider=="GoogleDrive"){var hashes=await RemotePath.GoogleHashesAsync(path,token);hash=hashes.Md5;sha256=hashes.Sha256;}
+                                else hash=await RemotePath.HashAsync(remote.Provider,path,token);
+                                sameContent=RemotePath.Content(target,new(path,info.Length,info.LastWriteTimeUtc,info.CreationTimeUtc,hash,sha256));
+                            }
+                            if(action==null && target!=null && target.Length==info.Length && (sameTime || sameContent))
                             {
                                 entries[relative]=FileEntry.From(info,relative);entries[relative].RemoteId=target.Id;
                                 lock(checkpointLock)result.Skipped++;handled=true;return;
@@ -126,15 +175,17 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                     if(full)state.LastFullScanUtc=DateTime.UtcNow.ToString("O");state.FullScanRequired=false;state.LastRunUtc=DateTime.UtcNow.ToString("O");
                 }
                 // Retention cleanup is scoped strictly to the application trash.
+                pause.ThrowIfStopRequested();
                 Report("클라우드 휴지통 보관 기간 확인","",completed,work.Length);
                 try
                 {
+                    result.Trashed+=new TrashService().RemoveExpired(job.Source,retentionDays,token,pause.ThrowIfStopRequested);
                     var trash=await remote.StatAsync(".safesync-trash",token);
                     var protectedBatches=publisher.ProtectedTrashBatches();
                     if(trash?.Folder==true)
                         foreach(var batch in await remote.ListAsync(".safesync-trash",token))
                         {
-                            await pause.WaitAsync(token);token.ThrowIfCancellationRequested();
+                            await pause.WaitAsync(token);pause.ThrowIfStopRequested();token.ThrowIfCancellationRequested();
                             if(protectedBatches.Contains(batch.Name) || !batch.Folder || !TrashDates.TryParse(batch.Name,out var deleted) || deleted>=DateTime.Now.AddDays(-retentionDays))continue;
                             await remote.DeleteAsync(".safesync-trash/"+PathPolicy.Relative(batch.Name),token);
                         }
@@ -148,14 +199,14 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
         }
         finally{gate.Release();}
         void Report(string stage,string file,int done,int total)=>progress?.Report(new(job.Id,job.Name,stage,file,done,total));
-        FileIssue Issue(string relative,string reason,FileInfo? source,RemoteItem? backup)=>new(job.Id,job.Name,relative,reason,source?.Exists==true ? source.Length : 0,backup?.Length ?? 0,source?.Exists==true ? source.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss") : "",backup?.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "");
+        FileIssue Issue(string relative,string reason,FileInfo? source,RemoteItem? backup)=>new(job.Id,job.Name,relative,reason,source?.Exists==true ? source.Length : 0,backup?.Length ?? 0,source?.Exists==true ? source.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss") : "",backup?.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "",SourceCreated:source?.Exists==true ? source.CreationTimeUtc.ToString("O") : "",BackupCreated:backup?.CreatedUtc.ToString("O") ?? "",SourceExists:source?.Exists,BackupExists:backup!=null);
     }
     public static async Task<Dictionary<string,RemoteItem>> TreeAsync(IRemoteStore remote,PauseGate pause,CancellationToken token,Action<string>? progress=null,bool includeInternal=false)
     {
         var files=new Dictionary<string,RemoteItem>(StringComparer.OrdinalIgnoreCase);var folders=new Stack<string>();folders.Push("");
         while(folders.Count>0)
         {
-            await pause.WaitAsync(token);token.ThrowIfCancellationRequested();var folder=folders.Pop();progress?.Invoke(folder);
+            await pause.WaitAsync(token);pause.ThrowIfStopRequested();token.ThrowIfCancellationRequested();var folder=folders.Pop();progress?.Invoke(folder);
             var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach(var item in await remote.ListAsync(folder,token))
             {

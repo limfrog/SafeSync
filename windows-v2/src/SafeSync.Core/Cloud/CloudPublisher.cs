@@ -2,10 +2,11 @@ using System.Text.RegularExpressions;
 
 namespace SafeSync.Core.Cloud;
 
-public sealed class CloudConflictException(string relative,string message) : IOException(message)
+public class CloudConflictException(string relative,string message) : IOException(message)
 {
     public string RelativePath {get;}=relative;
 }
+public sealed class CloudDuplicateNameException(string relative) : CloudConflictException(relative,"클라우드에 중복 이름의 다른 사본이 있습니다. 동기화 상태의 문제 해결에서 사본 정보를 확인하고 덮어쓰기·이름 보존·제외를 선택하세요.");
 public sealed class CloudTransaction
 {
     public string JobId {get;set;}="";
@@ -189,6 +190,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
         var failures=new List<(string,Exception)>();if(!Directory.Exists(JournalRoot))return failures;
         foreach(var journal in Directory.EnumerateFiles(JournalRoot,job.Id+".*.json"))
         {
+            pause.ThrowIfStopRequested();
             token.ThrowIfCancellationRequested();var record=JsonFile.Read<CloudTransaction>(journal);Validate(record);
             try
             {

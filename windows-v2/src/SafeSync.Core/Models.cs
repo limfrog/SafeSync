@@ -14,10 +14,12 @@ public sealed class BackupJob
     public string CloudFolderId { get; set; } = "";
     public string CloudFolderIdentity { get; set; } = "";
     public string CloudAccountId { get; set; } = "";
+    public bool CloudBindingReviewRequired { get; set; }
     public string TriggerType { get; set; } = "Realtime";
     public string ScheduleTime { get; set; } = "23:00";
     public bool MirrorDeletes { get; set; }
     public bool Paused { get; set; }
+    public bool Stopped { get; set; }
     public string LastScheduledRun { get; set; } = "";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
     [JsonIgnore] public string TriggerText => TriggerType == "Realtime" ? "파일 변경 시" : $"매일 {ScheduleTime}";
@@ -104,9 +106,10 @@ public sealed class JobState
 
 public sealed record SyncSide(long Length, string Modified, string Created, string Hash, string Identity);
 
-public enum ConflictAction { Overwrite, KeepBoth, Ignore, UseBackup }
+public enum ConflictAction { Overwrite, KeepBoth, Ignore, UseBackup, NormalizeDuplicates }
 public sealed record FileIssue(string JobId, string JobName, string File, string Reason,
-    long SourceSize, long BackupSize, string SourceModified, string BackupModified,string WaitingSinceUtc="",int RetryCount=0,string LastAttemptUtc="");
+    long SourceSize, long BackupSize, string SourceModified, string BackupModified,string WaitingSinceUtc="",int RetryCount=0,string LastAttemptUtc="",
+    string SourceCreated="",string BackupCreated="",bool? SourceExists=null,bool? BackupExists=null);
 public sealed record BackupProgress(string JobId, string JobName, string Stage, string CurrentFile,
     int Completed, int Total, long Bytes = 0, long TotalBytes = 0);
 public sealed class BackupResult
@@ -132,6 +135,17 @@ public sealed class PauseGate
 {
     private readonly object gate = new();
     private TaskCompletionSource? paused;
+    private bool stopRequested;
+    private readonly CancellationTokenSource boundaryStop=new();
+    public bool IsStopRequested { get { lock(gate)return stopRequested; } }
+    public void RequestStop() { lock(gate){stopRequested=true;paused?.TrySetResult();paused=null;}boundaryStop.Cancel(); }
+    public void ThrowIfStopRequested() { if(IsStopRequested)throw new JobStoppedException(); }
+    public async Task WaitForBoundaryAsync(SemaphoreSlim semaphore,CancellationToken token)
+    {
+        using var linked=CancellationTokenSource.CreateLinkedTokenSource(token,boundaryStop.Token);
+        try{await semaphore.WaitAsync(linked.Token);}
+        catch(OperationCanceledException) when(!token.IsCancellationRequested && IsStopRequested){throw new JobStoppedException();}
+    }
     public bool IsPaused { get { lock (gate) return paused != null; } }
     public void Pause() { lock (gate) paused ??= new(TaskCreationOptions.RunContinuationsAsynchronously); }
     public void Resume() { lock (gate) { paused?.TrySetResult(); paused = null; } }
@@ -139,4 +153,9 @@ public sealed class PauseGate
     {
         lock (gate) return paused?.Task.WaitAsync(token) ?? Task.CompletedTask;
     }
+}
+
+public sealed class JobStoppedException : OperationCanceledException
+{
+    public JobStoppedException() : base("현재 파일을 안전하게 마친 뒤 작업을 종료했습니다.") { }
 }

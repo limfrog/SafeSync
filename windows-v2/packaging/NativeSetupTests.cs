@@ -49,6 +49,7 @@ internal static class NativeSetupTests
                 Install(args[1],"interrupted",delegate(string phase){if(phase==args[2]){File.WriteAllText(Path.Combine(Path.GetDirectoryName(args[1]),"ready"),phase);Thread.Sleep(Timeout.Infinite);}});return 3;
             }
             if(args.Length!=1)return 2;
+            Check(NativeSetupCore.DisplayName=="SafeSync" && Path.GetFileName(NativeSetupCore.DefaultRoot)=="SafeSync2","Public name changed compatibility storage/install paths.");
             string home=Path.Combine(Path.GetFullPath(args[0]),"setup-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(home);File.WriteAllText(Path.Combine(home,".safesync2-test-sandbox"),"test");
             string root=Path.Combine(home,"app"),data=Path.Combine(home,"user-data");Directory.CreateDirectory(data);File.WriteAllText(Path.Combine(data,"config.json"),"keep-settings");
             Install(root,"one",null);Check(File.ReadAllText(Path.Combine(root,"SafeSync.exe"))=="one","First install failed");

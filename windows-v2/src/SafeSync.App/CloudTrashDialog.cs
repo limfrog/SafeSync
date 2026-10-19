@@ -16,8 +16,9 @@ internal sealed partial class DesktopController
     {
         IRemoteStore remote;
         try{remote=cloud.ForJob(job);}catch(Exception ex){Tell(ex.Message);return;}
+        if(!PrepareTrashWorkspace(job.Id+"|"+System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(job)+"|"+job.DestinationType+"|"+job.CloudAccountId+"|"+job.CloudFolderId))return;
         var window=NewDialog("Trash",false);var grid=window.Find<DataGrid>("TrashGrid");
-        window.Find<Button>("SourceTrashButton").Visibility=job.SyncMode=="TwoWay" ? Visibility.Visible : Visibility.Collapsed;
+        window.Find<Button>("SourceTrashButton").Visibility=Visibility.Visible;
         Click(window,"SourceTrashButton",()=>ShowLocalTrash(job,job.Source));
         var items=new ObservableCollection<CloudTrashItem>();var cache=new TrashListCache<CloudTrashItem>(store,job);bool firstLoad=true;
         var presentation=new TrashBrowserPresentation<CloudTrashItem>(window,items,item=>new(item.Name,item.OriginalPath,item.DeletedAt,item.Length),job,config.TrashRetentionDays,job.DestinationType=="Dropbox");
@@ -25,7 +26,7 @@ internal sealed partial class DesktopController
         var publisher=new CloudPublisher(store,job,remote);var service=new CloudTrash(remote,publisher,store);bool busy=false,initialized=false;
         void Buttons()
         {
-            presentation.SetState(busy,scheduler.RunningCount==0);
+            presentation.SetState(busy,jobs.Any(j=>ReferenceEquals(j,job)) && scheduler.RunningCount==0);
         }
         async Task LoadAsync()
         {
@@ -51,10 +52,11 @@ internal sealed partial class DesktopController
         async Task OperateAsync(bool restore)
         {
             var selected=grid.SelectedItems.Cast<CloudTrashItem>().ToArray();if(busy || selected.Length==0)return;
+            if(!jobs.Any(j=>ReferenceEquals(j,job))){status.Text="작업 설정이 변경되었습니다. 백업 작업 탭에서 휴지통을 다시 여세요.";Buttons();return;}
             if(scheduler.RunningCount>0 || LegacyRunning()){status.Text="모든 백업이 끝나고 기존 앱을 종료한 뒤 처리하세요.";return;}
             var notice=job.DestinationType=="Dropbox" ? "SafeSync 휴지통에서 제거합니다. Dropbox 자체 복구 정책은 별도로 적용됩니다." : "클라우드에서 완전히 삭제합니다. 되돌릴 수 없습니다.";
             if(!restore && !Confirm($"선택한 {selected.Length}개 파일을 삭제할까요?\n"+notice))return;
-            scheduler.SetPaused(job,true);Save();RefreshActions();Jobs.Items.Refresh();busy=true;Buttons();
+            scheduler.SetPaused(job,true);Save();RefreshActions();Jobs.Items.Refresh();busy=true;trashWorkspaceOperating=true;Buttons();
             var gate=CloudBackupEngine.ScopeGate(remote);bool entered=false;int done=0,failed=0;
             try
             {
@@ -72,10 +74,10 @@ internal sealed partial class DesktopController
             }
             catch(OperationCanceledException){}
             catch(Exception ex){status.Text=ex.Message;}
-            finally{if(entered)gate.Release();busy=false;Buttons();}
+            finally{if(entered)gate.Release();busy=false;trashWorkspaceOperating=false;Buttons();}
         }
-        Click(window,"CloseButton",window.Close);Click(window,"RefreshButton",()=>TrackAuxiliary(LoadAsync()));
+        Click(window,"CloseButton",()=>SelectWorkspace("MainTab"));Click(window,"RefreshButton",()=>TrackAuxiliary(LoadAsync()));
         Click(window,"SelectAllButton",grid.SelectAll);Click(window,"RestoreButton",()=>TrackAuxiliary(OperateAsync(true)));Click(window,"DeleteButton",()=>TrackAuxiliary(OperateAsync(false)));
-        grid.SelectionChanged+=(_,_)=>Buttons();window.Closed+=(_,_)=>lifetime.Cancel();window.Show();TrackAuxiliary(LoadAsync());
+        grid.SelectionChanged+=(_,_)=>Buttons();window.Closed+=(_,_)=>lifetime.Cancel();ShowTrashWorkspace(window);TrackAuxiliary(LoadAsync());
     }
 }

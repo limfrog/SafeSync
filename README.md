@@ -1,17 +1,26 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. Windows는 **1.0.0-preview.1 공개 프리뷰**, macOS는 **0.2.5 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. Windows는 **1.0.0-preview.9 공개 프리뷰**, macOS는 **0.2.5 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
 - [macOS 0.2.5 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.2.5-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 설치 파일](dist/SafeSync-Setup-1.0.0-preview.1.exe)
-- [Windows 1.0.0 Preview 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.1.zip)
+- [Windows 1.0.0 Preview 9 설치 파일](dist/SafeSync-Setup-1.0.0-preview.9.exe)
+- [Windows 1.0.0 Preview 9 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.9.zip)
 - [Windows 사용 및 기능 안내](windows-v2/README-ko.md)
-- [현재 검사 결과와 남은 출시 조건](windows-v2/RELEASE-VALIDATION.md)
+- [프리뷰 9 최종 검사 결과](windows-v2/PREVIEW9-VALIDATION.md)
+- [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## Windows 프리뷰 9 변경사항
+
+- 백업 작업·동기화 상태·휴지통을 한 창의 탭으로 통합했습니다.
+- 활동기록 높이를 드래그로 조절하고 저장하며 메인 문제 해결 아이콘을 제거했습니다.
+- Google Drive 중복 이름도 모든 사본의 내용 체크섬이 원본과 같으면 복사 없이 동기화 완료로 처리합니다.
+- 다른 내용은 하단 문제 해결에서 양방향 덮어쓰기·둘 다 보관·이번 동기화 제외 또는 중복 이름만 정리를 선택합니다. 추가 사본은 삭제하지 않고 이름을 바꿔 보존합니다.
+- 핵심 860개·화면 455개·설치 34개 검사, 설치 파일 499개 해시 검증을 통과했습니다. 실제 사용자 자료의 강제 처리를 검증했다는 의미는 아닙니다.
 
 ## 저장소 구성
 

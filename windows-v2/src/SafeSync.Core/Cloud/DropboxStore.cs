@@ -20,11 +20,11 @@ public sealed partial class DropboxStore(CloudHttp http,ISecretVault vault,strin
     public async Task InitializeAsync(CancellationToken token)
     {
         var profile=await Rpc("users/get_current_account",null,token);
-        if(profile.String("account_id")!=accountId)throw new InvalidOperationException("백업 작업에 연결된 Dropbox 계정과 현재 계정이 다릅니다.");
+        if(profile.String("account_id")!=accountId)throw new CloudBindingException("백업 작업에 연결된 Dropbox 계정과 현재 계정이 다릅니다.");
         if(Root.Length>0)
         {
-            var entry=await StatAsync("",token);if(entry?.Folder!=true)throw new DirectoryNotFoundException("Dropbox 백업 폴더에 접근할 수 없습니다.");
-            if(selectedFolderIdentity.Length>0 && selectedFolderIdentity!=entry.Id)throw new IOException("선택한 Dropbox 폴더가 이동되거나 다른 폴더로 교체되었습니다. 작업 설정에서 폴더를 다시 확인하세요.");
+            var entry=await StatAsync("",token);if(entry?.Folder!=true)throw new CloudBindingException("Dropbox 백업 폴더에 접근할 수 없습니다. 사용할 폴더를 다시 선택하세요.");
+            if(selectedFolderIdentity.Length>0 && selectedFolderIdentity!=entry.Id)throw new CloudBindingException("선택한 Dropbox 폴더가 이동되거나 다른 폴더로 교체되었습니다. 사용할 폴더를 다시 선택하세요.");
             rootId=entry.Id;
         }
     }

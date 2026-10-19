@@ -10,6 +10,44 @@ using SafeSync.Core.Cloud;
 // Credentials are read in memory and never copied into the test fixture/report.
 internal static class LiveGoogleTests
 {
+    // Read-only production diagnosis. The handler rejects every cloud write;
+    // OAuth refresh is the only permitted POST. Never invoke a backup engine.
+    public static async Task InspectDuplicatesAsync(string output,string configPath,string jobId)
+    {
+        var config=JsonFile.Read<AppConfig>(configPath);var job=config.Jobs.Single(j=>j.Id==jobId && j.DestinationType=="GoogleDrive");
+        var before=SHA256.HashData(File.ReadAllBytes(configPath));
+        using var client=new HttpClient(new ReadOnlyDriveHandler()){Timeout=TimeSpan.FromSeconds(45)};
+        using var services=new CloudServices(()=>config,client);using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        var remote=services.ForJob(job);await remote.InitializeAsync(timeout.Token);
+        var problem=new JobProblemStore(Path.GetDirectoryName(configPath)!).Get(job.Id) ?? throw new InvalidOperationException("No persisted job problem.");
+        var relative=PathPolicy.Relative(problem.File);var copies=await ((IRemoteDuplicates)remote).CandidatesAsync(relative,timeout.Token);
+        var plan=await ((IRemoteDuplicates)remote).InspectDuplicatesAsync(relative,timeout.Token);
+        var samples=new List<object>();var source=PathPolicy.Combine(job.Source,relative);PathPolicy.RejectLinks(job.Source,source);
+        var ambiguous=Directory.EnumerateFiles(Path.Combine(Path.GetDirectoryName(configPath)!,"remote-catalogs"),"*.json")
+            .Select(p=>JsonFile.Read<RemoteCatalog.Data>(p)).Where(c=>c.Identity.StartsWith(remote.Provider+"|"+remote.AccountId+"|"+remote.Root+"|",StringComparison.Ordinal))
+            .SelectMany(c=>c.Ambiguous).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var paths=ambiguous.Length>0 ? ambiguous.Select(p=>PathPolicy.Combine(job.Source,p)) : Directory.Exists(source) ? Directory.EnumerateFiles(source,"*",SearchOption.AllDirectories) : File.Exists(source) ? new[]{source} : [];
+        foreach(var path in paths.Take(12))
+        {
+            if(samples.Count>=3)break;var info=new FileInfo(path);if(info.Length>4*1024*1024)continue;
+            string file=PathPolicy.Relative(Path.GetRelativePath(job.Source,path));PathPolicy.RejectLinks(job.Source,path);
+            var candidates=await ((IRemoteDuplicates)remote).CandidatesAsync(file,timeout.Token);
+            bool identical=await RemoteDuplicates.IdenticalAsync(remote,path,file,timeout.Token)!=null;
+            samples.Add(new{File=file,SourceBytes=info.Length,Candidates=candidates.Select(i=>new{i.Id,i.Length,i.CreatedUtc,i.ModifiedUtc}),AllCopiesMatchSource=identical});
+        }
+        bool unchanged=before.SequenceEqual(SHA256.HashData(File.ReadAllBytes(configPath)));
+        JsonFile.Save(Path.Combine(output,"duplicate-readonly.json"),new{Status="OK",Job=job.Name,ProblemPath=relative,Copies=copies.Select(i=>new{i.Id,i.Name,i.Folder}),Groups=plan.Groups.Select(g=>new{g.Relative,Count=g.Items.Length}),AmbiguousPaths=ambiguous,Samples=samples,ConfigUnchanged=unchanged,CloudWrites=0});
+        Console.WriteLine($"Read-only duplicate inspection complete: {copies.Count} copies, {samples.Count} content samples; cloud writes=0; config unchanged={unchanged}. {output}");
+    }
+    private sealed class ReadOnlyDriveHandler:DelegatingHandler
+    {
+        public ReadOnlyDriveHandler():base(new HttpClientHandler{AllowAutoRedirect=false}){}
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
+        {
+            if(request.Method!=HttpMethod.Get && !(request.Method==HttpMethod.Post && request.RequestUri?.Host=="oauth2.googleapis.com"))throw new InvalidOperationException("Read-only diagnosis blocked a cloud write.");
+            return base.SendAsync(request,token);
+        }
+    }
     public static async Task RecheckAsync(string output,string configPath,string fixture)
     {
         var report=JsonFile.Read<JsonElement>(Path.Combine(fixture,"google-live-result.json"));

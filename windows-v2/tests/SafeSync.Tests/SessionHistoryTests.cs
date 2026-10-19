@@ -34,5 +34,17 @@ internal static class SessionHistoryTests
         check(session.Runs[0].Outcome==SyncRunOutcome.Canceled && session.Runs[0].Copied==1,"Canceled result lost");
         check(session.Runs.Count==4,"Session history discarded completed runs");
         check(new SyncSessionHistory().Runs.Count==0,"New session inherited old runs");
+        var stoppedJob=new BackupJob {Paused=true};var ending=session.Progress(stoppedJob,new(stoppedJob.Id,stoppedJob.Name,"파일 전송","file.txt",0,2));
+        stoppedJob.Stopped=true;stoppedJob.Paused=false;session.SetStopping(stoppedJob.Id);
+        check(ending.IsActive && ending.Outcome==SyncRunOutcome.Stopping && ending.StatusText=="종료 중…","Stop did not immediately display the finishing state.");
+        session.SetPaused(stoppedJob.Id,true);
+        check(ending.Outcome==SyncRunOutcome.Stopping,"Pause action reverted the finishing state.");
+        session.Progress(stoppedJob,new(stoppedJob.Id,stoppedJob.Name,"교체 후 검증","file.txt",1,2));
+        check(ending.Outcome==SyncRunOutcome.Stopping && ending.StageText.StartsWith("종료 중…") && ending.CurrentFile=="file.txt","Final file progress hid the stop request.");
+        session.Complete(stoppedJob,new BackupResult {Canceled=true,Copied=1});
+        check(!ending.IsActive && ending.Copied==1 && ending.Outcome==SyncRunOutcome.Waiting && ending.StatusText=="대기 중","Finished stop was paused/canceled rather than waiting.");
+        check(ending.Summary.Contains("직접 작업을 시작할 때까지 자동 실행하지 않습니다."),"Waiting result omitted the restart policy.");
+        stoppedJob.Stopped=false;var restarted=session.Begin(stoppedJob);
+        check(restarted.RunId!=ending.RunId && restarted.Outcome==SyncRunOutcome.Running && ending.Outcome==SyncRunOutcome.Waiting,"Explicit start resumed old run instead of creating new history.");
     }
 }

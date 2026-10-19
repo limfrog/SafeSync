@@ -15,7 +15,7 @@ public sealed class CloudServices : IDisposable
     public IRemoteStore ForJob(BackupJob job)
     {
         var account=CloudAccounts.Read(config()).For(job.DestinationType);
-        if(job.CloudAccountId.Length==0 || job.CloudAccountId!=account.AccountId)throw new InvalidOperationException("작업에 묶인 계정과 현재 연결 계정이 다릅니다. 백업 폴더를 다시 선택하세요.");
+        if(CloudJobBinding.NeedsReview(config(),job))throw new CloudBindingException("가져온 작업 또는 변경된 클라우드 계정·폴더를 확인해야 합니다. ‘클라우드 위치 다시 연결’에서 사용할 폴더를 선택하세요.");
         return Create(job.DestinationType,job.CloudFolderId,account,job.CloudFolderIdentity);
     }
     public IRemoteStore ForAccountRoot(string provider)=>Create(provider,provider=="GoogleDrive" ? "root" : "/",CloudAccounts.Read(config()).For(provider));

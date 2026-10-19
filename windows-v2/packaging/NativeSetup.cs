@@ -128,7 +128,7 @@ internal static class NativeSetup
         using(var old=Registry.CurrentUser.OpenSubKey(UninstallKey))if(old!=null&&!NativeSetupCore.Same(Convert.ToString(old.GetValue("InstallLocation")),root))throw new IOException("다른 위치의 프로그램 등록을 덮어쓰지 않았습니다.");
         using(var key=Registry.CurrentUser.CreateSubKey(UninstallKey))
         {
-            key.SetValue("DisplayName","SafeSync (1.0.0 Preview)");key.SetValue("DisplayVersion",Version);key.SetValue("Publisher","임호");
+            key.SetValue("DisplayName",NativeSetupCore.DisplayName+" (1.0.0 Preview)");key.SetValue("DisplayVersion",Version);key.SetValue("Publisher","임호");
             key.SetValue("InstallLocation",root);key.SetValue("DisplayIcon",Path.Combine(root,"SafeSync.exe"));
             key.SetValue("UninstallString","\""+Path.Combine(root,"Uninstall.exe")+"\" /uninstall");key.SetValue("NoModify",1);key.SetValue("NoRepair",1);
         }
@@ -143,16 +143,26 @@ internal static class NativeSetup
     }
     private static void Shortcut(bool remove)
     {
-        string path=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs),"SafeSync 2.lnk"),target=Path.Combine(NativeSetupCore.DefaultRoot,"SafeSync.exe");
+        string programs=Environment.GetFolderPath(Environment.SpecialFolder.Programs),target=Path.Combine(NativeSetupCore.DefaultRoot,"SafeSync.exe");
+        string normal=Path.Combine(programs,NativeSetupCore.DisplayName+".lnk"),fallback=Path.Combine(programs,"SafeSync","SafeSync.lnk");
+        if(remove){ShortcutAt(normal,target,true);ShortcutAt(fallback,target,true);}
+        else if(!ShortcutAt(normal,target,false)){NativeSetupCore.NoLinks(fallback);Directory.CreateDirectory(Path.GetDirectoryName(fallback));if(!ShortcutAt(fallback,target,false))throw new IOException("다른 바로 가기를 덮어쓰지 않았습니다.");}
+        // Remove only our own former link; leave unrelated/legacy shortcuts alone.
+        ShortcutAt(Path.Combine(programs,"SafeSync 2.lnk"),target,true);
+    }
+    private static bool ShortcutAt(string path,string target,bool remove)
+    {
+        if(remove&&!File.Exists(path))return true;
         NativeSetupCore.NoLinks(path);object shell=null,link=null;
         try
         {
             var type=Type.GetTypeFromProgID("WScript.Shell");shell=Activator.CreateInstance(type);
             link=type.InvokeMember("CreateShortcut",BindingFlags.InvokeMethod,null,shell,new object[]{path});var linkType=link.GetType();
             string current=Convert.ToString(linkType.InvokeMember("TargetPath",BindingFlags.GetProperty,null,link,null));
-            if(File.Exists(path)&&!NativeSetupCore.Same(current,target))throw new IOException("다른 바로 가기를 덮어쓰지 않았습니다.");
-            if(remove){if(File.Exists(path))File.Delete(path);return;}
+            if(File.Exists(path)&&!NativeSetupCore.Same(current,target))return false;
+            if(remove){if(File.Exists(path))File.Delete(path);return true;}
             linkType.InvokeMember("TargetPath",BindingFlags.SetProperty,null,link,new object[]{target});linkType.InvokeMember("WorkingDirectory",BindingFlags.SetProperty,null,link,new object[]{NativeSetupCore.DefaultRoot});linkType.InvokeMember("Save",BindingFlags.InvokeMethod,null,link,null);
+            return true;
         }
         finally{if(link!=null)System.Runtime.InteropServices.Marshal.FinalReleaseComObject(link);if(shell!=null)System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);}
     }

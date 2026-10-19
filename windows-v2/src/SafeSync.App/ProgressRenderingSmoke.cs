@@ -26,23 +26,23 @@ internal sealed partial class DesktopController
             foreach(var (completed,total) in new[]{(0,0),(0,12),(1,12),(6,12),(12,12)})
             {
                 OnProgress(new(job.Id,job.Name,"파일 비교 및 백업","한글/테스트.txt",completed,total));
-                window.UpdateLayout();await window.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                Main.UpdateLayout();await window.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 var bar=VisualChildren<ProgressBar>(items).Single();
                 Check(Math.Abs(bar.Value-(total>0 ? 100d*completed/total : 0))<.001,$"{mode}/{provider}: 진행률 값이 잘못되었습니다.");
                 Check(BindingOperations.GetBinding(bar,System.Windows.Controls.Primitives.RangeBase.ValueProperty)?.Mode==BindingMode.OneWay,"읽기 전용 진행률이 양방향으로 연결되어 있습니다.");
             }
             if(previewDirectory!=null && provider=="GoogleDrive")
             {
-                var bitmap=new RenderTargetBitmap((int)Math.Ceiling(window.ActualWidth),(int)Math.Ceiling(window.ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(window);
+                var bitmap=new RenderTargetBitmap((int)Math.Ceiling(WorkspaceVisual(window).ActualWidth),(int)Math.Ceiling(WorkspaceVisual(window).ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(WorkspaceVisual(window));
                 var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using var output=File.Create(Path.Combine(previewDirectory,"Progress-Active-"+mode+".png"));encoder.Save(output);
             }
-            ToggleProgress();OnProgress(new(job.Id,job.Name,"숨겨진 창의 진행 갱신","한글/테스트.txt",1,2));ToggleProgress();window.UpdateLayout();
+            ToggleProgress();OnProgress(new(job.Id,job.Name,"숨겨진 창의 진행 갱신","한글/테스트.txt",1,2));ToggleProgress();Main.UpdateLayout();
             await window.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-            Check(window.IsVisible && Math.Abs(VisualChildren<ProgressBar>(items).Single().Value-50)<.001,"진행 창을 숨겼다 다시 열면 값이 유지되지 않습니다.");
-            OnCompleted(job,new BackupResult {Copied=12});window.UpdateLayout();
+            Check(WorkspaceVisual(window).IsVisible && Math.Abs(VisualChildren<ProgressBar>(items).Single().Value-50)<.001,"진행 창을 숨겼다 다시 열면 값이 유지되지 않습니다.");
+            OnCompleted(job,new BackupResult {Copied=12});Main.UpdateLayout();
             await window.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             Check(items.Items.Count==0 && Main.IsEnabled,"완료 후 진행 항목이 남거나 메인창이 잠겼습니다.");
-            window.Hide();
+            HideProgress();
         }
         config.Jobs=[];RefreshJobs();return assertions;
     }

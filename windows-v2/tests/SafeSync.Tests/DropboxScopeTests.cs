@@ -8,6 +8,13 @@ internal static class DropboxScopeTests
 {
     public static async Task RunAsync(string root,Action<bool,string> check)
     {
+        check(PublicCloudRegistration.DropboxAppKey.Length>0,"Public build has no registered Dropbox app key.");
+        check(CloudAccounts.Read(new AppConfig()).Dropbox.AppKey==PublicCloudRegistration.DropboxAppKey,"New users must provide their own app key.");
+        check(PublicCloudRegistration.ResolveDropboxAppKey(" \t")==PublicCloudRegistration.DropboxAppKey,"Blank input did not use registered app key.");
+        check(PublicCloudRegistration.ResolveDropboxAppKey(" custom-app ")=="custom-app","Developer app override was lost.");
+        var existing=new CloudAccounts {Dropbox=new(){AppKey="",RefreshTokenProtected="synthetic-protected-token",AccountId="synthetic-account"}};
+        PublicCloudRegistration.Apply(existing);
+        check(existing.Dropbox.AppKey==PublicCloudRegistration.DropboxAppKey && existing.Dropbox.RefreshTokenProtected=="synthetic-protected-token" && existing.Dropbox.AccountId=="synthetic-account","Applying default key changed existing account credentials.");
         var calls=new List<(string Route,string Body)>();string rootId="id:selected";
         using var client=new HttpClient(new Handler(async(request,ct)=>
         {

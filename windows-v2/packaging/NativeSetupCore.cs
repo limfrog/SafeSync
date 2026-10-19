@@ -12,6 +12,7 @@ using System.Threading;
 internal static class NativeSetupCore
 {
     internal const string Product="SafeSync.Native.2";
+    internal const string DisplayName="SafeSync";
     internal const string Marker=".safesync2-install";
     internal const string Inventory="installed-files.sha256";
     internal static string DefaultRoot {get{return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Programs","SafeSync2");}}

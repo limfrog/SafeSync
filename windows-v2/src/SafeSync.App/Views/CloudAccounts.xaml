@@ -1,4 +1,4 @@
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="클라우드 계정" Width="800" Height="700" MinWidth="700" MinHeight="480" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="{DynamicResource SafeSyncWindowBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" FontFamily="Segoe UI, Malgun Gothic" FontSize="13" UseLayoutRounding="True">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="클라우드 계정" Width="800" Height="760" MinWidth="700" MinHeight="480" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="{DynamicResource SafeSyncWindowBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" FontFamily="Segoe UI, Malgun Gothic" FontSize="13" UseLayoutRounding="True">
  <Window.Resources>
   <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
   <Style TargetType="TextBox"><Setter Property="Background" Value="{DynamicResource SafeSyncInputBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/><Setter Property="CaretBrush" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="Padding" Value="8,6"/><Setter Property="MinHeight" Value="32"/></Style>
@@ -24,14 +24,27 @@
  </Window.Resources>
  <Grid x:Name="CloudAccountsLayout" Margin="24">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-  <StackPanel Margin="0,0,0,18"><TextBlock Text="클라우드 API 계정" FontSize="23" FontWeight="Bold"/><TextBlock Text="인증 정보는 Windows 사용자 계정으로 암호화되어 이 PC에만 저장됩니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,5,0,0"/></StackPanel>
+  <StackPanel Margin="0,0,0,18"><TextBlock Text="클라우드 계정 연결" FontSize="23" FontWeight="Bold"/><TextBlock Text="연결 정보는 Windows 사용자 계정으로 암호화되어 이 PC에만 저장됩니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,5,0,0"/></StackPanel>
   <ScrollViewer x:Name="AccountsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
-  <GroupBox Header="Dropbox — Full Dropbox" Padding="16" Margin="0,0,0,14">
+  <GroupBox Header="Dropbox" Padding="16" Margin="0,0,0,14">
    <StackPanel>
-    <TextBlock Text="전체 Dropbox에서 원하는 폴더를 선택·생성할 수 있습니다. 작업은 선택한 폴더 안에서만 실행됩니다.&#10;기본 공개 App Key가 포함되어 있습니다. Dropbox Production 승인은 별도로 진행 중이며, 현재는 개발 사용자 한도가 적용됩니다."/>
-    <TextBlock Text="Redirect URI: http://127.0.0.1:53682/" FontFamily="Consolas" Margin="0,5,0,10" Foreground="{DynamicResource SafeSyncMutedBrush}"/>
-    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="App Key" VerticalAlignment="Center"/><TextBox x:Name="DropboxKey" Grid.Column="1"/></Grid>
-    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="DropboxConnect" Content="Dropbox 연결"/><Button x:Name="DropboxDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="DropboxStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
+    <TextBlock x:Name="DropboxLoginHint" Text="아래 버튼을 누르면 Dropbox 공식 로그인 페이지가 브라우저에서 열립니다.&#10;본인 계정으로 로그인하고 SafeSync 연결을 허용하세요. App Key를 입력할 필요가 없습니다."/>
+    <TextBlock Text="SafeSync는 Dropbox 아이디·비밀번호를 직접 받거나 저장하지 않습니다. 연결 후 백업할 폴더를 선택하거나 새로 만들 수 있습니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,6,0,0" FontSize="12"/>
+    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="DropboxConnect" Content="Dropbox로 로그인" Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/><Button x:Name="DropboxDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="DropboxStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
+    <TextBlock Text="공개 심사 신청은 접수됐으며 승인 전까지 개발 사용자 한도가 적용됩니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,10,0,0" FontSize="12"/>
+    <Expander x:Name="DropboxDeveloperSettings" Header="개발자 설정 · 일반 사용자는 변경할 필요가 없습니다" IsExpanded="False" Margin="0,10,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderBrush}">
+     <Expander.Template><ControlTemplate TargetType="{x:Type Expander}"><StackPanel>
+      <ToggleButton IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Content="{TemplateBinding Header}" Foreground="{TemplateBinding Foreground}" Cursor="Hand">
+       <ToggleButton.Template><ControlTemplate TargetType="{x:Type ToggleButton}"><Border x:Name="DeveloperHeader" Background="Transparent" Padding="0,4" CornerRadius="4"><DockPanel><TextBlock x:Name="Chevron" Text="›" FontSize="16" Margin="0,0,8,0" Foreground="{TemplateBinding Foreground}"/><ContentPresenter VerticalAlignment="Center"/></DockPanel></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Chevron" Property="Text" Value="⌄"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="DeveloperHeader" Property="Background" Value="{DynamicResource SafeSyncSubtleBrush}"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="DeveloperHeader" Property="Background" Value="{DynamicResource SafeSyncSubtleBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template>
+      </ToggleButton>
+      <ContentPresenter x:Name="DeveloperContent" Visibility="Collapsed" ContentSource="Content"/>
+     </StackPanel><ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="DeveloperContent" Property="Visibility" Value="Visible"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Expander.Template>
+     <StackPanel Margin="0,10,0,0">
+      <TextBlock Text="SafeSync 등록 앱의 키가 자동으로 적용됩니다. 비워 저장하면 기본값을 사용합니다. 다른 개발자 앱의 키로 변경하면 기존 연결이 해제됩니다." FontSize="12" Margin="0,0,0,8"/>
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="App Key" VerticalAlignment="Center"/><TextBox x:Name="DropboxKey" Grid.Column="1"/></Grid>
+      <TextBlock Text="Redirect URI: http://127.0.0.1:53682/" FontFamily="Consolas" Margin="0,5,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}" FontSize="12"/>
+     </StackPanel>
+    </Expander>
    </StackPanel>
   </GroupBox>
   <GroupBox Header="Google Drive — 전체 Drive" Padding="16">

@@ -79,7 +79,7 @@ internal sealed partial class DesktopController
         window.Find<TextBox>("DestinationBox").Text=existing?.Destination ?? "";
         var type=window.Find<ComboBox>("DestinationTypeBox");
         type.SelectedIndex=existing?.DestinationType=="Dropbox" ? 1 : existing?.DestinationType=="GoogleDrive" ? 2 : 0;
-        string cloudFolder=existing?.CloudFolderId ?? "",cloudAccount=existing?.CloudAccountId ?? "",cloudIdentity=existing?.CloudFolderIdentity ?? "";
+        string cloudFolder=existing?.CloudFolderId ?? "",cloudAccount=existing?.CloudAccountId ?? "",cloudIdentity=existing?.CloudFolderIdentity ?? "";bool selectedCloudFolder=false;
         string Provider()=>((ComboBoxItem)type.SelectedItem).Tag.ToString()!;
         window.Find<TextBox>("DestinationBox").IsReadOnly=Provider()!="Local";
         type.SelectionChanged+=(_,_)=>{cloudFolder="";cloudAccount="";cloudIdentity="";window.Find<TextBox>("DestinationBox").Clear();window.Find<TextBox>("DestinationBox").IsReadOnly=Provider()!="Local";};
@@ -106,6 +106,7 @@ internal sealed partial class DesktopController
             if(Provider()=="Local"){Browse("DestinationBox");return;}
             var folder=ChooseCloudFolder(Provider(),window);if(folder==null)return;
             cloudFolder=folder.Reference;cloudAccount=folder.AccountId;cloudIdentity=folder.FolderIdentity;window.Find<TextBox>("DestinationBox").Text=folder.Display;
+            selectedCloudFolder=true;
         });
         Click(window,"CancelButton",window.Close);
         Click(window,"SaveButton",() =>
@@ -117,9 +118,9 @@ internal sealed partial class DesktopController
                 Destination=window.Find<TextBox>("DestinationBox").Text.Trim(),DestinationType=Provider(),CloudFolderId=cloudFolder,CloudAccountId=cloudAccount,CloudFolderIdentity=cloudIdentity,
                 TriggerType=window.Find<RadioButton>("ScheduleRadio").IsChecked==true ? "Scheduled" : "Realtime",
                 ScheduleTime=window.Find<TextBox>("TimeBox").Text.Trim(),MirrorDeletes=window.Find<CheckBox>("MirrorCheck").IsChecked==true,
-                Paused=existing?.Paused ?? false
+                Paused=existing?.Paused ?? false,Stopped=existing?.Stopped ?? false,CloudBindingReviewRequired=(existing?.CloudBindingReviewRequired ?? false) && !selectedCloudFolder
             };
-            if(existing!=null && existing.SyncMode==job.SyncMode && string.Equals(existing.Source,job.Source,StringComparison.OrdinalIgnoreCase) && string.Equals(existing.Destination,job.Destination,StringComparison.OrdinalIgnoreCase) && existing.DestinationType==job.DestinationType && existing.CloudFolderId==job.CloudFolderId && existing.CloudAccountId==job.CloudAccountId && existing.CloudFolderIdentity==job.CloudFolderIdentity)job.Id=existing.Id;
+            if(existing!=null && !(existing.CloudBindingReviewRequired && selectedCloudFolder) && existing.SyncMode==job.SyncMode && string.Equals(existing.Source,job.Source,StringComparison.OrdinalIgnoreCase) && string.Equals(existing.Destination,job.Destination,StringComparison.OrdinalIgnoreCase) && existing.DestinationType==job.DestinationType && existing.CloudFolderId==job.CloudFolderId && existing.CloudAccountId==job.CloudAccountId && existing.CloudFolderIdentity==job.CloudFolderIdentity)job.Id=existing.Id;
             try
             {
                 ConfigStore.ValidateJob(job);
@@ -144,7 +145,7 @@ internal sealed partial class DesktopController
     {
         var dialog=new Microsoft.Win32.SaveFileDialog {Filter="SafeSync 작업 목록|*.safesync-jobs.json",FileName="SafeSync-jobs-"+DateTime.Now.ToString("yyyyMMdd")+".safesync-jobs.json"};
         if(dialog.ShowDialog(Main)!=true)return;
-        var document=new JobListDocument {Jobs=jobs.Select(j=>new BackupJob {Id=j.Id,Name=j.Name,SyncMode=j.SyncMode,Source=j.Source,Destination=j.Destination,DestinationType=j.DestinationType,CloudFolderId=j.CloudFolderId,CloudFolderIdentity=j.CloudFolderIdentity,CloudAccountId=j.CloudAccountId,TriggerType=j.TriggerType,ScheduleTime=j.ScheduleTime,MirrorDeletes=j.MirrorDeletes,Paused=j.Paused}).ToList()};
+        var document=new JobListDocument {Jobs=jobs.Select(j=>new BackupJob {Id=j.Id,Name=j.Name,SyncMode=j.SyncMode,Source=j.Source,Destination=j.Destination,DestinationType=j.DestinationType,CloudFolderId=j.CloudFolderId,CloudFolderIdentity=j.CloudFolderIdentity,CloudAccountId=j.CloudAccountId,TriggerType=j.TriggerType,ScheduleTime=j.ScheduleTime,MirrorDeletes=j.MirrorDeletes,Paused=j.Paused,Stopped=j.Stopped,CloudBindingReviewRequired=j.CloudBindingReviewRequired}).ToList()};
         try {JsonFile.Save(dialog.FileName,document);Log("작업 목록 내보내기 완료 — 계정 정보와 스냅샷 제외");}catch(Exception ex){Tell(ex.Message);}
     }
     private void ImportJobs()
@@ -164,11 +165,11 @@ internal sealed partial class DesktopController
                 if(document.Version!=1)throw new InvalidDataException("지원하지 않는 작업 목록 버전입니다.");
                 var imported=new AppConfig {Jobs=document.Jobs,ThemeMode=config.ThemeMode,TrashRetentionDays=config.TrashRetentionDays};
                 ConfigStore.Validate(imported);
-                foreach(var job in imported.Jobs)job.Paused=true;
+                foreach(var job in imported.Jobs){job.Paused=true;job.Stopped=false;job.CloudBindingReviewRequired=job.DestinationType!="Local";}
                 if(File.Exists(store.ConfigPath))File.Copy(store.ConfigPath,store.ConfigPath+".before-import-"+Guid.NewGuid().ToString("N"));
                 config.Jobs=imported.Jobs;store.Save(config);
             }
-            else config=store.ImportLegacy(dialog.FileName);
+            else {config=store.ImportLegacy(dialog.FileName);foreach(var job in config.Jobs.Where(j=>j.DestinationType!="Local"))job.CloudBindingReviewRequired=true;store.Save(config);}
             RefreshJobs();scheduler.SetJobs(jobs);scheduler.RetentionDays=config.TrashRetentionDays;Theme.Apply(Main,config.ThemeMode);Log($"작업 {jobs.Count}개 가져옴 — 모두 일시정지, 원본 설정 보존");
         }
         catch(Exception ex){Tell(ex.Message,"가져오기 실패");}
@@ -181,20 +182,21 @@ internal sealed partial class DesktopController
     }
     private void ShowLocalTrash(BackupJob job,string root)
     {
+        if(!PrepareTrashWorkspace(job.Id+"|"+System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(job)+"|local|"+root))return;
         var window=NewDialog("Trash",false);
         var sourceTrash=root.Equals(job.Source,StringComparison.OrdinalIgnoreCase);
         var displayJob=sourceTrash ? new BackupJob {Id=job.Id+"-source-trash",Name=job.Name+" · 원본 휴지통",Source=job.Destination,Destination=root} : job;
         var grid=window.Find<DataGrid>("TrashGrid");
         var items=new ObservableCollection<TrashItem>();var cache=new TrashListCache<TrashItem>(store,displayJob);bool firstLoad=true;
         var presentation=new TrashBrowserPresentation<TrashItem>(window,items,item=>new(item.Name,item.OriginalPath,item.DeletedAt,item.Length),displayJob,config.TrashRetentionDays);
-        window.Find<Button>("SourceTrashButton").Visibility=job.SyncMode=="TwoWay" && !sourceTrash ? Visibility.Visible : Visibility.Collapsed;
+        window.Find<Button>("SourceTrashButton").Visibility=!sourceTrash ? Visibility.Visible : Visibility.Collapsed;
         Click(window,"SourceTrashButton",()=>ShowLocalTrash(job,job.Source));
         var status=window.Find<TextBlock>("StatusText");
         var service=new TrashService();var lifetime=new CancellationTokenSource();bool busy=false;
         auxiliaryTokens.Add(lifetime);
         void Buttons()
         {
-            presentation.SetState(busy,!scheduler.IsRunning(job.Id));
+            presentation.SetState(busy,jobs.Any(j=>ReferenceEquals(j,job)) && !scheduler.IsRunning(job.Id));
         }
         async Task LoadAsync()
         {
@@ -229,10 +231,11 @@ internal sealed partial class DesktopController
         {
             var selected=grid.SelectedItems.Cast<TrashItem>().ToArray();
             if(busy || selected.Length==0)return;
+            if(!jobs.Any(j=>ReferenceEquals(j,job))){status.Text="작업 설정이 변경되었습니다. 백업 작업 탭에서 휴지통을 다시 여세요.";Buttons();return;}
             if(scheduler.IsRunning(job.Id) || LegacyRunning()){status.Text="백업이 끝나고 기존 1.x 앱을 종료한 뒤 처리하세요.";return;}
             if(!restore && !Confirm($"선택한 {selected.Length}개 파일을 완전히 삭제할까요? 되돌릴 수 없습니다."))return;
             scheduler.SetPaused(job,true);Save();RefreshActions();Jobs.Items.Refresh();
-            busy=true;Buttons();int done=0,failed=0;
+            busy=true;trashWorkspaceOperating=true;Buttons();int done=0,failed=0;
             try
             {
                 using var legacyLease=LegacyRunLease.Acquire();
@@ -254,29 +257,30 @@ internal sealed partial class DesktopController
             }
             catch(OperationCanceledException){}
             catch(Exception ex){status.Text="휴지통 처리 실패: "+ex.Message;}
-            finally{busy=false;Buttons();}
+            finally{busy=false;trashWorkspaceOperating=false;Buttons();}
         }
-        Click(window,"CloseButton",window.Close);Click(window,"RefreshButton",()=>TrackAuxiliary(LoadAsync()));
+        Click(window,"CloseButton",()=>SelectWorkspace("MainTab"));Click(window,"RefreshButton",()=>TrackAuxiliary(LoadAsync()));
         Click(window,"SelectAllButton",()=>grid.SelectAll());Click(window,"RestoreButton",()=>TrackAuxiliary(OperateAsync(true)));Click(window,"DeleteButton",()=>TrackAuxiliary(OperateAsync(false)));
         grid.SelectionChanged+=(_,_)=>Buttons();window.Closed+=(_,_)=>lifetime.Cancel();
-        window.Show();TrackAuxiliary(LoadAsync());
+        ShowTrashWorkspace(window);TrackAuxiliary(LoadAsync());
     }
-    private void ToggleProgress() {if(progressWindow?.IsVisible==true)progressWindow.Hide();else ShowProgress();}
+    private void ToggleProgress() {if(Main.Find<TabItem>("SyncWorkspaceTab").IsSelected)HideProgress();else ShowProgress();}
     private void ShowProgress()
     {
         if(progressWindow==null)
         {
             progressWindow=NewDialog("Progress",false);
-            progressWindow.Width=Clamp(config.WindowLayout.ProgressWidth,720,2200,1180);
-            progressWindow.Height=Clamp(config.WindowLayout.ProgressHeight,600,1400,800);
+            MountWorkspace(progressWindow,"SyncWorkspaceHost",600);
             progressWindow.Find<RowDefinition>("ProgressHistoryRow").Height=new GridLength(Clamp(config.WindowLayout.ProgressHistoryHeight,90,600,210));
             progressWindow.Find<DataGrid>("HistoryGrid").ItemsSource=sessionHistory.Runs;
-            progressWindow.Find<DataGrid>("HistoryGrid").SelectionChanged+=(_,_)=>{if(!selectingHistory)followLatest=false;RefreshProgress();};
+            progressWindow.Find<DataGrid>("HistoryGrid").SelectionChanged+=(_,_)=>{if(!selectingHistory){followLatest=false;problemRequestedJob=null;}RefreshProgress();};
+            progressWindow.Find<TabControl>("ProgressTabs").SelectionChanged+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,progressWindow.Find<TabControl>("ProgressTabs")))RefreshProgress();};
             Click(progressWindow,"FollowLatestButton",()=>{followLatest=true;SelectRun(sessionHistory.Runs.FirstOrDefault());RefreshProgress();});
             Click(progressWindow,"ProgressPauseButton",ToggleRunPause);
             progressWindow.SizeChanged+=(_,_)=>LimitHistory();progressWindow.Find<Grid>("ProgressRoot").LayoutUpdated+=(_,_)=>LimitHistory();
-            progressWindow.Closing+=(_,e)=>{if(!exiting){e.Cancel=true;CaptureLayout();progressWindow.Hide();}};
             Click(progressWindow,"RetryLockedButton",RetrySelectedLocked);
+            Click(progressWindow,"ResultResolveButton",()=>{if(RecoveryRunJob() is {} job)ShowJobRecovery(job);});
+            Click(progressWindow,"ResultRetryButton",()=>{if(RecoveryRunJob() is {} job)TrackAuxiliary(RetryProblemAsync(job));});
             foreach(var (name,action) in new[]{("ConflictAllOverwriteButton",ConflictAction.Overwrite),("ConflictAllRenameButton",ConflictAction.KeepBoth),("ConflictAllIgnoreButton",ConflictAction.Ignore)})
                 Click(progressWindow,name,()=>{foreach(var row in conflictRows.Where(r=>r.CanResolve))row.Action=action;progressWindow.Find<DataGrid>("ProgressConflictGrid").Items.Refresh();});
             progressWindow.Find<DataGrid>("ProgressConflictGrid").AddHandler(ButtonBase.ClickEvent,new RoutedEventHandler((_,e)=>
@@ -287,29 +291,35 @@ internal sealed partial class DesktopController
                     progressWindow.Find<DataGrid>("ProgressConflictGrid").Items.Refresh();e.Handled=true;
                 }
             }));
-            Click(progressWindow,"ApplyConflictActionsButton",()=>_=ApplyConflictsAsync());
+            Click(progressWindow,"ApplyConflictActionsButton",()=>{if(RecoveryRunJob() is {} job)ShowFileComparison(job,SelectedRun,(progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem as ConflictRow)?.Issue.File);});
+            progressWindow.Find<DataGrid>("ProgressConflictGrid").MouseDoubleClick+=(_,_)=>{if(RecoveryRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem is ConflictRow row)ShowFileComparison(job,SelectedRun,row.Issue.File);};
+            progressWindow.Find<DataGrid>("ProgressErrorGrid").MouseDoubleClick+=(_,_)=>{if(RecoveryRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressErrorGrid").SelectedItem is FileIssue issue)ShowFileComparison(job,SelectedRun,issue.File);};
+            Click(progressWindow,"CompareErrorsButton",()=>{if(RecoveryRunJob() is {} job)ShowFileComparison(job,SelectedRun);});
         }
-        if(progressWindow.Find<DataGrid>("HistoryGrid").SelectedItem==null)SelectRun(sessionHistory.Runs.FirstOrDefault());
-        RefreshProgress();progressWindow.Show();progressWindow.WindowState=WindowState.Normal;progressWindow.Activate();
+        Theme.Apply(progressWindow,config.ThemeMode);
+        if(progressWindow.Find<DataGrid>("HistoryGrid").SelectedItem==null && problemRequestedJob==null)SelectRun(sessionHistory.Runs.FirstOrDefault());
+        RefreshProgress();SelectWorkspace("SyncWorkspaceTab");
     }
     private readonly ObservableCollection<ConflictRow> conflictRows=[];
     public sealed class ConflictRow(FileIssue issue,bool canResolve=true,bool twoWay=false)
     {
         public FileIssue Issue {get;}=issue;
-        public bool CanResolve {get;}=canResolve;
+        private bool DuplicateName=>Issue.Reason.Contains("같은 이름의 항목이 여러 개",StringComparison.Ordinal) || Issue.Reason.Contains("중복 이름",StringComparison.Ordinal);
+        public bool CanResolve=>canResolve && !DuplicateName;
         public bool CanUseBackup=>CanResolve && twoWay;
         public ConflictAction? Action {get;set;}
         public string FileDisplay=>Issue.JobName+"\n"+Issue.File;
         public string SourceInfo=>$"{Issue.SourceSize:N0} B\n{Issue.SourceModified}";
         public string BackupInfo=>$"{Issue.BackupSize:N0} B\n{Issue.BackupModified}";
         public string Reason=>Issue.Reason;
-        public string ActionLabel=>!CanResolve ? "이전 실행 기록 · 읽기 전용" : Action switch {ConflictAction.Overwrite=>"원본으로 덮어쓰기",ConflictAction.UseBackup=>"백업으로 원본 덮어쓰기",ConflictAction.KeepBoth=>"기존 이름 변경 후 복사",ConflictAction.Ignore=>"이번에는 변경 안 함",_=>"처리 방법을 선택하세요."};
+        public string ActionLabel=>DuplicateName ? "문제 해결에서 중복 이름 정리 · 사본 비교" : !CanResolve ? "이전 실행 기록 · 읽기 전용" : Action switch {ConflictAction.Overwrite=>"원본으로 덮어쓰기",ConflictAction.UseBackup=>"백업으로 원본 덮어쓰기",ConflictAction.KeepBoth=>"기존 이름 변경 후 복사",ConflictAction.Ignore=>"이번에는 변경 안 함",_=>"처리 방법을 선택하세요."};
     }
     private static string LocalTime(string value)=>DateTime.TryParse(value,out var time) ? time.ToLocalTime().ToString("MM-dd HH:mm:ss") : "—";
     private void RefreshProgress()
     {
         if(progressWindow is not {} window)return;
-        var run=SelectedRun;var currentJob=jobs.FirstOrDefault(j=>j.Id==run?.JobId);
+        window.Find<Border>("ProgressEndpoints").Visibility=window.Find<TabItem>("ProblemTab").IsSelected ? Visibility.Collapsed : Visibility.Visible;
+        var run=SelectedRun;var currentJob=run==null ? problemRequestedJob : jobs.FirstOrDefault(j=>j.Id==run.JobId);
         int active=sessionHistory.Runs.Count(r=>r.IsActive),finished=sessionHistory.Runs.Count-active;
         window.Find<TextBlock>("SessionSummaryText").Text=$"진행 중 {active:N0} · 종료 {finished:N0} · 주의 이력 {sessionHistory.Runs.Count(r=>r.Outcome is SyncRunOutcome.Attention or SyncRunOutcome.Failed):N0}";
         window.Find<TextBlock>("HistoryCountText").Text=$"{sessionHistory.Runs.Count:N0}회 · 이번 프로그램 실행";
@@ -319,18 +329,22 @@ internal sealed partial class DesktopController
         window.Find<TextBlock>("DirectionText").Text=run?.SyncMode=="TwoWay" ? "↔" : "→";
         window.Find<TextBlock>("SourceSummaryDetail").Text=run==null ? "원본" : run.JobName+" · 원본";
         window.Find<TextBlock>("DestinationSummaryDetail").Text=run?.DestinationType switch {"GoogleDrive"=>"Google Drive · 백업 위치","Dropbox"=>"Dropbox · 백업 위치",_=>"로컬·네트워크 · 백업 위치"};
-        window.Find<TextBlock>("ActiveSummaryText").Text=run?.IsActive==true ? "진행 상황" : "실행 결과";
-        window.Find<ItemsControl>("ProgressItems").ItemsSource=run?.IsActive==true ? new[]{new {run.JobName,run.ProgressText,StageText=run.Outcome==SyncRunOutcome.Paused ? "일시정지 · "+run.Stage : run.Stage,FileText=run.CurrentFile,run.Percent,IsIndeterminate=run.TotalFiles<=0}} : null;
+        window.Find<TextBlock>("ActiveSummaryText").Text=run?.Outcome==SyncRunOutcome.Stopping ? "종료 중…" : run?.Outcome==SyncRunOutcome.Waiting ? "대기 중" : run?.IsActive==true ? "진행 상황" : "실행 결과";
+        window.Find<ItemsControl>("ProgressItems").ItemsSource=run?.IsActive==true ? new[]{new {run.JobName,run.ProgressText,run.StageText,FileText=run.CurrentFile,run.Percent,IsIndeterminate=run.TotalFiles<=0}} : null;
         window.Find<StackPanel>("ResultSummaryPanel").Visibility=run?.IsActive==true ? Visibility.Collapsed : Visibility.Visible;
         window.Find<TextBlock>("ResultTitleText").Text=run?.StatusText ?? "작업을 기다리고 있습니다.";
         window.Find<TextBlock>("ResultTitleText").SetResourceReference(TextBlock.ForegroundProperty,run?.Tone switch {"Success"=>"SafeSyncSuccessTextBrush","Danger"=>"SafeSyncDangerBrush","Warning"=>"SafeSyncWarningBrush",_=>"SafeSyncTextBrush"});
         window.Find<TextBlock>("ResultDetailText").Text=run?.Summary ?? "실행한 작업의 진행 상황과 결과를 이 창에서 확인할 수 있습니다.";
+        bool recoverable=run!=null && !run.IsActive && currentJob!=null && sessionHistory.IsLatest(run) && (run.Outcome==SyncRunOutcome.Failed || run.Errors.Count+run.Conflicts.Count>0);
+        window.Find<WrapPanel>("ResultRecoveryActions").Visibility=recoverable ? Visibility.Visible : Visibility.Collapsed;
+        window.Find<Button>("ResultResolveButton").IsEnabled=recoverable;
+        window.Find<Button>("ResultRetryButton").IsEnabled=recoverable && !scheduler.IsRunning(run!.JobId);
         window.Find<TextBlock>("HistoryHintText").Text=run==null ? "" : $"시작 {run.StartedUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss} · 종료 {(run.EndedUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "진행 중")} · 경과 {run.DurationText}\n선택한 실행 시점의 결과입니다. 이후의 백업 상태는 최신 이력을 확인하세요.";
-        window.Find<Button>("ProgressPauseButton").IsEnabled=run?.IsActive==true && currentJob!=null;
-        window.Find<Button>("ProgressPauseButton").Visibility=run?.IsActive==true ? Visibility.Visible : Visibility.Collapsed;
+        window.Find<Button>("ProgressPauseButton").IsEnabled=run?.IsActive==true && currentJob!=null && !currentJob.Stopped;
+        window.Find<Button>("ProgressPauseButton").Visibility=run?.IsActive==true && run.Outcome!=SyncRunOutcome.Stopping ? Visibility.Visible : Visibility.Collapsed;
         window.Find<Button>("ProgressPauseButton").Content=currentJob?.Paused==true ? "다시 시작" : "일시정지";
         var locked=run?.IsActive==true ? restoredLocked.GetValueOrDefault(run.JobId,[]) : run?.Locked ?? restoredLocked.Values.SelectMany(v=>v).ToArray();
-        window.Find<TextBlock>("LockedSummaryText").Text=$"사용 중 파일 {locked.Count:N0}개 · 최신 실행의 대기 파일은 자동 재시도됩니다.";
+        window.Find<TextBlock>("LockedSummaryText").Text=$"사용 중 파일 {locked.Count:N0}개 · "+(currentJob?.Stopped==true ? "작업 종료 대기 중에는 자동 재시도하지 않습니다." : "최신 실행의 대기 파일은 자동 재시도됩니다.");
         window.Find<TextBlock>("LockedTabHeader").Text=$"사용 중 {locked.Count:N0}";
         window.Find<DataGrid>("ProgressLockedGrid").ItemsSource=locked.Select(i=>new {FileDisplay=i.JobName+"\n"+i.File,StatusText=i.Reason,WaitingSince=LocalTime(i.WaitingSinceUtc),RetryCount=i.RetryCount.ToString()+"회",LastAttempt=i.LastAttemptUtc.Length>0 ? LocalTime(i.LastAttemptUtc) : run?.EndedText ?? "—"}).ToArray();
         window.Find<Button>("RetryLockedButton").IsEnabled=run!=null ? sessionHistory.IsLatest(run) && !run.IsActive && locked.Count>0 && currentJob?.Paused==false : Selected?.Paused==false && restoredLocked.GetValueOrDefault(Selected.Id,[]).Length>0;
@@ -339,6 +353,7 @@ internal sealed partial class DesktopController
         window.Find<DataGrid>("ProgressErrorGrid").ItemsSource=errors;
         window.Find<TextBlock>("ErrorsTabHeader").Text=$"오류 {errors.Count:N0}";
         window.Find<TextBlock>("ErrorSummaryText").Text=errors.Count==0 ? "이 실행에서 기록된 오류가 없습니다." : $"오류 {errors.Count:N0}개 · 원인을 확인한 뒤 해당 작업을 다시 실행하세요.";
+        window.Find<Button>("CompareErrorsButton").IsEnabled=currentJob!=null && errors.Count>0;
         var choices=conflictRunId==run?.RunId ? conflictRows.ToDictionary(r=>r.Issue.JobId+"|"+r.Issue.File,r=>r.Action) : new Dictionary<string,ConflictAction?>();
         conflictRunId=run?.RunId ?? "";
         bool canResolve=run!=null && !run.IsActive && sessionHistory.IsLatest(run) && currentJob!=null;
@@ -347,7 +362,20 @@ internal sealed partial class DesktopController
         window.Find<DataGrid>("ProgressConflictGrid").ItemsSource=conflictRows;
         window.Find<TextBlock>("ConflictSummaryText").Text=$"확인이 필요한 파일 {conflictRows.Count}개";
         window.Find<TextBlock>("ConflictTabHeader").Text=$"충돌 {conflictRows.Count:N0}";
-        foreach(var name in new[]{"ConflictAllOverwriteButton","ConflictAllRenameButton","ConflictAllIgnoreButton","ApplyConflictActionsButton"})window.Find<Button>(name).IsEnabled=canResolve && conflictRows.Count>0;
+        foreach(var name in new[]{"ConflictAllOverwriteButton","ConflictAllRenameButton","ConflictAllIgnoreButton","ApplyConflictActionsButton"})window.Find<Button>(name).IsEnabled=canResolve && conflictRows.Any(r=>r.CanResolve);
+        window.Find<Button>("ApplyConflictActionsButton").IsEnabled=canResolve && conflictRows.Count>0;
+        window.Find<TextBlock>("ProblemTabHeader").Text=$"문제 해결 {conflictRows.Count+errors.Count:N0}";
+        if(window.Find<TabItem>("ProblemTab").IsSelected)
+        {
+            if(currentJob!=null)EnsureProblemWorkspace(currentJob,run);
+            else ClearProblemWorkspace();
+        }
+        else if(problemPanel!=null && problemContextKey.Length>0)
+        {
+            // Release old decisions immediately on history changes, even when
+            // the resolution tab is hidden; don't fetch metadata off-screen.
+            if(currentJob==null || problemContextKey.Split('|')[1]!=(run?.RunId ?? ""))ClearProblemWorkspace();
+        }
     }
     private async Task ApplyConflictsAsync()
     {
@@ -378,6 +406,12 @@ internal sealed partial class DesktopController
                 await window.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 Check(window.ActualWidth>0 && window.ActualHeight>0,name+" 화면이 표시되지 않습니다.");
                 Check(((SolidColorBrush)window.Background).Color==((SolidColorBrush)window.Resources["SafeSyncWindowBrush"]).Color,name+" 배경에 테마가 적용되지 않았습니다.");
+                if(name=="CloudAccounts")
+                {
+                    Check(!window.Find<Expander>("DropboxDeveloperSettings").IsExpanded && !window.Find<TextBox>("DropboxKey").IsVisible,"일반 연결 화면에 Dropbox App Key 입력이 노출됩니다.");
+                    Check(window.Find<Button>("DropboxConnect").Content.ToString()=="Dropbox로 로그인" && window.Find<TextBlock>("DropboxLoginHint").Text.Contains("공식 로그인"),"Dropbox 브라우저 로그인 안내가 없습니다.");
+                    Check(window.Find<ScrollViewer>("AccountsScroll").ScrollableHeight<1,"기본 크기에서 클라우드 연결 버튼이 스크롤 아래로 가려집니다.");
+                }
                 if(previewDirectory!=null)
                 {
                     Directory.CreateDirectory(previewDirectory);
@@ -431,26 +465,55 @@ internal sealed partial class DesktopController
         {
             Check(w.Find<Button>("GoogleConnect").IsEnabled && w.Find<Button>("DropboxConnect").IsEnabled,"계정 연결 버튼이 비활성화되었습니다.");
             Check(w.Find<TextBlock>("GoogleStatus").Text=="연결되지 않음","격리 UI 검사가 실제 계정을 읽었습니다.");
+            Check(w.Find<TextBox>("DropboxKey").Text==PublicCloudRegistration.DropboxAppKey,"기본 Dropbox 키가 자동 적용되지 않았습니다.");
+            w.Find<Expander>("DropboxDeveloperSettings").IsExpanded=true;w.UpdateLayout();
+            Check(w.Find<TextBox>("DropboxKey").IsVisible,"필요할 때 개발자 설정을 열 수 없습니다.");
+            w.Find<TextBox>("DropboxKey").Clear();w.Find<Button>("SaveCredentials").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(CloudAccounts.Read(config).Dropbox.AppKey==PublicCloudRegistration.DropboxAppKey && w.Find<TextBox>("DropboxKey").Text==PublicCloudRegistration.DropboxAppKey,"빈 Dropbox 키 저장이 기본 연결 설정을 지웠습니다.");
         });
         Check(jobs.Count==0,"취소한 작업이 저장되었습니다.");
-        ShowProgress();Check(progressWindow!.IsVisible && Main.IsEnabled && progressWindow.Owner==null,"진행 창이 메인창을 막습니다.");
-        ToggleProgress();Check(!progressWindow.IsVisible,"진행 창을 숨길 수 없습니다.");
-        ToggleProgress();Check(progressWindow.IsVisible,"진행 창을 다시 열 수 없습니다.");
-        progressWindow.Hide();
+        ShowProgress();Check(WorkspaceVisual(progressWindow!).IsVisible && Main.IsEnabled && Window.GetWindow(WorkspaceVisual(progressWindow!))==Main,"동기화 상태가 메인 탭에 표시되지 않습니다.");
+        ToggleProgress();Check(!WorkspaceVisual(progressWindow!).IsVisible,"백업 작업 탭으로 돌아갈 수 없습니다.");
+        ToggleProgress();Check(WorkspaceVisual(progressWindow!).IsVisible,"동기화 탭을 다시 열 수 없습니다.");
+        HideProgress();
         var uiSource=Path.Combine(store.Root,"smoke-source");var uiBackup=Path.Combine(store.Root,"smoke-backup");
         Directory.CreateDirectory(uiSource);Directory.CreateDirectory(uiBackup);
         var uiTrash=TrashService.NewPath(uiBackup,"example.txt","deleted");Directory.CreateDirectory(Path.GetDirectoryName(uiTrash)!);File.WriteAllText(uiTrash,"sample");
         config.Jobs=[new BackupJob {Name="UI smoke job",Source=uiSource,Destination=uiBackup,Paused=true}];RefreshJobs();
+        Check(Main.Find<MenuItem>("StopJobMenuItem").IsEnabled,"작업 종료 메뉴가 비활성화되었습니다.");
+        Main.Find<MenuItem>("StopJobMenuItem").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Check(Selected!.Stopped && !Selected.Paused && Selected.Status=="대기 중" && Main.Find<Button>("RunButton").IsEnabled,"작업 종료가 일시정지가 아닌 대기/작업 시작 상태를 표시하지 않았습니다.");
+        Check(!Main.Find<MenuItem>("StopJobMenuItem").IsEnabled && Main.Find<Button>("PauseButton").Content.ToString()=="▶ 작업 시작","종료한 작업의 메뉴 상태가 잘못되었습니다.");
+        Check(store.Load().Jobs.Single().Stopped,"종료 대기 설정이 저장되지 않았습니다.");
+        Check(scheduler.ResumeJob(Selected),"UI 검사의 종료 대기 해제 실패");scheduler.SetPaused(Selected,true);Save();RefreshActions();
         ShowTrash();var trashWindow=auxiliary.Last(w=>w.FindName("TrashGrid")!=null);
         for(int i=0;i<100 && trashWindow.Find<DataGrid>("TrashGrid").Items.Count==0;i++)await Task.Delay(25);
         Check(trashWindow.Find<DataGrid>("TrashGrid").Items.Count==1,"실제 휴지통 창이 비동기 목록을 표시하지 못했습니다.");
-        Check(Main.IsEnabled && trashWindow.Owner==null,"휴지통 창이 메인창을 막습니다.");
+        Check(Main.IsEnabled && !trashWindow.IsVisible && Window.GetWindow(WorkspaceVisual(trashWindow))==Main,"휴지통이 별도 창으로 표시됩니다.");
+        var mountedTrash=WorkspaceVisual(trashWindow);SelectWorkspace("MainTab");ShowTrash();
+        Check(ReferenceEquals(WorkspaceVisual(trashWindow),mountedTrash) && Main.Find<TabItem>("TrashWorkspaceTab").IsSelected,"탭 전환만으로 휴지통을 다시 읽습니다.");
+        SelectWorkspace("MainTab");Main.Height=540;Main.Width=800;Main.UpdateLayout();
+        var splitter=Main.Find<GridSplitter>("MainLayoutSplitter");
+        Check(splitter.ResizeDirection==GridResizeDirection.Rows && splitter.ResizeBehavior==GridResizeBehavior.PreviousAndNext,"활동 기록 분할 방향이 잘못되었습니다.");
+        var activityRow=Main.Find<RowDefinition>("MainActivityRow");activityRow.Height=new GridLength(90);Main.UpdateLayout();CaptureLayout();
+        var beforeDrag=activityRow.ActualHeight;splitter.ShowsPreview=false;
+        splitter.RaiseEvent(new DragStartedEventArgs(0,0));splitter.RaiseEvent(new DragDeltaEventArgs(0,-24));splitter.RaiseEvent(new DragCompletedEventArgs(0,-24,false));Main.UpdateLayout();splitter.ShowsPreview=true;CaptureLayout();
+        Check(activityRow.ActualHeight>beforeDrag+10,"활동 기록 구분선의 실제 드래그가 높이를 바꾸지 않습니다.");
+        Check(Math.Abs(store.Load().WindowLayout.MainActivityHeight-activityRow.ActualHeight)<1,"활동 기록 높이가 저장되지 않습니다.");
+        var log=Main.Find<TextBox>("ActivityBox");var footer=Main.Find<TextBlock>("FooterText");
+        Check(log.ActualHeight>10 && footer.TransformToAncestor(Main).TransformBounds(new Rect(footer.RenderSize)).Bottom<Main.ActualHeight,"작은 메인창에서 활동 기록 또는 상태줄이 가려집니다.");
+        Check(Main.FindName("ResolveJobButton")==null,"메인 문제 해결 아이콘이 남아 있습니다.");
+        Main.Width=1180;Main.Height=900;Main.UpdateLayout();
+        Check(app.Windows.OfType<Window>().Count(w=>w.IsVisible)==1,"동기화·휴지통이 별도 창을 표시합니다.");
         // Keep trash open to exercise cancellation and window cleanup on exit.
         assertions+=await TestProgressRenderingAsync(previewDirectory);
         assertions+=await TestSessionHistoryAsync(previewDirectory);
         assertions+=await TestTrashBrowserAsync(previewDirectory);
         assertions+=await TestCloudPickerAsync(previewDirectory);
         assertions+=await TestReleaseUiAsync();
+        assertions+=await TestRecoveryUiAsync(previewDirectory);
+        assertions+=await TestFailureRecoveryAsync(previewDirectory);
+        assertions+=await TestFileComparisonUiAsync(previewDirectory);
         config.ThemeMode="Light";
         return assertions;
     }

@@ -79,12 +79,14 @@ internal static class Program
 internal static class Views
 {
     public static Window Load(string name)
+        => (Window)LoadElement(name);
+    public static FrameworkElement LoadElement(string name)
     {
         var resource = Application.GetResourceStream(new Uri("pack://application:,,,/SafeSync;component/Views/" + name + ".xaml"))
             ?? throw new InvalidOperationException("화면 리소스가 없습니다: " + name);
         using var stream = resource.Stream;
-        return (Window)XamlReader.Load(stream);
+        return (FrameworkElement)XamlReader.Load(stream);
     }
-    public static T Find<T>(this Window window,string name) where T : class => window.FindName(name) as T
+    public static T Find<T>(this FrameworkElement window,string name) where T : class => window.FindName(name) as T
         ?? throw new InvalidOperationException("화면 요소가 없습니다: " + name);
 }

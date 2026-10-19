@@ -1,4 +1,14 @@
-# SafeSync 개발 인계 — Windows 1.0.0-preview.1
+# SafeSync 개발 인계
+
+## 현재 Windows 배포 소스 — 1.0.0-preview.9 (2026-10-19)
+
+검증된 preview.9 소스·설치본·검사 문서를 사용자 요청으로 공개한다. 실행 중인 앱과 실제 계정·작업·스냅샷은 자동으로 변경하지 않는다. 아래 공개 프리뷰 항목은 당시 인계 기록이다.
+
+- UI: `Workspace.cs`가 기존 화면 정의의 내용만 메인창에 장착한다. 백업 작업 / 동기화 상태 / 휴지통 관리 세 탭이며 동기화·휴지통용 정의는 실제 별도 창으로 Show하지 않는다. 설정/계정/확인은 기존 대화상자다. WPF 이름 범위와 종료 취소 핸들러를 유지하므로 이 정의들을 별도 Show로 되돌리지 않는다. `MainLayoutSplitter`는 Rows/PreviousAndNext이며 활동기록 높이를 저장한다.
+- 문제 해결: `FileComparisonDialog.cs` 및 하단 UserControl. 동일 중복 파일은 `RemoteDuplicates.IdenticalAsync`에서 모든 물리 사본의 체크섬을 검사한다. `GoogleDriveDuplicates.cs`의 ID 기반 탐색/보존, `FileComparisons.PrepareDuplicatesAsync`의 확인 재검증을 사용한다. 단순 Dictionary 덮어쓰기 선택은 중복 경로 처리 권한이 아니다. 폴더 보존은 해당 폴더의 내부 파일 전체를 포함한다.
+- 양방향의 동일 중복 사본에는 삭제 권한 기준을 부여하지 않는다. 비교 후 변경된 파일·계정·루트·사본 집합은 거부한다. 보존된 사본은 `.SafeSync-conflict-...` 이름의 일반 항목이며 다음 양방향 실행 시 원본에도 복사될 수 있다.
+- 실계정의 해당 작업은 일반 오류가 아닌 57개 반복 충돌이었다. 카탈로그 중복 경로 12개와 관련 상위 폴더가 포함됐다. 실계정 읽기 전용으로 실제 충돌 파일 3개의 사본 각 2개가 모두 원본과 내용이 같음을 확인했다. 실제 백업을 강제 실행하거나 사본을 정리하지 않았다. 사용자 파일명과 실제 경로는 공개하지 않는다.
+- 검사·산출물: `windows-v2/PREVIEW9-VALIDATION.md`, `windows-v2/README-ko.md`, `windows-v2/TEST-RESULTS.md`를 우선 참고한다. 개인정보·계정 토큰·진단 표본 경로가 든 테스트 산출물은 공개하지 않는다.
 
 ## 현재 공개 프리뷰 — 2026-10-19
 
