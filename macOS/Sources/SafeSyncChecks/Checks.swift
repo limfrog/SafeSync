@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import SafeSyncCore
 
 final class BackupTests {
@@ -127,6 +128,7 @@ func checkEqual<T: Equatable>(_ a: T, _ b: T, file: StaticString = #file, line: 
 func fail(_ value: String) { fatalError(value) }
 @main struct Checks {
     static func main() async throws {
+        setbuf(stdout, nil)
         let tests = BackupTests()
         try await tests.testCopyOverwriteDeleteAndRestore(); print("PASS copy, skip, verified overwrite, deletion and restore")
         try await tests.testConflictDoesNotBlockOtherFileAndKeepBoth(); print("PASS conflict isolation and keep both")
@@ -144,5 +146,6 @@ func fail(_ value: String) { fatalError(value) }
         try JobListChecks.run()
         try await ImprovementChecks.run()
         try await FolderCreationChecks.run()
+        try await TwoWayChecks.run()
     }
 }

@@ -53,22 +53,23 @@ public struct RemoteItem: Codable, Identifiable, Equatable, Sendable {
     public var folder: Bool
     public var size: Int64
     public var modified: Date
+    public var created: Date?
     public var hash: String?
     public var hashKind: String?
     public var revision: String
     public var locator: String
-    public init(id: String, name: String, parent: String, folder: Bool = false, size: Int64 = 0, modified: Date = .distantPast, hash: String? = nil, hashKind: String? = nil, revision: String = "", locator: String? = nil) {
-        self.id = id; self.name = name; self.parent = parent; self.folder = folder; self.size = size; self.modified = modified; self.hash = hash; self.hashKind = hashKind; self.revision = revision; self.locator = locator ?? id
+    public init(id: String, name: String, parent: String, folder: Bool = false, size: Int64 = 0, modified: Date = .distantPast, hash: String? = nil, hashKind: String? = nil, revision: String = "", locator: String? = nil, created: Date? = nil) {
+        self.id = id; self.name = name; self.parent = parent; self.folder = folder; self.size = size; self.modified = modified; self.created = created; self.hash = hash; self.hashKind = hashKind; self.revision = revision; self.locator = locator ?? id
     }
-    public var stamp: FileStamp { FileStamp(size: size, modified: modified, created: modified) }
+    public var stamp: FileStamp { FileStamp(size: size, modified: modified, created: created ?? .distantPast) }
 }
 public struct RemoteIndex: Codable, Sendable {
     public var nodes: [String: RemoteItem] = [:]
     public var cursor: String?
     public var root = ""
     public init() {}
-    public func filesByPath() throws -> [String: RemoteItem] {
-        var result: [String: RemoteItem] = [:]
+    public func groupsByPath() throws -> [String: [RemoteItem]] {
+        var result: [String: [RemoteItem]] = [:]
         for node in nodes.values where !node.folder {
             guard !node.name.isEmpty, !node.name.contains("/"), node.name != ".", node.name != ".." else { throw BackupError.unsafe("백업 경로로 해석할 수 없는 클라우드 파일 이름이 있습니다.") }
             var current = node, components = [node.name], visited: Set<String> = [node.id]
@@ -79,11 +80,16 @@ public struct RemoteIndex: Codable, Sendable {
             }
             if components.isEmpty || components.first?.hasPrefix(".safesync-") == true { continue }
             let path = components.joined(separator: "/")
-            guard result[path] == nil else { throw BackupError.unsafe("클라우드에 이름이 같은 파일이 중복되어 있습니다: \(path)") }
-            result[path] = node
+            result[path, default: []].append(node)
         }
         return result
     }
+    public func filesByPath() throws -> [String: RemoteItem] {
+        let groups = try groupsByPath()
+        guard !groups.values.contains(where: { $0.count > 1 }) else { throw BackupError.unsafe("클라우드에 이름이 같은 파일이 중복되어 있습니다.") }
+        return groups.compactMapValues { $0.first }
+    }
+
 }
 public protocol RemoteStorage: Sendable {
     var provider: CloudProvider { get }
@@ -93,10 +99,12 @@ public protocol RemoteStorage: Sendable {
     func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String, progress: @Sendable (Int64, Int64) -> Void) async throws -> RemoteItem
     func move(_ item: RemoteItem, name: String, parent: String) async throws -> RemoteItem
     func remove(_ item: RemoteItem) async throws
+    func download(_ item: RemoteItem, to file: URL) async throws
     func download(_ item: RemoteItem) async throws -> Data
     func inventory(root: String, previous: RemoteIndex?) async throws -> RemoteIndex
 }
 public extension RemoteStorage {
+    func download(_ item: RemoteItem, to file: URL) async throws { try await download(item).write(to: file, options: .atomic) }
     func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String) async throws -> RemoteItem { try await upload(file: file, name: name, parent: parent, modified: modified, resumeKey: resumeKey, progress: { _, _ in }) }
 
     func ensureFolder(name: String, parent: String) async throws -> RemoteItem {

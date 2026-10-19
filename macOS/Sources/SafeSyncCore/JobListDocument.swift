@@ -12,6 +12,8 @@ public struct PortableJob: Codable, Sendable {
     public var ScheduleTime: String
     public var MirrorDeletes: Bool
     public var Paused: Bool
+    public var SyncMode: String?
+    public var Stopped: Bool?
 
     public init(_ job: BackupJob) {
         Id = job.id.uuidString; Name = job.name; Source = job.source
@@ -19,7 +21,7 @@ public struct PortableJob: Codable, Sendable {
         Destination = job.destination
         CloudFolderId = job.cloudProvider == .dropbox && job.cloudFolderID == "" ? "/" : job.cloudFolderID ?? ""
         TriggerType = job.scheduled ? "Scheduled" : "Realtime"; ScheduleTime = job.scheduleTime
-        MirrorDeletes = job.mirrorDeletes; Paused = job.paused
+        MirrorDeletes = job.mirrorDeletes; Paused = job.paused; SyncMode = job.mode == .twoWay ? "TwoWay" : "OneWay"; Stopped = job.stopped
     }
     public var provider: CloudProvider? { DestinationType == "Dropbox" ? .dropbox : DestinationType == "GoogleDrive" ? .googleDrive : nil }
     public var folderID: String? { provider == nil ? nil : provider == .dropbox && CloudFolderId == "/" ? "" : CloudFolderId }
@@ -62,6 +64,7 @@ public enum JobListCodec {
         guard document.Jobs.count <= maximumJobs else { throw BackupError.unsafe("작업은 최대 1000개까지 가져올 수 있습니다.") }
         var ids: Set<String> = []
         for job in document.Jobs {
+            guard job.SyncMode == nil || ["OneWay", "TwoWay"].contains(job.SyncMode!) else { throw BackupError.unsafe("지원하지 않는 동기화 방향입니다.") }
             guard job.Id.range(of: "^[a-zA-Z0-9_.-]{1,128}$", options: .regularExpression) != nil, ids.insert(job.Id.lowercased()).inserted else { throw BackupError.unsafe("작업 ID가 잘못되었거나 중복되었습니다: \(job.Id)") }
             guard !job.Name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, job.Name.utf16.count <= 200 else { throw BackupError.unsafe("작업 이름이 비어 있거나 너무 깁니다.") }
             guard [job.Name, job.Source, job.Destination, job.CloudFolderId].allSatisfy({ !$0.contains("\0") }) else { throw BackupError.unsafe("작업 설정에 사용할 수 없는 문자가 있습니다.") }
@@ -91,8 +94,8 @@ public enum JobListCodec {
             var job = BackupJob(); job.name = portable.Name; job.source = portable.Source; job.destination = portable.Destination
             job.cloudProvider = portable.provider; job.cloudFolderID = portable.folderID
             job.scheduled = portable.TriggerType == "Scheduled"; job.scheduleTime = portable.ScheduleTime
-            job.mirrorDeletes = portable.MirrorDeletes; job.paused = portable.Paused
-            if let id = UUID(uuidString: portable.Id), let old = current.first(where: { $0.id == id }), old.source == job.source, old.destination == job.destination, old.cloudProvider == job.cloudProvider, old.cloudFolderID == job.cloudFolderID {
+            job.mirrorDeletes = portable.MirrorDeletes; job.paused = portable.Paused; job.syncMode = portable.SyncMode == "TwoWay" ? .twoWay : .oneWay; job.stopped = portable.Stopped
+            if let id = UUID(uuidString: portable.Id), let old = current.first(where: { $0.id == id }), old.mode == job.mode, old.source == job.source, old.destination == job.destination, old.cloudProvider == job.cloudProvider, old.cloudFolderID == job.cloudFolderID {
                 job.id = old.id; job.cloudAccountID = old.cloudAccountID; job.lastScheduledDay = old.lastScheduledDay; reused.insert(old.id)
             }
             jobs.append(job)
@@ -103,6 +106,7 @@ public enum JobListCodec {
             if let target = endpoints[i].target, BackupEngine.overlaps(endpoints[i].source, target) { throw BackupError.unsafe("원본과 백업 위치가 겹칩니다: \(jobs[i].name)") }
             for j in jobs.indices where j < i {
                 if jobs[i].cloudProvider != nil, jobs[i].cloudProvider == jobs[j].cloudProvider, jobs[i].cloudFolderID == jobs[j].cloudFolderID, jobs[i].cloudAccountID == jobs[j].cloudAccountID { throw BackupError.unsafe("여러 작업이 같은 클라우드 백업 폴더를 사용합니다.") }
+                if (jobs[i].mode == .twoWay || jobs[j].mode == .twoWay), BackupEngine.overlaps(endpoints[i].source, endpoints[j].source) { throw BackupError.unsafe("양방향 작업의 원본이 다른 작업과 겹칩니다.") }
                 if let target = endpoints[i].target, BackupEngine.overlaps(target, endpoints[j].source) { throw BackupError.unsafe("작업 간 원본·백업 위치가 겹칩니다.") }
                 if let target = endpoints[j].target, BackupEngine.overlaps(target, endpoints[i].source) { throw BackupError.unsafe("작업 간 원본·백업 위치가 겹칩니다.") }
                 if let a = endpoints[i].target, let b = endpoints[j].target, BackupEngine.overlaps(a, b) { throw BackupError.unsafe("여러 작업의 백업 위치가 겹칩니다.") }

@@ -23,6 +23,7 @@ public struct DropboxStorage: RemoteStorage {
         }
     }
     public func metadata(_ id: String) async throws -> RemoteItem? {
+        if id.isEmpty { return RemoteItem(id: "dropbox-root-" + account.id.uuidString, name: "Dropbox", parent: "", folder: true, locator: "") }
         do { return try parse(await rpc("files/get_metadata", ["path": id])) }
         catch let error as APIError where error.status == 409 { return nil }
     }
@@ -67,6 +68,10 @@ public struct DropboxStorage: RemoteStorage {
         guard let metadata = result["metadata"] as? [String: Any] else { throw BackupError.unsafe("Dropbox 이동 응답이 없습니다.") }; return try parse(metadata)
     }
     public func remove(_ item: RemoteItem) async throws { _ = try await rpc("files/delete_v2", ["path": item.id]) }
+    public func download(_ item: RemoteItem, to file: URL) async throws {
+        let arg = String(decoding: try HTTP.json(["path": item.id]), as: UTF8.self)
+        try await CloudAuthorization.shared.download(account, url: URL(string: "https://content.dropboxapi.com/2/files/download")!, to: file, method: "POST", headers: ["Dropbox-API-Arg": arg])
+    }
     public func download(_ item: RemoteItem) async throws -> Data {
         let arg = String(decoding: try HTTP.json(["path": item.id]), as: UTF8.self)
         let (data, _) = try await CloudAuthorization.shared.request(account, url: URL(string: "https://content.dropboxapi.com/2/files/download")!, method: "POST", headers: ["Dropbox-API-Arg": arg]); return data

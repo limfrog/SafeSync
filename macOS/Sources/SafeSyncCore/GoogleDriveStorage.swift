@@ -7,7 +7,7 @@ public struct GoogleDriveStorage: RemoteStorage {
     let dataDirectory: URL
     public typealias Transport = @Sendable (URLRequest, Set<Int>) async throws -> (Data, HTTPURLResponse)
     private let transport: Transport?
-    private let fields = "id,name,parents,mimeType,size,modifiedTime,md5Checksum,sha256Checksum,version,trashed"
+    private let fields = "id,name,parents,mimeType,size,modifiedTime,createdTime,md5Checksum,sha256Checksum,version,trashed"
     public init(account: CloudAccount, dataDirectory: URL = Storage.applicationDirectory, transport: Transport? = nil) {
         self.account = account; self.dataDirectory = dataDirectory; self.transport = transport
     }
@@ -27,7 +27,7 @@ public struct GoogleDriveStorage: RemoteStorage {
     private func parse(_ json: [String: Any]) throws -> RemoteItem {
         guard let id = json["id"] as? String, let name = json["name"] as? String else { throw BackupError.unsafe("Google Drive 파일 응답이 올바르지 않습니다.") }
         let sha = json["sha256Checksum"] as? String, md5 = json["md5Checksum"] as? String
-        return RemoteItem(id: id, name: name, parent: (json["parents"] as? [String])?.first ?? "", folder: json["mimeType"] as? String == "application/vnd.google-apps.folder", size: Int64(json["size"] as? String ?? "0") ?? 0, modified: HTTP.date(json["modifiedTime"] as? String), hash: sha ?? md5, hashKind: sha != nil ? "sha256" : md5 != nil ? "md5" : nil, revision: json["version"] as? String ?? "")
+        return RemoteItem(id: id, name: name, parent: (json["parents"] as? [String])?.first ?? "", folder: json["mimeType"] as? String == "application/vnd.google-apps.folder", size: Int64(json["size"] as? String ?? "0") ?? 0, modified: HTTP.date(json["modifiedTime"] as? String), hash: sha ?? md5, hashKind: sha != nil ? "sha256" : md5 != nil ? "md5" : nil, revision: json["version"] as? String ?? "", created: json["createdTime"] == nil ? nil : HTTP.date(json["createdTime"] as? String))
     }
     private func escaped(_ value: String) -> String { value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'") }
     public func children(_ parent: String) async throws -> [RemoteItem] {
@@ -114,6 +114,10 @@ public struct GoogleDriveStorage: RemoteStorage {
         return try parse(await api("files/" + item.id, method: "PATCH", query: query, body: ["name": name]))
     }
     public func remove(_ item: RemoteItem) async throws { _ = try await api("files/" + item.id, method: "DELETE") }
+    public func download(_ item: RemoteItem, to file: URL) async throws {
+        if transport != nil { try await download(item).write(to: file, options: .atomic); return }
+        try await CloudAuthorization.shared.download(account, url: HTTP.url("https://www.googleapis.com/drive/v3/files/" + item.id, query: ["alt": "media", "supportsAllDrives": "true"]), to: file)
+    }
     public func download(_ item: RemoteItem) async throws -> Data {
         let (data, _) = try await request(url: HTTP.url("https://www.googleapis.com/drive/v3/files/" + item.id, query: ["alt": "media", "supportsAllDrives": "true"])); return data
     }

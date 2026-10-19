@@ -1,5 +1,10 @@
 import Foundation
 
+public enum SyncMode: String, Codable, CaseIterable, Sendable {
+    case oneWay, twoWay
+    public var title: String { self == .oneWay ? "단방향 백업 →" : "양방향 동기화 ↔" }
+}
+
 public struct BackupJob: Codable, Identifiable, Hashable, Sendable {
     public var id = UUID()
     public var name = ""
@@ -10,6 +15,9 @@ public struct BackupJob: Codable, Identifiable, Hashable, Sendable {
     public var mirrorDeletes = true
     public var paused = false
     public var lastScheduledDay: String?
+    public var syncMode: SyncMode?
+    public var stopped: Bool?
+    public var mode: SyncMode { syncMode ?? .oneWay }
     public var cloudProvider: CloudProvider?
     public var cloudAccountID: UUID?
     public var cloudFolderID: String?
@@ -80,8 +88,20 @@ public struct TrashItem: Identifiable, Codable, Sendable {
     public var path: String
     public var deletedAt: Date
     public var size: Int64
+    public var directory: Bool? = nil
 }
-public enum ConflictAction: String, Sendable { case overwrite, keepBoth }
+public enum ConflictAction: String, Codable, CaseIterable, Sendable {
+    case overwrite, useBackup, keepBoth, ignore, normalizeDuplicates
+    public var title: String {
+        switch self {
+        case .overwrite: return "원본 → 백업 덮어쓰기"
+        case .useBackup: return "백업 → 원본 덮어쓰기"
+        case .keepBoth: return "이름 변경 · 둘 다 보관"
+        case .ignore: return "이번 동기화에서 제외"
+        case .normalizeDuplicates: return "중복 이름만 정리 · 사본 모두 보존"
+        }
+    }
+}
 public enum BackupError: LocalizedError {
     case unsafe(String)
     case fileBusy(String)
@@ -89,7 +109,12 @@ public enum BackupError: LocalizedError {
 }
 public enum Storage {
     public static var applicationDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("SafeSync")
+        #if DEBUG
+        if let path = ProcessInfo.processInfo.environment["SAFESYNC_TEST_DATA_DIRECTORY"], path.hasPrefix("/private/tmp/") {
+            return URL(fileURLWithPath: path)
+        }
+        #endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("SafeSync")
     }
     public static func save<T: Encodable>(_ value: T, to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

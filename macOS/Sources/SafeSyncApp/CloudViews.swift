@@ -6,7 +6,11 @@ struct CloudAccountsView: View {
     @Environment(\.dismiss) private var dismiss
     @ViewState private var provider = CloudProvider.dropbox
     @ViewState private var name = ""
-    @ViewState private var clientID = ""
+    @ViewState private var googleClientID = ""
+    @ViewState private var dropboxKey = ""
+    @ViewState private var developerSettings = false
+    private let publicDropboxKey = "08al8ot9uye36k9"
+    var clientID: String { provider == .dropbox ? (dropboxKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? publicDropboxKey : dropboxKey) : googleClientID }
     @ViewState private var clientSecret = ""
     @ViewState private var busy = false
     @ViewState private var error: String?
@@ -17,13 +21,24 @@ struct CloudAccountsView: View {
             List(store.accounts) { account in
                 HStack { VStack(alignment: .leading) { Text(account.name).font(.headline); Text(account.provider.title).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("연결 검증") { store.validateCloudAccount(account) }.disabled(store.validatingCloud || busy); Button("연결 해제") { store.disconnect(account) }.disabled(busy) }
             }.frame(height: 150)
-            Form {
-                Picker("서비스", selection: $provider) { ForEach(CloudProvider.allCases, id: \.self) { Text($0.title).tag($0) } }
-                TextField("계정 표시 이름", text: $name)
-                TextField(provider == .dropbox ? "Dropbox App key" : "Google Client ID", text: $clientID)
-                if provider == .googleDrive { SecureField("Google Client Secret", text: $clientSecret) }
-            }.formStyle(.grouped).disabled(busy)
-            Text(provider == .dropbox ? "Dropbox App Console의 Full Dropbox 앱에 http://127.0.0.1:53682/ 리디렉션과 파일 읽기·쓰기 권한을 등록하세요." : "Google Drive API를 활성화한 ‘데스크톱 앱’ OAuth 클라이언트를 사용하세요. 선택한 폴더를 백업하기 위해 Drive 접근 동의를 요청합니다.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            TabView(selection: $provider) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Dropbox 공식 로그인 페이지에서 본인 계정으로 로그인하고 SafeSync 연결을 허용하세요.").foregroundStyle(.secondary)
+                    TextField("계정 표시 이름", text: $name)
+                    DisclosureGroup("개발자 설정 · 일반 사용자는 변경할 필요가 없습니다", isExpanded: $developerSettings) {
+                        TextField("Dropbox App key (기본 SafeSync 앱)", text: $dropboxKey).padding(.top, 8)
+                        Text("개인 앱을 사용한다면 Full Dropbox 권한과 http://127.0.0.1:53682/ 리디렉션을 등록하세요.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                    Spacer(minLength: 0)
+                }.padding(16).tabItem { Text("Dropbox") }.tag(CloudProvider.dropbox)
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField("계정 표시 이름", text: $name)
+                    TextField("Google Client ID", text: $googleClientID)
+                    SecureField("Google Client Secret", text: $clientSecret)
+                    Text("Google Drive API를 활성화한 ‘데스크톱 앱’ OAuth 클라이언트를 사용하세요. 백업 폴더 접근 동의를 요청합니다.").font(.caption).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }.padding(16).tabItem { Text("Google Drive") }.tag(CloudProvider.googleDrive)
+            }.frame(height: 235).disabled(busy)
             if let report = store.cloudValidationReport { Text(report).font(.caption).textSelection(.enabled) }
             if let error { Text(error).foregroundStyle(.red).font(.caption) }
             HStack {
@@ -39,7 +54,7 @@ struct CloudAccountsView: View {
         let account = CloudAccount(provider: provider, name: name.trimmingCharacters(in: .whitespaces), clientID: clientID.trimmingCharacters(in: .whitespacesAndNewlines))
         let connection = OAuthLogin(); login = connection
         Task { @MainActor in
-            do { try await connection.connect(account, clientSecret: clientSecret); try store.addAccount(account); name = ""; clientID = ""; clientSecret = "" }
+            do { try await connection.connect(account, clientSecret: clientSecret); try store.addAccount(account); name = ""; googleClientID = ""; dropboxKey = ""; clientSecret = "" }
             catch is CancellationError { self.error = "연결을 취소했습니다." }
             catch { self.error = error.localizedDescription }
             busy = false; login = nil

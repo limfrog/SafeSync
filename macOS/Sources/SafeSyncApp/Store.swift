@@ -6,6 +6,22 @@ import CoreServices
 @MainActor final class Store: ObservableObject {
     static let shared = Store()
     var openAppWindow: ((String) -> Void)?
+    @Published var workspace: WorkspaceTab = .jobs
+    @Published var detailTab: SyncDetailTab = .progress
+    @Published var sessions: [SyncSession] = []
+    @Published var sessionSelection: UUID?
+    @Published var followLatest = true
+    @Published var problemSelection: UUID?
+    @Published var deleteRequest: BackupJob?
+    private var pauseGates: [UUID: RunPauseGate] = [:]
+    private let coordinator = SyncCoordinator()
+    var selectedSession: SyncSession? { sessions.first { $0.id == sessionSelection } }
+    func canRepair(_ session: SyncSession) -> Bool {
+        !session.active && sessions.first(where: { $0.job.id == session.job.id })?.id == session.id &&
+        jobs.contains { FileComparisons.sameEndpoints($0, session.job) } && running[session.job.id] == nil && !busyTrash && !isImportingJobList
+    }
+    func navigate(_ tab: WorkspaceTab) { workspace = tab; if tab == .trash { loadTrash() } }
+    func showProblems(_ issue: BackupIssue? = nil) { workspace = .sync; detailTab = .problems; problemSelection = issue?.id }
     @Published var validatingCloud = false
     @Published var cloudValidationReport: String?
     @Published var accounts: [CloudAccount] = []
@@ -22,6 +38,7 @@ import CoreServices
     @Published var trash: [TrashItem] = []
     @Published var trashJob: BackupJob?
     @Published var busyTrash = false
+    private var trashGeneration = UUID()
     @Published private var running: [UUID: Task<Void, Never>] = [:]
     private var timer: Timer?
     private var windowObservers: [NSObjectProtocol] = []
@@ -78,6 +95,9 @@ import CoreServices
         try BackupEngine.validate(job)
         guard running[job.id] == nil else { throw BackupError.unsafe("실행 중인 작업은 완료 후 수정하세요.") }
         for other in jobs where other.id != job.id {
+            if (job.mode == .twoWay || other.mode == .twoWay), BackupEngine.overlaps(BackupEngine.canonical(job.source), BackupEngine.canonical(other.source)) { throw BackupError.unsafe("양방향 작업의 원본 위치는 다른 작업의 원본과 겹칠 수 없습니다.") }
+            if job.cloudProvider == nil, BackupEngine.overlaps(BackupEngine.canonical(job.destination), BackupEngine.canonical(other.source)) { throw BackupError.unsafe("백업 위치가 다른 작업의 원본과 겹칩니다.") }
+            if other.cloudProvider == nil, BackupEngine.overlaps(BackupEngine.canonical(other.destination), BackupEngine.canonical(job.source)) { throw BackupError.unsafe("원본 위치가 다른 작업의 백업과 겹칩니다.") }
             if job.cloudProvider != nil || other.cloudProvider != nil {
                 if job.cloudProvider != nil, job.cloudAccountID == other.cloudAccountID, (job.cloudFolderID == other.cloudFolderID || job.destination.hasPrefix(other.destination + " / ") || other.destination.hasPrefix(job.destination + " / ")) { throw BackupError.unsafe("다른 작업이 같은 클라우드 폴더를 사용 중입니다.") }
                 continue
@@ -87,32 +107,42 @@ import CoreServices
                 throw BackupError.unsafe("다른 작업의 원본·백업 경로와 겹칩니다. 서로 분리된 폴더를 선택하세요.")
             }
         }
-        let originalJobs = jobs
+        let originalJobs = jobs, originalIssues = issues
         var savedID = job.id
         if let i = jobs.firstIndex(where: { $0.id == job.id }) {
-            if jobs[i].cloudProvider != nil, jobs[i].cloudAccountID == nil, job.cloudAccountID != nil, jobs[i].cloudProvider == job.cloudProvider, jobs[i].source == job.source {
-                var connected = job; connected.id = UUID(); jobs[i] = connected; savedID = connected.id
-            } else {
-                guard jobs[i].source == job.source, jobs[i].destination == job.destination, jobs[i].cloudAccountID == job.cloudAccountID, jobs[i].cloudFolderID == job.cloudFolderID, jobs[i].cloudProvider == job.cloudProvider else { throw BackupError.unsafe("백업 기록을 보호하기 위해 경로를 바꿀 때는 새 작업을 추가하세요.") }
-                jobs[i] = job
-            }
+            var updated = job
+            if !FileComparisons.sameEndpoints(jobs[i], job) { updated.id = UUID(); updated.paused = true; updated.stopped = nil; savedID = updated.id }
+            jobs[i] = updated
         } else { jobs.append(job) }
-        do { try persist() } catch { jobs = originalJobs; throw error }
+        let known = Set(jobs.map(\.id)); issues.removeAll { !known.contains($0.jobID) }
+        do { try persist() } catch { jobs = originalJobs; issues = originalIssues; throw error }
         selection = savedID; rebuildWatchers(); log("작업 저장: \(job.name)")
     }
     func removeSelected() {
-        guard !isImportingJobList, let job = selected, running[job.id] == nil else { return }
-        let alert = NSAlert(); alert.messageText = "‘\(job.name)’ 작업을 삭제할까요?"; alert.informativeText = "백업 파일과 SafeSync 휴지통은 보존합니다."; alert.addButton(withTitle: "작업 삭제"); alert.addButton(withTitle: "취소")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        jobs.removeAll { $0.id == job.id }; rebuildWatchers(); issues.removeAll { $0.jobID == job.id }; save()
+        guard !isImportingJobList, let job = selected else { return }
+        guard running[job.id] == nil else { error = "작업 관리에서 작업 종료 후 삭제하세요. 백업 파일은 보존합니다."; return }
+        deleteRequest = job
+    }
+    func confirmDelete() {
+        guard let job = deleteRequest, running[job.id] == nil else { return }
+        jobs.removeAll { $0.id == job.id }; rebuildWatchers(); issues.removeAll { $0.jobID == job.id }; selection = nil; deleteRequest = nil; save()
+    }
+    func stopSelected() {
+        guard let id = selection, let i = jobs.firstIndex(where: { $0.id == id }) else { return }
+        jobs[i].stopped = true; jobs[i].paused = false; running[id]?.cancel(); pauseGates[id]?.setPaused(false); statuses[id] = "종료 대기"; save()
     }
     func togglePause() {
         guard !isImportingJobList, let id = selection, let i = jobs.firstIndex(where: { $0.id == id }) else { return }
-        jobs[i].paused.toggle()
-        if jobs[i].paused { running[id]?.cancel(); statuses[id] = "일시정지" }
+        if jobs[i].stopped == true { jobs[i].stopped = false; jobs[i].paused = false; save(); run(jobs[i]); return }
+        jobs[i].paused.toggle(); pauseGates[id]?.setPaused(jobs[i].paused)
+        statuses[id] = jobs[i].paused ? "일시정지" : (running[id] == nil ? "대기 중" : "실행 중")
+        if let index = sessions.firstIndex(where: { $0.job.id == id && $0.active }) { sessions[index].outcome = jobs[i].paused ? "일시정지" : "실행 중" }
         save()
     }
-    @discardableResult func run(_ job: BackupJob, full: Bool = false, automatic: Bool = false) -> Bool {
+    @discardableResult func run(_ requested: BackupJob, full: Bool = false, automatic: Bool = false, decisions: [ResolutionDecision]? = nil) -> Bool {
+        var job = requested
+        if !automatic, job.stopped == true { job.stopped = false; if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].stopped = false }; save() }
+        if automatic && job.stopped == true { return false }
         guard configurationUsable, !isImportingJobList, running[job.id] == nil, !job.paused, !busyTrash else { return false }
         if job.cloudProvider != nil, !accounts.contains(where: { $0.id == job.cloudAccountID && $0.provider == job.cloudProvider }) {
             statuses[job.id] = "계정 연결 필요"
@@ -120,14 +150,31 @@ import CoreServices
             return false
         }
         statuses[job.id] = "변경 기록 확인 중"; log("\(job.name): 백업 시작")
-        let engine = self.engine, cloudEngine = self.cloudEngine
+        let engine = self.engine, cloudEngine = self.cloudEngine, coordinator = self.coordinator
         let remoteStorage: (any RemoteStorage)?
         do { remoteStorage = job.cloudProvider == nil ? nil : try remote(job) }
         catch { statuses[job.id] = "오류"; self.error = error.localizedDescription; return false }
         let retention = max(1, UserDefaults.standard.object(forKey: "trashRetentionDays") as? Int ?? 100)
-        let updateProgress: @Sendable (BackupProgress) -> Void = { [weak self] p in Task { @MainActor in self?.progress[job.id] = p } }
+        let runJob = job
+        let gate = RunPauseGate(); pauseGates[job.id] = gate
+        let session = SyncSession(job: job), runID = session.id
+        sessions.insert(session, at: 0); if followLatest { sessionSelection = runID }
+        let updateProgress: @Sendable (BackupProgress) -> Void = { [weak self] p in
+            gate.wait()
+            Task { @MainActor in
+                guard let self, let i = self.sessions.firstIndex(where: { $0.id == runID && $0.active }) else { return }
+                self.progress[runJob.id] = p; self.sessions[i].progress = p
+            }
+        }
         running[job.id] = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if let i = self.sessions.firstIndex(where: { $0.id == runID }), self.sessions[i].end == nil {
+                    self.sessions[i].end = Date(); self.sessions[i].outcome = self.statuses[job.id] ?? "중단됨"
+                    self.sessions[i].issues = self.issues.filter { $0.jobID == job.id }
+                }
+                self.pauseGates.removeValue(forKey: job.id)
+            }
             let watcherReady = await self.watchers[job.id]?.flushPendingEvents() ?? false
             guard !Task.isCancelled else { self.running.removeValue(forKey: job.id); return }
             let journal = self.journals[job.id] ?? ChangeJournal(), checkpoint = journal.sequence
@@ -137,6 +184,8 @@ import CoreServices
             let deferredPaths = automatic ? Set(self.waitingIssues.filter { $0.jobID == job.id && ($0.waiting?.nextAttempt ?? .distantPast) > Date() }.map(\.path)) : []
             self.statuses[job.id] = doFull ? "전체 검사 중" : "변경 파일 검사 중"
             let worker = Task.detached {
+                if let decisions { return try await coordinator.apply(decisions, job: runJob, storage: remoteStorage, progress: updateProgress) }
+                if runJob.mode == .twoWay { return try await coordinator.run(runJob, storage: remoteStorage, deferredPaths: deferredPaths, progress: updateProgress) }
                 if let remoteStorage { return try await cloudEngine.run(job, storage: remoteStorage, fullScan: doFull, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress) }
                 return try await engine.run(job, fullScan: doFull, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress)
             }
@@ -144,7 +193,7 @@ import CoreServices
                 let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation()
                 let previousIssues: [BackupIssue] = self.issues.filter { $0.jobID == job.id }
-                self.issues.removeAll { $0.jobID == job.id && !deferredPaths.contains($0.path) && (doFull || $0.path.isEmpty || result.evaluated($0.path)) }
+                self.issues.removeAll { $0.jobID == job.id && !deferredPaths.contains($0.path) && ((doFull && decisions == nil) || $0.path.isEmpty || result.evaluated($0.path)) }
                 let newIssues = result.issues.filter { issue in !previousIssues.contains { old in self.sameIssue(old, issue) } }
                 if !newIssues.isEmpty, self.mainVisible, UserDefaults.standard.bool(forKey: "errorSound") { NSSound(named: "Basso")?.play() }
                 self.issues.append(contentsOf: result.issues.map { (issue: BackupIssue) -> BackupIssue in
@@ -155,6 +204,7 @@ import CoreServices
                     }
                     return stable
                 })
+                if let i = self.sessions.firstIndex(where: { $0.id == runID }) { self.sessions[i].result = result }
                 let remaining = self.issues.filter { $0.jobID == job.id }
                 let waitingCount = remaining.filter { $0.waiting != nil }.count
                 self.statuses[job.id] = remaining.isEmpty ? "완료" : (waitingCount == remaining.count ? "사용 중 대기 \(waitingCount)" : "확인 필요 \(remaining.count)")
@@ -164,15 +214,19 @@ import CoreServices
                 if result.issues.isEmpty {
                     do {
                         let pruned = if let remoteStorage { try await cloudEngine.pruneTrash(job, storage: remoteStorage, retentionDays: retention) } else { try await engine.pruneTrash(job, retentionDays: retention) }
+                        if job.mode == .twoWay || decisions != nil {
+                            var originalTrash = job; originalTrash.destination = job.source; originalTrash.cloudProvider = nil
+                            _ = try await engine.pruneTrash(originalTrash, retentionDays: retention)
+                        }
                         if pruned > 0 { self.log("보관기간이 지난 휴지통 파일 \(pruned)개 정리") }
                     } catch { self.log("휴지통 자동 정리 보류: \(error.localizedDescription)") }
                 }
                 var current = self.journals[job.id] ?? journal
-                current.acknowledge(through: checkpoint, full: doFull, retry: self.issues.filter { $0.jobID == job.id }.map(\.path))
+                if decisions == nil { current.acknowledge(through: checkpoint, full: doFull, retry: self.issues.filter { $0.jobID == job.id }.map(\.path)) }
                 self.journals[job.id] = current; self.saveJournal(job.id)
                 if self.issues.contains(where: { $0.jobID == job.id && !$0.conflict }) { self.scheduleRetry(job.id) } else { self.retries.removeValue(forKey: job.id); self.saveRetries() }
                 self.save()
-            } catch is CancellationError { self.statuses[job.id] = "일시정지"; self.log("\(job.name): 중지됨, 다음 실행에서 재검사") }
+            } catch is CancellationError { self.statuses[job.id] = self.jobs.first(where: { $0.id == job.id })?.stopped == true ? "중단됨" : "일시정지"; self.log("\(job.name): 중지됨, 다음 실행에서 재검사") }
             catch {
                 do {
                     self.statuses[job.id] = "오류"; self.log("\(job.name): \(error.localizedDescription)")
@@ -270,7 +324,7 @@ import CoreServices
         tickCount += 1
         let now = Date(), clock = DateFormatter(), day = DateFormatter()
         clock.dateFormat = "HH:mm"; day.dateFormat = "yyyy-MM-dd"
-        for i in jobs.indices where !jobs[i].paused {
+        for i in jobs.indices where !jobs[i].paused && jobs[i].stopped != true {
             let job = jobs[i]
             if let retry = retries[job.id], now < retry.next { continue }
             if job.scheduled {
@@ -297,14 +351,28 @@ import CoreServices
             catch { self.error = error.localizedDescription }
         }
     }
+    func applyDecisions(_ decisions: [ResolutionDecision], session: SyncSession) {
+        guard canRepair(session), let job = jobs.first(where: { $0.id == session.job.id }) else { error = "최신 완료 기록에서만 처리할 수 있습니다."; return }
+        var runnable = job; runnable.paused = false
+        if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].paused = false }
+        workspace = .sync; detailTab = .progress
+        _ = run(runnable, decisions: decisions)
+    }
     func loadTrash() {
         guard !isImportingJobList, let job = selected, running[job.id] == nil else { return }
         if trashJob?.id != job.id { trash = [] }
         trashJob = job; refreshTrash(job)
     }
     func refreshTrash(_ job: BackupJob) {
-        busyTrash = true
-        Task { do { trash = job.cloudProvider == nil ? try await engine.listTrash(job) : try await cloudEngine.listTrash(job, storage: remote(job)) } catch { self.error = error.localizedDescription }; busyTrash = false }
+        guard running[job.id] == nil else { error = "실행을 완료하거나 작업 종료 후 휴지통을 확인하세요."; return }
+        let token = UUID(); trashGeneration = token; busyTrash = true
+        Task {
+            do {
+                let listed = job.cloudProvider == nil ? try await engine.listTrash(job) : try await cloudEngine.listTrash(job, storage: remote(job))
+                if trashGeneration == token { trash = listed }
+            } catch { if trashGeneration == token { self.error = error.localizedDescription } }
+            if trashGeneration == token { busyTrash = false }
+        }
     }
     func restore(_ items: [TrashItem]) {
         guard let job = trashJob, !busyTrash else { return }
@@ -321,8 +389,6 @@ import CoreServices
     func deleteTrash(_ items: [TrashItem]) {
         guard let job = trashJob, !busyTrash, !items.isEmpty else { return }
         guard running[job.id] == nil else { error = "백업 완료 또는 일시정지 후 휴지통을 정리하세요."; return }
-        let alert = NSAlert(); alert.messageText = "선택한 \(items.count)개 파일을 완전히 삭제할까요?"; alert.informativeText = "이 작업은 되돌릴 수 없습니다."; alert.addButton(withTitle: "완전 삭제"); alert.addButton(withTitle: "취소")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
         busyTrash = true
         Task { do { if job.cloudProvider != nil { try await cloudEngine.deleteTrash(items, job: job, storage: remote(job)) } else { try await engine.deleteTrash(items, job: job) } } catch { self.error = error.localizedDescription }; busyTrash = false; refreshTrash(job) }
     }
@@ -373,6 +439,6 @@ import CoreServices
         do { try CredentialVault.delete(account: account.id); accounts.removeAll { $0.id == account.id }; for i in jobs.indices where jobs[i].cloudAccountID == account.id { jobs[i].paused = true }; save() }
         catch { self.error = error.localizedDescription }
     }
-    func status(_ job: BackupJob) -> String { job.paused ? "일시정지" : statuses[job.id] ?? "대기 중" }
+    func status(_ job: BackupJob) -> String { job.stopped == true ? "종료 대기" : job.paused ? "일시정지" : statuses[job.id] ?? "대기 중" }
     func quit() { for task in running.values { task.cancel() }; NSApp.terminate(nil) }
 }

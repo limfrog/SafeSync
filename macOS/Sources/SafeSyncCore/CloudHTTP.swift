@@ -70,6 +70,21 @@ public actor CloudAuthorization {
         defer { refreshes.removeValue(forKey: account.id) }
         return try await task.value
     }
+    public func download(_ account: CloudAccount, url: URL, to destination: URL, method: String = "GET", headers: [String: String] = [:]) async throws {
+        for attempt in 0...1 {
+            var request = URLRequest(url: url); request.httpMethod = method
+            for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+            request.setValue("Bearer \(try await token(account, forceRefresh: attempt == 1))", forHTTPHeaderField: "Authorization")
+            let (temporary, response) = try await HTTP.session.download(for: request)
+            defer { try? FileManager.default.removeItem(at: temporary) }
+            guard let http = response as? HTTPURLResponse else { throw BackupError.unsafe("다운로드 응답이 없습니다.") }
+            if http.statusCode == 401 && attempt == 0 { continue }
+            guard (200...299).contains(http.statusCode) else { throw APIError(status: http.statusCode, summary: "파일 다운로드를 완료하지 못했습니다.") }
+            try Task.checkCancellation()
+            try FileManager.default.moveItem(at: temporary, to: destination); return
+        }
+        throw BackupError.unsafe("클라우드 인증 갱신에 실패했습니다.")
+    }
     public func request(_ account: CloudAccount, url: URL, method: String = "GET", body: Data? = nil, headers: [String: String] = [:], accepted: Set<Int> = Set(200...299)) async throws -> (Data, HTTPURLResponse) {
         for attempt in 0...1 {
             var request = URLRequest(url: url); request.httpMethod = method; request.httpBody = body

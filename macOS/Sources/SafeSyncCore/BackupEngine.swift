@@ -75,7 +75,7 @@ public actor BackupEngine {
         return dir
     }
     private func archive(_ file: URL, path: String, root: URL) throws {
-        let item = TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(file).size)
+        let item = TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(file).size, directory: (try file.resourceValues(forKeys: [.isDirectoryKey])).isDirectory)
         let dir = try trashDirectory(root)
         try Storage.save(item, to: dir.appendingPathComponent("\(item.id).json"))
         do { try fm.moveItem(at: file, to: dir.appendingPathComponent("\(item.id).data")) }
@@ -105,7 +105,7 @@ public actor BackupEngine {
             try fm.removeItem(at: journal)
         }
     }
-    private func transfer(_ source: URL, to destination: URL, path: String, root: URL, expected: FileStamp) throws -> String {
+    private func transfer(_ source: URL, to destination: URL, path: String, root: URL, expected: FileStamp, validate: () throws -> Void = {}) throws -> String {
         let sourceLock = try FileAccess.readLock(source); defer { FileAccess.unlock(sourceLock) }
         try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         _ = try child(root, path)
@@ -124,6 +124,7 @@ public actor BackupEngine {
         guard try FileStamp(source) == before else { throw BackupError.fileBusy("복사 중 원본이 변경되어 사용 중 대기합니다. 기존 백업을 보존합니다.") }
         guard try Self.hash(temp) == digest else { throw BackupError.unsafe("복사 사본의 체크섬이 일치하지 않습니다. 기존 백업을 보존합니다.") }
         try Task.checkCancellation()
+        try validate()
         if fm.fileExists(atPath: destination.path) {
             let tx = Transaction(destination: path, temporary: relative, expectedHash: digest, trash: TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(destination).size))
             try Storage.save(tx, to: journal); journalWritten = true
@@ -160,6 +161,7 @@ public actor BackupEngine {
             result.evaluatedPaths.insert(path)
             try Task.checkCancellation()
             progress(BackupProgress(path: path, completed: index, total: paths.count, size: files[path]?.size, stage: "파일 비교·검증"))
+            try Task.checkCancellation()
             do {
                 let src = try child(source, path), dst = try child(root, path), stamp = files[path]!
                 let sourceLock = try FileAccess.readLock(src); defer { FileAccess.unlock(sourceLock) }
@@ -219,6 +221,7 @@ public actor BackupEngine {
         return result
     }
     public func resolve(_ issue: BackupIssue, job: BackupJob, action: ConflictAction) throws {
+        guard action == .overwrite || action == .keepBoth else { throw BackupError.unsafe("파일 비교 화면에서 처리를 선택하세요.") }
         try Self.validate(job)
         let root = Self.canonical(job.destination), source = Self.canonical(job.source)
         let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }
@@ -236,6 +239,71 @@ public actor BackupEngine {
         manifest.files[issue.path] = FileRecord(source: stamp, backup: try FileStamp(dst), hash: digest)
         try Storage.save(manifest, to: manifestURL(job))
     }
+    public func prepareSync(_ job: BackupJob) throws {
+        try Self.validate(job)
+        var descriptors: [Int32] = []; defer { for fd in descriptors { flock(fd, LOCK_UN); Darwin.close(fd) } }
+        for root in [Self.canonical(job.source), Self.canonical(job.destination)].sorted(by: { $0.path < $1.path }) {
+            descriptors.append(try lock(root)); try recover(root)
+        }
+    }
+    /// Revalidate both endpoints immediately before the atomic exchange.
+    public func apply(_ comparison: FileComparison, action: ConflictAction) throws {
+        let job = comparison.job
+        try Self.validate(job)
+        guard job.cloudProvider == nil, comparison.allows(action) else { throw BackupError.unsafe("선택한 처리를 적용할 수 없습니다.") }
+        if action == .ignore { return }
+        let roots = [Self.canonical(job.source), Self.canonical(job.destination)].sorted { $0.path < $1.path }
+        var locks: [Int32] = []; defer { for fd in locks { flock(fd, LOCK_UN); Darwin.close(fd) } }
+        for root in roots { locks.append(try lock(root)); try recover(root) }
+        let check = { try FileComparisons.verify(comparison, current: FileComparisons.localPair(job: job, path: comparison.path)) }
+        try check()
+        let reverse = action == .useBackup
+        let fromRoot = Self.canonical(reverse ? job.destination : job.source)
+        let toRoot = Self.canonical(reverse ? job.source : job.destination)
+        let src = try child(fromRoot, comparison.path), dst = try child(toRoot, comparison.path)
+        let targetLock = fm.fileExists(atPath: dst.path) ? try FileAccess.readLock(dst) : nil
+        defer { if let targetLock { FileAccess.unlock(targetLock) } }
+        if action == .keepBoth {
+            let sibling = dst.appendingPathExtension("SafeSync-conflict-" + UUID().uuidString)
+            try fm.copyItem(at: dst, to: sibling)
+            guard try Self.hash(sibling) == comparison.backup?.hash else { throw BackupError.unsafe("보존 사본 검증에 실패했습니다.") }
+        }
+        _ = try transfer(src, to: dst, path: comparison.path, root: toRoot,
+            expected: (reverse ? comparison.backup : comparison.source)!.stamp, validate: check)
+    }
+    public func installDownload(_ file: URL, comparison: FileComparison) throws {
+        let root = Self.canonical(comparison.job.source)
+        let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }
+        try recover(root)
+        let check = {
+            guard try FileComparisons.identity(root) == comparison.sourceRoot,
+                  try FileComparisons.local(root: root.path, path: comparison.path) == comparison.source else {
+                throw BackupError.unsafe("다운로드 중 원본이 변경되어 보존했습니다.")
+            }
+        }
+        let target = try child(root, comparison.path)
+        let targetLock = fm.fileExists(atPath: target.path) ? try FileAccess.readLock(target) : nil
+        defer { if let targetLock { FileAccess.unlock(targetLock) } }
+        try check()
+        _ = try transfer(file, to: target, path: comparison.path, root: root, expected: FileStamp(file), validate: check)
+    }
+    public func changeStructure(_ comparison: FileComparison, forward: Bool, deleting: Bool) throws {
+        try Task.checkCancellation()
+        let job = comparison.job, root = Self.canonical(forward ? job.destination : job.source)
+        let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }
+        try recover(root)
+        if job.cloudProvider == nil { try FileComparisons.verify(comparison, current: FileComparisons.localPair(job: job, path: comparison.path)) }
+        else {
+            guard try FileComparisons.identity(root) == comparison.sourceRoot,
+                  try FileComparisons.local(root: root.path, path: comparison.path) == comparison.source else { throw BackupError.unsafe("원본이 변경되었습니다.") }
+        }
+        let target = try child(root, comparison.path)
+        if deleting {
+            if (forward ? comparison.backup : comparison.source)?.folder == true,
+               !(try fm.contentsOfDirectory(atPath: target.path)).isEmpty { throw BackupError.unsafe("폴더에 남은 항목이 있어 삭제를 보류합니다.") }
+            try archive(target, path: comparison.path, root: root)
+        } else { try fm.createDirectory(at: target, withIntermediateDirectories: true) }
+    }
     public func listTrash(_ job: BackupJob) throws -> [TrashItem] {
         let root = Self.canonical(job.destination)
         let dir = try child(root, ".safesync-trash")
@@ -248,6 +316,11 @@ public actor BackupEngine {
         let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }
         let dir = try trashDirectory(root), stored = dir.appendingPathComponent("\(item.id).data")
         let dst = try child(root, item.path)
+        if item.directory == true {
+            try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+            guard renameatx_np(AT_FDCWD, stored.path, AT_FDCWD, dst.path, UInt32(RENAME_EXCL)) == 0 else { throw BackupError.unsafe("복구 위치에 항목이 있거나 폴더를 복구할 수 없습니다. 사본을 보존합니다.") }
+            try fm.removeItem(at: dir.appendingPathComponent("\(item.id).json")); return
+        }
         let stamp = try FileStamp(stored)
         _ = try transfer(stored, to: dst, path: item.path, root: root, expected: stamp)
         try fm.removeItem(at: stored)

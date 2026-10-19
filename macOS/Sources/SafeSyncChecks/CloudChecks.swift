@@ -22,7 +22,7 @@ actor MemoryCloud: RemoteStorage {
     func setMutation(_ value: Bool) { mutateOnUpload = value }
     private func location(_ name: String, parent: String, id: String) -> String { provider == .dropbox ? (parent + "/" + name).lowercased() : id }
     func children(_ parent: String) -> [RemoteItem] { items.values.filter { $0.parent == parent } }
-    func metadata(_ id: String) -> RemoteItem? { items[id] ?? items.values.first { $0.locator == id } }
+    func metadata(_ id: String) -> RemoteItem? { if id == "" || id == "root" { return RemoteItem(id: id, name: "root", parent: "", folder: true, locator: id) }; return items[id] ?? items.values.first { $0.locator == id } }
     func createFolder(name: String, parent: String) -> RemoteItem {
         counter += 1; let id = "id-\(counter)"
         let item = RemoteItem(id: id, name: name, parent: parent, folder: true, revision: String(counter), locator: location(name, parent: parent, id: id))
