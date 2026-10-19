@@ -11,9 +11,9 @@
 - 홈페이지: https://www.horizonent.co.kr/apps/safesync/
 - 개인정보처리방침: https://www.horizonent.co.kr/apps/safesync/privacy.php
 - Windows 설치본: https://github.com/limfrog/SafeSync/raw/main/dist/SafeSync-Setup-1.0.0-preview.1.exe
-- 등록 상태: Development, 외부 개발 사용자 활성화. Production 승인은 아직 받지 않음.
+- 등록 상태: 2026-10-19 Production 신청 접수 완료. 콘솔 표시 `Awaiting review pending app eligibility`. 승인 완료가 아니며 개발 사용자 한도가 유지됨.
 
-실제 계정의 새 폴더에서 32개 검사를 통과했다. 콘솔의 Production 요청 양식은 작성 중이며, 요청 제출과 승인 완료는 별개다. Development의 사용자 한도/조기 심사 조건은 콘솔에서 확인한다. 50명 도달 전 조기 심사는 실제 사유가 필요하므로 사용자 수나 출시 이력을 만들어 쓰지 않는다.
+실제 계정의 새 폴더에서 32개 검사를 통과했다. 사용자가 최종 제출을 승인했고 새 공개 설치본·홈페이지·정책·테스트 안내로 신청을 접수했다. 콘솔은 최소 50명 연결 등 심사 적격 조건 충족을 기다리는 상태를 표시한다. 제출과 승인 완료는 별개다. 조기 심사 사유나 사용자 수를 만들어 쓰지 않았다. 설치본에 포함된 인계 문서는 빌드 당시의 제출 전 상태이며 최신 접수 상태는 이 저장소 문서를 기준으로 한다.
 
 ## 심사자 테스트 안내
 
