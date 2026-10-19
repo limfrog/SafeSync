@@ -1,4 +1,21 @@
-# SafeSync 개발 인계 — Windows 1.9.15
+# SafeSync 개발 인계 — Windows 1.0.0-preview.1
+
+## 현재 공개 프리뷰 — 2026-10-19
+
+현재 Windows 코드는 `windows-v2/`의 C#/.NET WPF 앱이다. 내부 개발판 2.0.0-preview 번호를 1.0.0-preview.1로 재정리했다. 데이터 폴더 `SafeSync2-Preview`, 설치 경로 `Programs/SafeSync2`와 제어 채널은 기존 프리뷰 호환을 위해 유지한다. 이전 PowerShell 버전의 설정을 자동으로 덮어쓰지 않는다.
+
+- 진입점: `windows-v2/src/SafeSync.App/Program.cs`, `DesktopController.cs`, `Dialogs.cs`, `Views/`
+- 엔진: `SafeSync.Core/BackupEngine.cs`, `TwoWayEngine.cs`, `VerifiedFiles.cs`, `Persistence.cs`, `OfflineJournal.cs`
+- 클라우드: `SafeSync.Core/Cloud/`, Dropbox 기본 공개 App Key는 Directory.Build.props의 비밀이 아닌 클라이언트 ID
+- 빌드/설치: `windows-v2/scripts/Build.ps1`, `Build-Installer.ps1`, `packaging/`
+- 검사: `windows-v2/tests/SafeSync.Tests/`, 핵심 448개·UI 316개·설치 33개 통과, Google 양방향 35개·Dropbox 32개·NAS 22단계 통과
+- 동작/주의사항: [양방향 및 Dropbox](windows-v2/TWOWAY-AND-DROPBOX.md), [현재 검증](windows-v2/RELEASE-VALIDATION.md), [Dropbox 공개 심사 인계](windows-v2/DROPBOX-PRODUCTION.md)
+
+현재 Windows EXE/ZIP만 dist에서 제공한다. 구 Windows 배포본 12개는 현재 브랜치에서 제거하며 맥 소스/배포본 0.2.4와 0.2.5는 그대로 보존한다. Git 과거 이력은 지우지 않는다. 인증 토큰, 비밀번호, 사용자 설정, 실제 스냅샷과 테스트 자료는 공개하지 않는다. 아래 내용은 이전 개발 이력이다.
+
+## Windows 2.0 C# 전환 — 2026-10-18
+
+`windows-v2/`에 별도의 C#/.NET WPF 전환 검증본을 구현했습니다. 기존 PowerShell 소스와 설치본은 변경하지 않았습니다. preview.2에는 Google Drive·Dropbox OAuth/PKCE·분할 전송·서비스 체크섬·저널 복구·클라우드 휴지통과, 기존 계정/스냅샷/델타 체크포인트의 복사 승계를 추가했습니다. 실제 계정 시험·변경 커서·USN·대규모 성능·정식 설치는 아직 미완료입니다. 코드 지도, 검사 범위와 다음 단계는 [전환 현황](windows-v2/MIGRATION.md), [검증본 안내](windows-v2/README-ko.md), [검사 기록](windows-v2/TEST-RESULTS.md)을 먼저 읽으세요. 정식 배포본 다운로드는 아직 1.9.15를 가리키며 검증본은 GitHub에 자동 업로드하지 않았습니다.
 
 ## macOS 진행 현황 — 2026-10-17
 

@@ -1,0 +1,140 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SafeSync 백업" Width="1180" Height="720" MinWidth="800" MinHeight="540"
+        WindowStartupLocation="CenterScreen" Background="{DynamicResource SafeSyncWindowBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" FontFamily="Segoe UI, Malgun Gothic">
+  <Window.Resources>
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="12,7"/><Setter Property="Margin" Value="0,0,6,0"/>
+      <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/><Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="MinHeight" Value="34"/><Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type Button}"><Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonBorder" Property="Opacity" Value="0.86"/></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonBorder" Property="Opacity" Value="0.70"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource SafeSyncAccentBrush}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="CommandButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Padding" Value="12,7"/><Setter Property="Margin" Value="0,0,6,0"/>
+      <Setter Property="MinWidth" Value="84"/>
+    </Style>
+    <Style x:Key="SafeSyncMenuItemStyle" TargetType="MenuItem">
+      <Setter Property="OverridesDefaultStyle" Value="True"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/>
+      <Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FontSize" Value="13"/><Setter Property="Padding" Value="10,5"/><Setter Property="MinWidth" Value="124"/><Setter Property="MinHeight" Value="28"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type MenuItem}">
+        <Grid SnapsToDevicePixels="True">
+          <Border x:Name="MenuItemSurface" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <Grid x:Name="IconSlot" Width="18" Margin="0,0,6,0"><ContentPresenter x:Name="IconPresenter" ContentSource="Icon" VerticalAlignment="Center" HorizontalAlignment="Center"/><Path x:Name="MenuCheckMark" Data="M 1,5 L 4,8 L 10,1" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5" Width="11" Height="9" Visibility="Collapsed" VerticalAlignment="Center"/></Grid>
+              <ContentPresenter x:Name="MenuHeaderPresenter" Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+              <TextBlock x:Name="GestureText" Grid.Column="2" Text="{TemplateBinding InputGestureText}" Foreground="{TemplateBinding Foreground}" Opacity="0.72" Margin="18,0,0,0" VerticalAlignment="Center"/>
+              <Path x:Name="SubmenuArrow" Grid.Column="3" Data="M 0,0 L 4,4 L 0,8" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.4" Width="5" Height="9" Margin="14,0,0,0" Visibility="Collapsed" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+          <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="-1" VerticalOffset="-6" IsOpen="{Binding IsSubmenuOpen,RelativeSource={RelativeSource TemplatedParent}}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+            <Border x:Name="SubmenuSurface" Margin="6" Padding="5" MinWidth="160" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncMenuBorderBrush}" BorderThickness="1" CornerRadius="8">
+              <Border.Effect><DropShadowEffect Color="Black" BlurRadius="10" ShadowDepth="2" Opacity="0.16"/></Border.Effect>
+              <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" KeyboardNavigation.TabNavigation="Cycle"/></ScrollViewer>
+            </Border>
+          </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+          <Trigger Property="Icon" Value="{x:Null}"><Setter TargetName="IconSlot" Property="Visibility" Value="Collapsed"/></Trigger>
+          <Trigger Property="IsCheckable" Value="True"><Setter TargetName="IconSlot" Property="Visibility" Value="Visible"/></Trigger>
+          <Trigger Property="IsChecked" Value="True"><Setter TargetName="MenuCheckMark" Property="Visibility" Value="Visible"/><Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed"/></Trigger>
+          <Trigger Property="InputGestureText" Value=""><Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/></Trigger>
+          <Trigger Property="HasItems" Value="True"><Setter TargetName="SubmenuArrow" Property="Visibility" Value="Visible"/></Trigger>
+          <MultiTrigger><MultiTrigger.Conditions><Condition Property="IsHighlighted" Value="True"/><Condition Property="IsEnabled" Value="True"/></MultiTrigger.Conditions><Setter Property="Background" Value="{DynamicResource SafeSyncAccentDarkBrush}"/><Setter Property="Foreground" Value="White"/></MultiTrigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="{DynamicResource SafeSyncMutedBrush}"/><Setter TargetName="MenuItemSurface" Property="Opacity" Value="0.5"/></Trigger>
+          <Trigger Property="Role" Value="TopLevelHeader"><Setter TargetName="PART_Popup" Property="Placement" Value="Bottom"/><Setter TargetName="PART_Popup" Property="HorizontalOffset" Value="-6"/><Setter TargetName="PART_Popup" Property="VerticalOffset" Value="0"/><Setter TargetName="SubmenuArrow" Property="Visibility" Value="Collapsed"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="MenuItem" BasedOn="{StaticResource SafeSyncMenuItemStyle}"/>
+    <Style x:Key="MenuHeaderItem" TargetType="MenuItem" BasedOn="{StaticResource SafeSyncMenuItemStyle}">
+      <Setter Property="Padding" Value="10,4"/><Setter Property="MinWidth" Value="0"/>
+    </Style>
+    <Style TargetType="Menu"><Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/></Style>
+    <Style TargetType="ContextMenu"><Setter Property="OverridesDefaultStyle" Value="True"/><Setter Property="HasDropShadow" Value="False"/><Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncMenuBorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type ContextMenu}"><Border x:Name="MenuPopupSurface" Margin="6" Padding="5" MinWidth="160" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"><Border.Effect><DropShadowEffect Color="Black" BlurRadius="10" ShadowDepth="2" Opacity="0.16"/></Border.Effect><ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" KeyboardNavigation.TabNavigation="Cycle"/></ScrollViewer></Border></ControlTemplate></Setter.Value></Setter></Style>
+    <Style TargetType="Separator"><Setter Property="OverridesDefaultStyle" Value="True"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type Separator}"><Border Height="1" Background="{DynamicResource SafeSyncBorderSoftBrush}" Margin="8,4"/></ControlTemplate></Setter.Value></Setter></Style>
+    <Style TargetType="DataGridColumnHeader">
+      <Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/><Setter Property="BorderThickness" Value="0,0,1,1"/><Setter Property="Padding" Value="10,7"/><Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type DataGridColumnHeader}"><Grid SnapsToDevicePixels="True"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" ContentStringFormat="{TemplateBinding ContentStringFormat}" RecognizesAccessKey="True"/></Border><Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"><Thumb.Template><ControlTemplate TargetType="{x:Type Thumb}"><Border Background="{TemplateBinding Background}"/></ControlTemplate></Thumb.Template></Thumb><Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Width="4" Background="{TemplateBinding Background}" Cursor="SizeWE"><Thumb.Template><ControlTemplate TargetType="{x:Type Thumb}"><Border Background="{TemplateBinding Background}"/></ControlTemplate></Thumb.Template></Thumb><Border HorizontalAlignment="Right" Width="1" Background="{DynamicResource SafeSyncBorderSoftBrush}"/></Grid></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="DataGridRow"><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SafeSyncAccentDarkBrush}"/><Setter Property="Foreground" Value="White"/></Trigger></Style.Triggers></Style>
+    <Style TargetType="DataGridCell"><Setter Property="Foreground" Value="{Binding Foreground,RelativeSource={RelativeSource AncestorType={x:Type DataGridRow}}}"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type DataGridCell}"><Border Background="{TemplateBinding Background}"><ContentPresenter VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter><Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SafeSyncAccentDarkBrush}"/><Setter Property="Foreground" Value="White"/></Trigger></Style.Triggers></Style>
+    <Style x:Key="JobCellText" TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="8,0"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Text,RelativeSource={RelativeSource Self}}"/></Style>
+    <Style TargetType="DataGridColumnHeadersPresenter"><Setter Property="Background" Value="{DynamicResource SafeSyncHeadingBrush}"/></Style>
+  </Window.Resources>
+  <Grid x:Name="MainLayoutRoot" Margin="16">
+    <Grid.RowDefinitions><RowDefinition Height="27"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition x:Name="MainJobsRow" Height="*" MinHeight="110"/><RowDefinition Height="8"/><RowDefinition x:Name="MainActivityRow" Height="155" MinHeight="56"/><RowDefinition Height="26"/></Grid.RowDefinitions>
+    <Menu Grid.Row="0" Background="Transparent" Foreground="{DynamicResource SafeSyncTextBrush}" BorderThickness="0">
+      <MenuItem Header="파일" Style="{StaticResource MenuHeaderItem}">
+        <MenuItem x:Name="MenuAddJobItem" Header="새 백업 작업"/><Separator/>
+        <MenuItem x:Name="MenuExportJobsItem" Header="작업 목록 내보내기..."/>
+        <MenuItem x:Name="MenuImportJobsItem" Header="작업 목록 가져오기..."/>
+        <Separator/><MenuItem x:Name="MenuExitItem" Header="프로그램 종료"/>
+      </MenuItem>
+      <MenuItem Header="작업" Style="{StaticResource MenuHeaderItem}">
+        <MenuItem x:Name="EditButton" Header="작업 수정"/><MenuItem x:Name="DeleteButton" Header="작업 삭제"/><Separator/>
+        <MenuItem x:Name="FullScanButton" Header="전체 검사" ToolTip="선택한 작업의 모든 파일을 다시 비교합니다."/>
+      </MenuItem>
+      <MenuItem Header="보기" Style="{StaticResource MenuHeaderItem}"><MenuItem x:Name="MenuProgressItem" Header="동기화 상태 창"/><MenuItem x:Name="MenuMessagesItem" Header="확인할 메시지"/><Separator/><MenuItem x:Name="TrashButton" Header="휴지통 관리"/></MenuItem>
+      <MenuItem Header="도구" Style="{StaticResource MenuHeaderItem}"><MenuItem x:Name="SettingsButton" Header="환경설정"/><MenuItem x:Name="MenuCloudAccountsItem" Header="클라우드 계정"/></MenuItem>
+      <MenuItem Header="도움말" Style="{StaticResource MenuHeaderItem}"><MenuItem x:Name="MenuAboutItem" Header="SafeSync 정보"/></MenuItem>
+    </Menu>
+    <Grid Grid.Row="1" Margin="8,10,8,18">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Image x:Name="BrandImage" Width="48" Height="48" Margin="0,0,12,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+      <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="SafeSync" FontSize="27" FontWeight="Bold" Foreground="{DynamicResource SafeSyncTextBrush}"/><TextBlock Text="파일을 안전하게, 백업은 자동으로" FontSize="13" Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,2,0,0"/></StackPanel>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+        <TextBlock x:Name="ServiceBadge" Text="● 자동 검사 대기" Foreground="{DynamicResource SafeSyncSuccessTextBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,16,0"/>
+        <Button x:Name="NotificationsButton" Content="확인할 메시지 0" IsEnabled="False" Margin="0"/>
+      </StackPanel>
+    </Grid>
+    <DockPanel Grid.Row="2" LastChildFill="True" Margin="0,0,0,12">
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0">
+          <Button x:Name="TrashShortcutButton" Content="휴지통 관리" MinWidth="100" ToolTip="선택한 백업 작업의 휴지통을 엽니다."/>
+          <Button x:Name="JobActionsButton" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사 및 삭제">
+            <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
+          </Button>
+          <Button x:Name="SettingsShortcutButton" Width="36" Padding="8" Margin="0" ToolTip="환경설정" AutomationProperties.Name="환경설정"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16"/></Button>
+        </StackPanel>
+        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="AddButton" Style="{StaticResource CommandButton}" Content="＋ 새 작업" Background="{DynamicResource SafeSyncSurfaceBrush}"/>
+          <Button x:Name="RunButton" Style="{StaticResource CommandButton}" Content="▶ 지금 백업" ToolTip="저장된 변경 목록만 빠르게 확인하여 백업합니다." Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/>
+          <Button x:Name="PauseButton" Style="{StaticResource CommandButton}" Content="Ⅱ 일시정지" MinWidth="104"/>
+          <Button x:Name="RunAllButton" Style="{StaticResource CommandButton}" Content="▶▶ 모든 작업" ToolTip="모든 작업에서 변경된 파일만 빠르게 백업합니다."/>
+          <Border Width="1" Height="22" Background="{DynamicResource SafeSyncBorderBrush}" Margin="5,6,11,6"/>
+          <Button x:Name="ProgressButton" Style="{StaticResource CommandButton}" Content="동기화 상태" ToolTip="독립적인 동기화 상태 창을 열거나 닫습니다."/>
+        </WrapPanel>
+    </DockPanel>
+    <Border Grid.Row="3" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="1" CornerRadius="6" Padding="1" ClipToBounds="True">
+     <Grid>
+      <DataGrid x:Name="JobsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" CanUserAddRows="False" CanUserResizeColumns="True" GridLinesVisibility="Horizontal" BorderThickness="0" RowHeight="36" ColumnHeaderHeight="32" HeadersVisibility="Column" Background="{DynamicResource SafeSyncSurfaceBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" RowBackground="{DynamicResource SafeSyncSurfaceBrush}" AlternatingRowBackground="{DynamicResource SafeSyncSubtleBrush}" HorizontalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}" VerticalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="작업 이름" Binding="{Binding Name}" ElementStyle="{StaticResource JobCellText}" Width="1.5*" MinWidth="110"/>
+          <DataGridTextColumn Header="동기화 방향" Binding="{Binding ModeText}" ElementStyle="{StaticResource JobCellText}" Width="140" MinWidth="130"/>
+          <DataGridTextColumn Header="원본 위치" Binding="{Binding Source}" ElementStyle="{StaticResource JobCellText}" Width="2.6*" MinWidth="150"/>
+          <DataGridTextColumn Header="백업 위치" Binding="{Binding Destination}" ElementStyle="{StaticResource JobCellText}" Width="2.6*" MinWidth="150"/>
+          <DataGridTextColumn Header="실행 방식" Binding="{Binding TriggerText}" ElementStyle="{StaticResource JobCellText}" Width="1.2*" MinWidth="100"/>
+          <DataGridTextColumn Header="상태" Binding="{Binding Status}" ElementStyle="{StaticResource JobCellText}" Width="1.1*" MinWidth="90"/>
+        </DataGrid.Columns>
+      </DataGrid>
+      <StackPanel x:Name="EmptyJobsHint" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20,32,20,0">
+        <TextBlock Text="&#xE8F4;" FontFamily="Segoe MDL2 Assets" FontSize="38" Foreground="{DynamicResource SafeSyncMutedBrush}" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+        <TextBlock Text="첫 백업 작업을 추가하세요" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource SafeSyncTextBrush}" HorizontalAlignment="Center"/>
+        <TextBlock Text="원본과 백업 폴더를 선택하면 자동 백업을 시작합니다." FontSize="13" Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,6,0,0" TextAlignment="Center"/>
+      </StackPanel>
+     </Grid>
+    </Border>
+    <GridSplitter x:Name="MainLayoutSplitter" Grid.Row="4" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="Transparent" ShowsPreview="True" Cursor="SizeNS"/>
+    <Grid Grid.Row="5" Margin="0,4,0,8">
+      <Border Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="1" CornerRadius="8" Padding="12">
+        <DockPanel><TextBlock DockPanel.Dock="Top" Text="활동 기록" Foreground="{DynamicResource SafeSyncTextBrush}" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,8"/>
+          <TextBox x:Name="ActivityBox" Background="Transparent" Foreground="{DynamicResource SafeSyncTextBrush}" BorderThickness="0" IsReadOnly="True" FontFamily="Consolas, Malgun Gothic" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+        </DockPanel>
+      </Border>
+    </Grid>
+    <DockPanel Grid.Row="6" VerticalAlignment="Center"><TextBlock x:Name="JobCountText" DockPanel.Dock="Right" Text="작업 0개" Foreground="{DynamicResource SafeSyncMutedBrush}" FontSize="12"/><TextBlock x:Name="FooterText" Text="Windows · 로컬 · Dropbox · Google Drive" Foreground="{DynamicResource SafeSyncMutedBrush}" FontSize="12"/></DockPanel>
+  </Grid>
+</Window>

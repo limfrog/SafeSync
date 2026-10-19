@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <StartupObject>SafeSync.App.Program</StartupObject>
+    <ApplicationIcon>../../../outputs/SafeSync/SafeSync.ico</ApplicationIcon>
+    <AssemblyName>SafeSync</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../SafeSync.Core/SafeSync.Core.csproj" />
+    <Resource Include="Views/*.xaml" />
+    <Resource Include="../../../outputs/SafeSync/SafeSync.ico" Link="Assets/SafeSync.ico" />
+    <Content Include="../../../outputs/SafeSync/SafeSync-Progress-*.ico" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

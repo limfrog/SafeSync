@@ -26,3 +26,8 @@ work/*/
 work/packaging/*/
 work/safesync-*-preview.*
 work/safesync-tray-*.png
+
+# C# 2.0 build output and local development tools
+windows-v2/**/bin/
+windows-v2/**/obj/
+windows-v2/artifacts/

@@ -1,0 +1,49 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="클라우드 계정" Width="800" Height="700" MinWidth="700" MinHeight="480" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" Background="{DynamicResource SafeSyncWindowBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" FontFamily="Segoe UI, Malgun Gothic" FontSize="13" UseLayoutRounding="True">
+ <Window.Resources>
+  <Style TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+  <Style TargetType="TextBox"><Setter Property="Background" Value="{DynamicResource SafeSyncInputBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/><Setter Property="CaretBrush" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="Padding" Value="8,6"/><Setter Property="MinHeight" Value="32"/></Style>
+  <Style TargetType="PasswordBox"><Setter Property="Background" Value="{DynamicResource SafeSyncInputBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/><Setter Property="CaretBrush" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="Padding" Value="8,6"/><Setter Property="MinHeight" Value="32"/></Style>
+  <Style TargetType="Button">
+   <Setter Property="Padding" Value="14,7"/><Setter Property="Margin" Value="0,0,8,0"/><Setter Property="MinHeight" Value="34"/><Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderBrush}"/>
+   <Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="VerticalContentAlignment" Value="Center"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type Button}">
+    <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" RecognizesAccessKey="True"/></Border>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.86"/></Trigger>
+     <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.70"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ButtonSurface" Property="BorderBrush" Value="{DynamicResource SafeSyncAccentBrush}"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/><Setter Property="Cursor" Value="Arrow"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
+  <Style TargetType="GroupBox">
+   <Setter Property="Background" Value="{DynamicResource SafeSyncSurfaceBrush}"/><Setter Property="Foreground" Value="{DynamicResource SafeSyncTextBrush}"/><Setter Property="BorderBrush" Value="{DynamicResource SafeSyncBorderSoftBrush}"/><Setter Property="BorderThickness" Value="1"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type GroupBox}"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}"><StackPanel><ContentPresenter ContentSource="Header" TextElement.FontSize="16" TextElement.FontWeight="SemiBold" Margin="0,0,0,10"/><ContentPresenter ContentSource="Content"/></StackPanel></Border></ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </Window.Resources>
+ <Grid x:Name="CloudAccountsLayout" Margin="24">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <StackPanel Margin="0,0,0,18"><TextBlock Text="클라우드 API 계정" FontSize="23" FontWeight="Bold"/><TextBlock Text="인증 정보는 Windows 사용자 계정으로 암호화되어 이 PC에만 저장됩니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,5,0,0"/></StackPanel>
+  <ScrollViewer x:Name="AccountsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
+  <GroupBox Header="Dropbox — Full Dropbox" Padding="16" Margin="0,0,0,14">
+   <StackPanel>
+    <TextBlock Text="전체 Dropbox에서 원하는 폴더를 선택·생성할 수 있습니다. 작업은 선택한 폴더 안에서만 실행됩니다.&#10;기본 공개 App Key가 포함되어 있습니다. Dropbox Production 승인은 별도로 진행 중이며, 현재는 개발 사용자 한도가 적용됩니다."/>
+    <TextBlock Text="Redirect URI: http://127.0.0.1:53682/" FontFamily="Consolas" Margin="0,5,0,10" Foreground="{DynamicResource SafeSyncMutedBrush}"/>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="App Key" VerticalAlignment="Center"/><TextBox x:Name="DropboxKey" Grid.Column="1"/></Grid>
+    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="DropboxConnect" Content="Dropbox 연결"/><Button x:Name="DropboxDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="DropboxStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
+   </StackPanel>
+  </GroupBox>
+  <GroupBox Header="Google Drive — 전체 Drive" Padding="16">
+   <StackPanel>
+    <TextBlock Text="Drive API를 켜고 OAuth 클라이언트를 ‘데스크톱 앱’으로 생성하세요.&#10;테스트 중인 앱은 OAuth 동의 화면에 본인 계정을 테스트 사용자로 등록합니다."/>
+    <Grid Margin="0,10,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client ID" VerticalAlignment="Center"/><TextBox x:Name="GoogleClientId" Grid.Column="1"/></Grid>
+    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client Secret" VerticalAlignment="Center"/><PasswordBox x:Name="GoogleSecret" Grid.Column="1"/></Grid>
+    <TextBlock Text="Client Secret을 비워 두면 기존에 암호화 저장된 값을 유지합니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="110,4,0,0" FontSize="12"/>
+    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="GoogleConnect" Content="Google Drive 연결"/><Button x:Name="GoogleDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="GoogleStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
+   </StackPanel>
+  </GroupBox>
+  </StackPanel></ScrollViewer>
+  <Border Grid.Row="2" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="0,1,0,0" Padding="0,14,0,0" Margin="0,16,0,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="SaveCredentials" Content="입력값 저장"/><Button x:Name="CloseButton" Content="닫기" MinWidth="80" Margin="0" Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/></StackPanel></Border>
+ </Grid>
+</Window>

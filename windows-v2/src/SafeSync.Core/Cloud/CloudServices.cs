@@ -1,0 +1,30 @@
+namespace SafeSync.Core.Cloud;
+
+public sealed class CloudServices : IDisposable
+{
+    private readonly Func<AppConfig> config;
+    private readonly HttpClient client;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string,CloudRetryState> retryStates=new();
+    public ISecretVault Vault {get;}
+    public CloudAuthentication Authentication {get;}
+    public CloudServices(Func<AppConfig> config,HttpClient? client=null,ISecretVault? vault=null)
+    {
+        this.config=config;this.client=client ?? new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromMinutes(10)};
+        Vault=vault ?? new WindowsSecretVault();Authentication=new(this.client,Vault);
+    }
+    public IRemoteStore ForJob(BackupJob job)
+    {
+        var account=CloudAccounts.Read(config()).For(job.DestinationType);
+        if(job.CloudAccountId.Length==0 || job.CloudAccountId!=account.AccountId)throw new InvalidOperationException("작업에 묶인 계정과 현재 연결 계정이 다릅니다. 백업 폴더를 다시 선택하세요.");
+        return Create(job.DestinationType,job.CloudFolderId,account,job.CloudFolderIdentity);
+    }
+    public IRemoteStore ForAccountRoot(string provider)=>Create(provider,provider=="GoogleDrive" ? "root" : "/",CloudAccounts.Read(config()).For(provider));
+    private IRemoteStore Create(string provider,string root,CloudAccount account,string folderIdentity="")
+    {
+        if(account.RefreshTokenProtected.Length==0 || account.AccountId.Length==0)throw new InvalidOperationException("클라우드 계정을 먼저 연결하세요.");
+        var retryState=retryStates.GetOrAdd(provider+"|"+account.AccountId,_=>new());
+        var http=new CloudHttp(client,(force,token)=>Authentication.AccessAsync(provider,account,force,token),retryState:retryState);
+        return provider switch {"GoogleDrive"=>new GoogleDriveStore(http,Vault,root,account.AccountId),"Dropbox"=>new DropboxStore(http,Vault,root,account.AccountId,folderIdentity),_=>throw new ArgumentException("Unknown cloud provider.")};
+    }
+    public void Dispose(){client.Dispose();}
+}
