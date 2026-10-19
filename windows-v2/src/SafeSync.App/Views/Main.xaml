@@ -94,28 +94,31 @@
         <Button x:Name="NotificationsButton" Content="확인할 메시지 0" IsEnabled="False" Margin="0"/>
       </StackPanel>
     </Grid>
-    <TabControl x:Name="WorkspaceTabs" Grid.Row="2" Background="{DynamicResource SafeSyncWindowBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+    <TabControl x:Name="WorkspaceTabs" Grid.Row="2" Background="{DynamicResource SafeSyncWindowBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+      <TabControl.Template><ControlTemplate TargetType="{x:Type TabControl}">
+        <Grid KeyboardNavigation.TabNavigation="Local">
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+          <!-- Reserve a shared header slot for settings, outside every tab page. -->
+          <TabPanel x:Name="HeaderPanel" IsItemsHost="True" Margin="0,0,48,0" Panel.ZIndex="1" KeyboardNavigation.TabIndex="1"/>
+          <Border Grid.Row="1" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+            <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+          </Border>
+        </Grid>
+      </ControlTemplate></TabControl.Template>
       <TabControl.Resources><Style TargetType="TabItem"><Setter Property="Foreground" Value="{DynamicResource SafeSyncMutedBrush}"/><Setter Property="Padding" Value="22,9"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="{x:Type TabItem}"><Border x:Name="TabSurface" Background="Transparent" BorderThickness="0,0,0,2" BorderBrush="Transparent" Padding="{TemplateBinding Padding}"><ContentPresenter ContentSource="Header" HorizontalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="{DynamicResource SafeSyncAccentBrush}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter TargetName="TabSurface" Property="BorderBrush" Value="{DynamicResource SafeSyncAccentBrush}"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="{DynamicResource SafeSyncSubtleBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></TabControl.Resources>
       <TabItem x:Name="MainTab" Header="백업 작업">
       <Grid x:Name="MainLayoutRoot">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="MainJobsRow" Height="*" MinHeight="90"/><RowDefinition Height="10"/><RowDefinition x:Name="MainActivityRow" Height="155" MinHeight="64"/></Grid.RowDefinitions>
-    <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,12">
-        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Top" Margin="8,0,0,0">
-          <Button x:Name="TrashShortcutButton" Content="휴지통 관리" MinWidth="100" ToolTip="선택한 백업 작업의 휴지통을 엽니다."/>
-          <Button x:Name="JobActionsButton" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사 및 삭제">
+        <WrapPanel x:Name="JobCommandBar" Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,0,12">
+          <Button x:Name="AddButton" Style="{StaticResource CommandButton}" Content="＋ 새 작업" Background="{DynamicResource SafeSyncSurfaceBrush}"/>
+          <Button x:Name="JobActionsButton" Style="{StaticResource CommandButton}" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사 및 삭제">
             <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><MenuItem Header="클라우드 위치 다시 연결..." Tag="RebindCloudJobMenuItem"/><MenuItem Header="작업 종료" Tag="StopJobMenuItem"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
           </Button>
-          <Button x:Name="SettingsShortcutButton" Width="36" Padding="8" Margin="0" ToolTip="환경설정" AutomationProperties.Name="환경설정"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16"/></Button>
-        </StackPanel>
-        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <Button x:Name="AddButton" Style="{StaticResource CommandButton}" Content="＋ 새 작업" Background="{DynamicResource SafeSyncSurfaceBrush}"/>
+          <Border Width="1" Height="22" Background="{DynamicResource SafeSyncBorderBrush}" Margin="5,6,11,6"/>
           <Button x:Name="RunButton" Style="{StaticResource CommandButton}" Content="▶ 지금 백업" ToolTip="저장된 변경 목록만 빠르게 확인하여 백업합니다." Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/>
           <Button x:Name="PauseButton" Style="{StaticResource CommandButton}" Content="Ⅱ 일시정지" MinWidth="104"/>
           <Button x:Name="RunAllButton" Style="{StaticResource CommandButton}" Content="▶▶ 모든 작업" ToolTip="모든 작업에서 변경된 파일만 빠르게 백업합니다."/>
-          <Border Width="1" Height="22" Background="{DynamicResource SafeSyncBorderBrush}" Margin="5,6,11,6"/>
-          <Button x:Name="ProgressButton" Style="{StaticResource CommandButton}" Content="동기화 상태" ToolTip="동기화 상태 탭에서 진행 상황과 문제 해결을 확인합니다."/>
         </WrapPanel>
-    </DockPanel>
     <Border Grid.Row="1" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="1" CornerRadius="6" Padding="1" ClipToBounds="True">
      <Grid>
       <DataGrid x:Name="JobsGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" CanUserAddRows="False" CanUserResizeColumns="True" GridLinesVisibility="Horizontal" BorderThickness="0" RowHeight="36" ColumnHeaderHeight="32" HeadersVisibility="Column" Background="{DynamicResource SafeSyncSurfaceBrush}" Foreground="{DynamicResource SafeSyncTextBrush}" RowBackground="{DynamicResource SafeSyncSurfaceBrush}" AlternatingRowBackground="{DynamicResource SafeSyncSubtleBrush}" HorizontalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}" VerticalGridLinesBrush="{DynamicResource SafeSyncBorderSoftBrush}">
@@ -145,8 +148,9 @@
     </Grid>
       </Grid></TabItem>
       <TabItem x:Name="SyncWorkspaceTab" Header="동기화 상태"><ContentControl x:Name="SyncWorkspaceHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/></TabItem>
-      <TabItem x:Name="TrashWorkspaceTab" Header="휴지통 관리"><ContentControl x:Name="TrashWorkspaceHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"><TextBlock Text="백업 작업을 선택한 뒤 휴지통 관리 버튼을 누르세요." Foreground="{DynamicResource SafeSyncMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></ContentControl></TabItem>
+      <TabItem x:Name="TrashWorkspaceTab" Header="휴지통 관리"><ContentControl x:Name="TrashWorkspaceHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"><TextBlock Text="백업 작업 탭에서 작업을 선택한 뒤 이 탭을 여세요." Foreground="{DynamicResource SafeSyncMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/></ContentControl></TabItem>
     </TabControl>
+    <Button x:Name="SettingsShortcutButton" Grid.Row="2" Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top" Width="36" Height="36" Padding="8" Margin="0" ToolTip="환경설정" AutomationProperties.Name="환경설정"><TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16"/></Button>
     <DockPanel Grid.Row="3" VerticalAlignment="Center"><TextBlock x:Name="JobCountText" DockPanel.Dock="Right" Text="작업 0개" Foreground="{DynamicResource SafeSyncMutedBrush}" FontSize="12"/><TextBlock x:Name="FooterText" Text="Windows · 로컬 · Dropbox · Google Drive" Foreground="{DynamicResource SafeSyncMutedBrush}" FontSize="12"/></DockPanel>
   </Grid>
 </Window>

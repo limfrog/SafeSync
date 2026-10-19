@@ -131,8 +131,8 @@ internal sealed partial class DesktopController
             Log(job.Name + (job.Paused ? ": 일시정지" : ": 다시 시작"));
         });
         Click(Main,"SettingsButton",ShowSettings);Click(Main,"SettingsShortcutButton",ShowSettings);
-        Click(Main,"ProgressButton",ToggleProgress);Click(Main,"MenuProgressItem",ToggleProgress);
-        Click(Main,"TrashButton",ShowTrash);Click(Main,"TrashShortcutButton",ShowTrash);
+        Click(Main,"MenuProgressItem",ToggleProgress);
+        Click(Main,"TrashButton",ShowTrash);
         Click(Main,"MenuMessagesItem",ShowNotices);Click(Main,"NotificationsButton",ShowNotices);
         Click(Main,"MenuExportJobsItem",ExportJobs);Click(Main,"MenuImportJobsItem",ImportJobs);
         Click(Main,"MenuAboutItem",() => Tell($"SafeSync {AppVersion}\n제작자: 임호\nlimfrog75@gmail.com\n\nC#/.NET 기반 전환 검증본입니다. 아직 1.9.15 대체용이 아닙니다.","SafeSync 정보"));
@@ -224,7 +224,7 @@ internal sealed partial class DesktopController
         Main.Find<MenuItem>("StopJobMenuItem").IsEnabled=selected && job?.Stopped==false;
         Main.Find<MenuItem>("RebindCloudJobMenuItem").IsEnabled=selected && job!.DestinationType!="Local" && !scheduler.IsRunning(job.Id);
         Main.Find<MenuItem>("ResolveJobMenuItem").IsEnabled=selected;
-        foreach(var name in new[]{"TrashShortcutButton","JobActionsButton","PauseButton"})Main.Find<Button>(name).IsEnabled=selected && (name!="TrashShortcutButton" || local);
+        foreach(var name in new[]{"JobActionsButton","PauseButton"})Main.Find<Button>(name).IsEnabled=selected;
         Main.Find<Button>("RunButton").IsEnabled=local && (job?.Paused==false || job?.Stopped==true) && !stopping;
         Main.Find<Button>("PauseButton").IsEnabled=selected && !stopping;
         Main.Find<Button>("PauseButton").Content=job?.Stopped==true ? "▶ 작업 시작" : job?.Paused==true ? "▶ 다시 시작" : "Ⅱ 일시정지";

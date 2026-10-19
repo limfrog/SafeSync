@@ -1,3 +1,5 @@
+2b81b14d59727c3d3b563dcbaa13d4b2b6731bc27a235f44934564a028d5627f  SafeSync-Setup-1.0.0-preview.10.exe
+0a78a2b487cb69077ab1e4315f522cbbeef83aaf762c01af145b099dfecd9cbf  SafeSync-Windows-1.0.0-preview.10.zip
 615b99dfa58850411ea38d3f3e9ffd6d6634d3839e173cced685187ea7d926ec  SafeSync-Setup-1.0.0-preview.9.exe
 0301769a6246dd796586594c6e0625ba904836917fef6135ae3c582af076e006  SafeSync-Windows-1.0.0-preview.9.zip
 0ae6c1b644c4541efd296f7ac8bf51d0cf0d9ef4c85247590323e61c1225eaf2  SafeSync-Setup-1.0.0-preview.1.exe

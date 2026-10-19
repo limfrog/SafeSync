@@ -437,6 +437,8 @@ internal sealed partial class DesktopController
             if(failure!=null)throw failure;
             Check(inspected,"설정 버튼 동작이 검사되지 않았습니다.");
         }
+        var toolbarAssertions=await TestWorkspaceToolbarAsync(previewDirectory,CheckModal);
+        assertions+=toolbarAssertions;
         Check(AutoStart.Command(@"C:\Apps\Safe Sync\SafeSync.exe")=="\"C:\\Apps\\Safe Sync\\SafeSync.exe\"","공백이 있는 자동 시작 경로의 인용이 잘못되었습니다.");
         bool unsafeStartup=false;try{AutoStart.Command("C:\\Apps\\unsafe\".exe");}catch(ArgumentException){unsafeStartup=true;}Check(unsafeStartup,"잘못된 자동 시작 경로가 허용되었습니다.");
         CheckModal(ShowSettings,w=>

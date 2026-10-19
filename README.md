@@ -1,18 +1,25 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. Windows는 **1.0.0-preview.9 공개 프리뷰**, macOS는 **0.2.5 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. Windows는 **1.0.0-preview.10 공개 프리뷰**, macOS는 **0.2.5 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
 - [macOS 0.2.5 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.2.5-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 9 설치 파일](dist/SafeSync-Setup-1.0.0-preview.9.exe)
-- [Windows 1.0.0 Preview 9 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.9.zip)
+- [Windows 1.0.0 Preview 10 설치 파일](dist/SafeSync-Setup-1.0.0-preview.10.exe)
+- [Windows 1.0.0 Preview 10 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.10.zip)
 - [Windows 사용 및 기능 안내](windows-v2/README-ko.md)
-- [프리뷰 9 최종 검사 결과](windows-v2/PREVIEW9-VALIDATION.md)
+- [프리뷰 10 최종 검사 결과](windows-v2/PREVIEW10-VALIDATION.md)
 - [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## Windows 프리뷰 10 변경사항
+
+- 탭과 중복되는 메인 도구줄의 휴지통 관리·동기화 상태 버튼을 제거했습니다. 해당 기능은 탭과 보기 메뉴에서 이용합니다.
+- 환경설정을 공통 탭 제목줄 오른쪽에 배치해 어느 탭에서도 열 수 있습니다.
+- 작업 관리와 새 작업 버튼을 왼쪽으로 정렬하고 실행 버튼 그룹과 구분했습니다.
+- 핵심 860개·화면 548개·설치 34개 검사와 설치 파일 499개 해시 검증을 통과했습니다. 백업 엔진·작업 설정 형식은 변경하지 않았습니다.
 
 ## Windows 프리뷰 9 변경사항
 
