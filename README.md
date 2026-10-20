@@ -40,9 +40,9 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. Windows는 
 
 ## macOS 0.3.7
 
-macOS 14 이상에서 ZIP을 풀고 `SafeSync.app`을 사용합니다. 기존 Windows 아이콘을 사용하며 로컬·외장·마운트된 네트워크 폴더, Dropbox·Google Drive 백업을 지원합니다. 작업 목록 내보내기·가져오기, 사용 중 파일 대기와 즉시 재시도, 수동 증분 백업, 완료 알림음, 클라우드 폴더 선택 창의 **새 폴더** 버튼을 포함합니다. 최신 Windows 1.0.0-preview.10에 맞춰 **백업 작업 / 동기화 상태 / 휴지통** 탭과 공통 환경설정, 실행 이력, 파일 비교·충돌 선택, 원본 휴지통을 제공합니다. **양방향 자동 동기화**도 작업별로 선택할 수 있습니다. 원본 아이콘과 별도 **About SafeSync** 정보 창을 유지합니다.
+macOS 14 이상에서 ZIP을 풀고 `SafeSync.app`을 사용합니다. 기존 Windows 아이콘을 사용하며 로컬·외장·마운트된 네트워크 폴더, Dropbox·Google Drive 백업을 지원합니다. 작업 목록 내보내기·가져오기, 사용 중 파일 대기와 즉시 재시도, 수동 증분 백업, 완료 알림음, 클라우드 폴더 선택 창의 **새 폴더** 버튼을 포함합니다. 최신 Windows 1.0.0-preview.10에 맞춰 **백업 작업 / 동기화 상태 / 휴지통** 탭과 공통 환경설정, 실행 이력, 파일 비교·충돌 선택, 원본 휴지통을 제공합니다. **양방향 자동 동기화**도 작업별로 선택할 수 있습니다. 원본 아이콘과 별도 **About SafeSync** 정보 창을 유지합니다. 0.3.7은 일반 사용자용 클라우드 로그인, 창 닫기 시 Dock 숨김, 메뉴 막대 화살표·다크 모드 아웃라인, 전용 메시지 창을 포함하며 Dropbox의 `.DS_Store` 반복 실패를 수정했습니다.
 
-이 배포본은 **ad-hoc 서명**이며 Developer ID 서명·Apple 공증 전입니다. 자동 검사 63개와 Universal 빌드가 통과했지만 실제 클라우드 전송·NAS·잠자기·Intel 실행 검증 등은 남아 있습니다. 확인한 범위는 [검증 현황](macOS/STATUS.md)과 [검사 결과](macOS/TEST-RESULTS.txt)를 참고하세요.
+이 배포본은 **ad-hoc 서명**이며 Developer ID 서명·Apple 공증 전입니다. 자동 검사 67개와 Universal 빌드가 통과했지만 실제 클라우드 전송·NAS·잠자기·Intel 실행 검증 등은 남아 있습니다. 확인한 범위는 [검증 현황](macOS/STATUS.md)과 [검사 결과](macOS/TEST-RESULTS.txt)를 참고하세요.
 
 Swift 6 도구체인과 Command Line Tools에서 실행합니다.
 
@@ -52,7 +52,7 @@ cd macOS
 ARCHITECTURE=universal ./scripts/build-app.sh
 ```
 
-결과는 `macOS/build/SafeSync.app`입니다. Google Drive는 데스크톱 앱 OAuth Client ID/Secret을 앱에서 입력하고 다시 연결합니다. 인증 정보는 저장소에 포함하지 않습니다.
+결과는 `macOS/build/SafeSync.app`입니다. 일반 사용자용 배포본은 SafeSync의 Desktop 앱 등록 정보를 포함하므로 Google Drive/Dropbox 연결 버튼에서 브라우저 로그인만 진행합니다. 개발자 빌드 설정은 [클라우드 배포 안내](macOS/CLOUD-RELEASE.md)를 참고하세요. 사용자 로그인 토큰과 개발자 원본 OAuth JSON은 저장소에 포함하지 않습니다.
 
 ## Windows 빌드
 
@@ -60,9 +60,9 @@ ARCHITECTURE=universal ./scripts/build-app.sh
 
 .NET 10 SDK와 Windows 런타임이 있는 개발 환경에서 `windows-v2/scripts/Build.ps1 -RunTests -BundleRuntime`을 실행합니다. 실행용 .NET 런타임이 포함된 EXE 설치본/ZIP이 생성됩니다. 개발용 빌드 스크립트만 PowerShell을 사용하며 앱이 PowerShell을 로드하지 않습니다. 설치 부트스트랩은 .NET Framework 4.8을 전제로 합니다. 배포본은 아직 코드 서명되지 않았습니다.
 
-`dist/`에는 현재 Windows 프리뷰와 보존된 macOS 배포본을 제공합니다. 구버전 Windows 설치본/ZIP 12개는 현재 브랜치에서 제거했습니다. 과거 Git 이력은 유지하며 맥 파일은 변경하지 않았습니다. 다운로드 전에 SHA-256을 [체크섬 목록](dist/SHA256SUMS.txt)과 대조하세요.
+`dist/`에는 현재 Windows 프리뷰와 보존된 macOS 배포본을 제공합니다. 구버전 Windows 설치본/ZIP 12개는 현재 브랜치에서 제거했습니다. 과거 Git 이력과 이전 macOS 배포본은 유지합니다. 다운로드 전에 SHA-256을 [체크섬 목록](dist/SHA256SUMS.txt)과 대조하세요.
 
-개인 설정, OAuth 토큰·키, 실행 로그, 백업 데이터, 테스트용 임시 파일은 저장소에 포함하지 않습니다. 이 저장소를 맥에서 복제해도 Windows에 저장된 작업·스냅샷·클라우드 인증 상태는 자동으로 이전되지 않습니다.
+개인 설정, 사용자 OAuth 토큰, 개발자 원본 인증 설정, 실행 로그, 백업 데이터, 테스트용 임시 파일은 저장소에 포함하지 않습니다. 이 저장소를 맥에서 복제해도 Windows에 저장된 작업·스냅샷·클라우드 인증 상태는 자동으로 이전되지 않습니다.
 
 앱의 **파일** 메뉴에서 작업 목록을 JSON으로 내보내거나 다시 가져올 수 있습니다. 내보내기에는 인증 정보와 스냅샷이 포함되지 않습니다. 기존 설정 파일을 직접 가져오면 같은 사용자에서 호환 계정과 스냅샷을 복사 승계하며 작업은 일시정지로 시작합니다. 기존 설치·설정·백업은 자동 변경하지 않습니다.
 
