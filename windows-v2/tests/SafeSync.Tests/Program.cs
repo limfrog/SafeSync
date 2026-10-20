@@ -196,6 +196,7 @@ try
     await TwoWayTests.RunAsync(testRoot,Check);
     await DropboxScopeTests.RunAsync(testRoot,Check);
     await ComparisonRegressionTests.RunAsync(testRoot,Check);
+    await OneWaySafetyTests.RunAsync(testRoot,Check);
     await GracefulStopTests.RunAsync(testRoot,Check);
     await RecoveryRegressionTests.RunAsync(testRoot,Check);
     await FileComparisonTests.RunAsync(testRoot,Check);

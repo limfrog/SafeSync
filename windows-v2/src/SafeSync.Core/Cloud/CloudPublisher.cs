@@ -26,6 +26,8 @@ public sealed class CloudTransaction
 }
 public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore remote)
 {
+    // Also applied to interrupted deletion journals immediately before mutation.
+    public Action<string>? ValidateDeletion {get;set;}
     private string JournalRoot=>Path.Combine(store.Root,"cloud-transactions-v2");
     private static string TrashPath(string relative,string reason)=>".safesync-trash/"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+reason+"-"+Guid.NewGuid().ToString("N")+"/"+RemotePath.Normalize(relative);
     private CloudTransaction Record(string relative,RemoteItem? previous,bool keepBoth=false)=>new()
@@ -94,6 +96,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
             if(record.Previous==null)throw new InvalidDataException("삭제 전 백업 정보가 없습니다.");
             if(destination==null && prior!=null && RemotePath.Same(record.Previous,prior)){File.Delete(journal);return null;}
             if(destination==null || !RemotePath.Same(record.Previous,destination) || prior!=null)throw new CloudConflictException(record.Relative,"삭제 처리 중 클라우드 파일이 변경되었습니다.");
+            ValidateDeletion?.Invoke(record.Relative);
             var moved=await remote.MoveAsync(record.Relative,record.PreviousPath,token);
             if(!RemotePath.Same(record.Previous,moved))throw new CloudConflictException(record.Relative,"삭제된 파일의 내용이 예상과 다릅니다. 휴지통 사본을 보존했습니다.");
             File.Delete(journal);return null;

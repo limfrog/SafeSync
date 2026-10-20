@@ -131,8 +131,9 @@ internal sealed class MemoryRemote(string provider) : IRemoteStore
     public Dictionary<string,RemoteItem> Files {get;}=new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string,byte[]> content=new(StringComparer.OrdinalIgnoreCase);
     public bool CorruptUpload,FailBeforePublish,LosePublishResponse,CorruptPublish,CorruptDownload;
+    public Action<string>? BeforeStat;
     public Task InitializeAsync(CancellationToken token){token.ThrowIfCancellationRequested();return Task.CompletedTask;}
-    public Task<RemoteItem?> StatAsync(string path,CancellationToken token){token.ThrowIfCancellationRequested();return Task.FromResult(path.Length==0 ? new RemoteItem(Root,"Test root",true,0,DateTime.MinValue,DateTime.MinValue,"","") : Files.GetValueOrDefault(path));}
+    public Task<RemoteItem?> StatAsync(string path,CancellationToken token){token.ThrowIfCancellationRequested();BeforeStat?.Invoke(path);return Task.FromResult(path.Length==0 ? new RemoteItem(Root,"Test root",true,0,DateTime.MinValue,DateTime.MinValue,"","") : Files.GetValueOrDefault(path));}
     public Task<IReadOnlyList<RemoteItem>> ListAsync(string directory,CancellationToken token){token.ThrowIfCancellationRequested();return Task.FromResult<IReadOnlyList<RemoteItem>>(Files.Where(k=>RemotePath.Parent(k.Key)==directory).Select(k=>k.Value).ToArray());}
     public Task EnsureFolderAsync(string path,CancellationToken token)
     {

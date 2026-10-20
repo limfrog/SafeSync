@@ -67,6 +67,9 @@ public sealed class FileEntry
     public int LockRetryCount {get;set;}
     public string RemoteId { get; set; } = "";
     public string RemoteParentId { get; set; } = "";
+    // Older snapshots must not authorize deletion until this source was observed
+    // under a verified root. Missing legacy files remain reviewable conflicts.
+    public bool DeletionSourceVerified { get; set; }
     public SyncSide? SyncSource { get; set; }
     public SyncSide? SyncBackup { get; set; }
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
@@ -75,7 +78,7 @@ public sealed class FileEntry
         RelativePath = relative, Length = info.Exists ? info.Length : 0,SourceFileId=info.Exists ? OfflineJournal.FileIdentity(info.FullName) : 0,
         CreationTimeUtc = info.Exists ? info.CreationTimeUtc.ToString("O") : "",
         LastWriteTimeUtc = info.Exists ? info.LastWriteTimeUtc.ToString("O") : "",
-        Status = status, LastError = error, LastAttemptUtc = DateTime.UtcNow.ToString("O")
+        Status = status, LastError = error, LastAttemptUtc = DateTime.UtcNow.ToString("O"),DeletionSourceVerified=info.Exists
     };
 }
 
@@ -89,6 +92,8 @@ public sealed class JobState
     public string SyncMode { get; set; } = "OneWay";
     public string SyncSourceIdentity { get; set; } = "";
     public string SyncBackupIdentity { get; set; } = "";
+    public string OneWaySourceIdentity { get; set; } = "";
+    public string OneWayBackupIdentity { get; set; } = "";
     public string CloudFolderIdentity { get; set; } = "";
     public string Source { get; set; } = "";
     public string Destination { get; set; } = "";

@@ -1,18 +1,27 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. Windows는 **1.0.0-preview.10 공개 프리뷰**, macOS는 **0.3.7 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. Windows는 **1.0.0-preview.11 공개 프리뷰**, macOS는 **0.3.7 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
 - [macOS 0.3.7 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.7-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 10 설치 파일](dist/SafeSync-Setup-1.0.0-preview.10.exe)
-- [Windows 1.0.0 Preview 10 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.10.zip)
+- [Windows 1.0.0 Preview 11 설치 파일](dist/SafeSync-Setup-1.0.0-preview.11.exe)
+- [Windows 1.0.0 Preview 11 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.11.zip)
 - [Windows 사용 및 기능 안내](windows-v2/README-ko.md)
-- [프리뷰 10 최종 검사 결과](windows-v2/PREVIEW10-VALIDATION.md)
+- [프리뷰 11 검사 결과](windows-v2/PREVIEW11-VALIDATION.md)
+- [프리뷰 11 설치본 검증과 SHA-256](windows-v2/PREVIEW11-PACKAGE-RESULT.md)
 - [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## Windows 프리뷰 11 변경사항
+
+- 비교 대상은 크기·수정 시간이 비슷해도 내용을 검증합니다. 다른 내용을 동일 파일로 건너뛰거나 백업 완료로 기록하지 않습니다.
+- 원본 폴더 연결 중단·교체 시 삭제 반영을 차단하고 기존 스냅샷과 재시도 목록을 유지합니다. 중단된 클라우드 삭제 기록도 다시 확인합니다.
+- 구버전 스냅샷은 보존하면서 최초 한 번 재검증하므로 업데이트 후 첫 비교가 오래 걸릴 수 있습니다. 이후에는 기존처럼 변경·재시도 대상만 처리합니다.
+- 자동 검사 958개·중단 및 복구 검사 941개·설치 도구 검사 34개와 최종 설치 파일 500개 해시 검증을 통과했습니다. 이번 클라우드 장애 재현은 모의 저장소에서 진행했습니다.
+- 홈페이지 개별 페이지는 유지하지만 사용자 요청에 따라 별도 공개 지시 전까지 `/apps/` 목록에는 소개하지 않습니다. 버전 배포만으로 목록에 다시 노출하지 않습니다.
 
 ## Windows 프리뷰 10 변경사항
 

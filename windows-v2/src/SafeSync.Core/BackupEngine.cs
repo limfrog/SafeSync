@@ -29,11 +29,13 @@ public sealed class BackupEngine(ConfigStore store)
                 throw new DirectoryNotFoundException("원본 또는 백업 위치에 접근할 수 없습니다.");
             PathPolicy.RejectLinks(job.Source,job.Source);
             PathPolicy.RejectLinks(job.Destination,job.Destination);
+            var state = store.LoadState(job);
+            var roots = new OneWayRoots(job,state);
+            store.SaveState(state);
             var publisher = new VerifiedFiles();
             progress?.Report(new(job.Id,job.Name,"중단된 파일 교체 확인", "",0,0));
             await publisher.RecoverAsync(job.Source,token);
             await publisher.RecoverAsync(job.Destination,token);
-            var state = store.LoadState(job);
             var offline=OfflineJournal.Read(job.Source,state.SourceJournal,token,OfflineJournal.TrackedIds(state.Files));
             var targetOffline=OfflineJournal.Read(job.Destination,state.DestinationJournal,token,OfflineJournal.TrackedIds(state.Files,true));
             bool journalInvalid=(state.SourceJournal!=null && offline.RequiresScan)||(state.DestinationJournal!=null && targetOffline.RequiresScan);
@@ -63,7 +65,7 @@ public sealed class BackupEngine(ConfigStore store)
             Save();
             var result = new BackupResult();
             var work = pending.Order(StringComparer.OrdinalIgnoreCase).ToArray();
-            int completed = 0;var checkpointPaths=new List<string>(5);
+            int completed = 0;var checkpointPaths=new List<string>(5);bool rootFailed=false;
             try
             {
                 foreach (var relative in work)
@@ -79,6 +81,7 @@ public sealed class BackupEngine(ConfigStore store)
                     bool handled = false;
                     try
                     {
+                        roots.Check();
                         var action = resolutions != null && resolutions.TryGetValue(relative,out var choice) ? choice : (ConflictAction?)null;
                         if(action==ConflictAction.Ignore){entries[relative]=FileEntry.From(info,relative,"Conflict","이번 동기화에서 제외");handled=true;result.Skipped++;continue;}
                         await FileComparisons.VerifyAsync(job,relative,null,resolutions,token);
@@ -92,6 +95,7 @@ public sealed class BackupEngine(ConfigStore store)
                         if(action is ConflictAction.Overwrite or ConflictAction.KeepBoth && !info.Exists)throw new Cloud.CloudConflictException(relative,"복사할 원본 파일이 없습니다. 덮어쓰기로 삭제를 강제하지 않습니다.");
                         if (!info.Exists)
                         {
+                            roots.RequireDeletion(relative,entries.GetValueOrDefault(relative));
                             // Only tracked backup files are eligible for mirrored deletion.
                             if (entries.ContainsKey(relative) && job.MirrorDeletes && File.Exists(destination))
                             { TrashService.Move(job.Destination,relative,"deleted"); result.Trashed++; }
@@ -105,15 +109,15 @@ public sealed class BackupEngine(ConfigStore store)
                         // Creation time is not a portable content identifier:
                         // NAS/Samba and copied files may report a different birth time.
                         bool sameContent=false;
-                        if(action is null && target.Exists && sameSize && !sameModified)
+                        if(action is null && target.Exists && sameSize)
                         {
-                            progress?.Report(new(job.Id,job.Name,"시간이 다른 파일의 내용 동일 여부 확인",relative,completed,work.Length));
+                            progress?.Report(new(job.Id,job.Name,"파일 내용 동일 여부 검증",relative,completed,work.Length));
                             PathPolicy.RejectLinks(job.Destination,destination);
                             using var targetGuard=new FileStream(destination,FileMode.Open,FileAccess.Read,FileShare.Read);
                             target.Refresh();
                             sameContent=info.Length==target.Length && await VerifiedFiles.HashAsync(source,token)==await VerifiedFiles.HashAsync(destination,token);
                         }
-                        if (action is null && target.Exists && sameSize && (sameModified || sameContent))
+                        if (action is null && target.Exists && sameSize && sameContent)
                         { entries[relative] = FileEntry.From(info,relative);entries[relative].BackupFileId=OfflineJournal.FileIdentity(destination); result.Skipped++; handled=true; continue; }
                         if (action is null && target.Exists && info.LastWriteTimeUtc <= target.LastWriteTimeUtc.AddSeconds(2))
                         {
@@ -158,9 +162,12 @@ public sealed class BackupEngine(ConfigStore store)
                         var locked = ex is IOException && ((ex.HResult & 0xFFFF) is 32 or 33);
                         var issue = Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,new FileInfo(destination));
                         var oldEntry=entries.GetValueOrDefault(relative);
-                        entries[relative] = FileEntry.From(info,relative,locked ? "Locked" : ex is Cloud.CloudConflictException ? "Conflict" : "Failed",issue.Reason);
+                        if((!info.Exists || ex is BackupRootUnavailableException) && oldEntry!=null)
+                        {oldEntry.Status=ex is Cloud.CloudConflictException ? "Conflict" : "Failed";oldEntry.LastError=issue.Reason;entries[relative]=oldEntry;}
+                        else entries[relative] = FileEntry.From(info,relative,locked ? "Locked" : ex is Cloud.CloudConflictException ? "Conflict" : "Failed",issue.Reason);
                         if(locked)issue=LockTracking.Update(entries[relative],oldEntry,issue);
                         if(locked)result.Locked.Add(issue);else if(ex is Cloud.CloudConflictException)result.Conflicts.Add(issue);else result.Errors.Add(issue);
+                        if(ex is BackupRootUnavailableException)rootFailed=true;
                     }
                     finally
                     {
@@ -170,13 +177,17 @@ public sealed class BackupEngine(ConfigStore store)
                         if (checkpointPaths.Count>=5 || completed==work.Length){store.SaveCheckpoint(state,entries,pending,checkpointPaths);checkpointPaths.Clear();}
                         progress?.Report(new(job.Id,job.Name,"파일 비교 및 백업",relative,completed,work.Length));
                     }
+                    if(rootFailed)break;
                 }
-                if (full) state.LastFullScanUtc = DateTime.UtcNow.ToString("O");
-                state.LastRunUtc = DateTime.UtcNow.ToString("O");
-                state.FullScanRequired = false;
+                if(completed==work.Length)
+                {
+                    if (full) state.LastFullScanUtc = DateTime.UtcNow.ToString("O");
+                    state.LastRunUtc = DateTime.UtcNow.ToString("O");
+                    state.FullScanRequired = false;
+                }
                 pause.ThrowIfStopRequested();
                 progress?.Report(new(job.Id,job.Name,"휴지통 보관 기간 확인", "",completed,work.Length));
-                try {result.Trashed += await Task.Run(() => new TrashService().RemoveExpired(job.Destination,retentionDays,token,pause.ThrowIfStopRequested)+new TrashService().RemoveExpired(job.Source,retentionDays,token,pause.ThrowIfStopRequested),token);}
+                try {roots.Check();result.Trashed += await Task.Run(() => new TrashService().RemoveExpired(job.Destination,retentionDays,token,pause.ThrowIfStopRequested)+new TrashService().RemoveExpired(job.Source,retentionDays,token,pause.ThrowIfStopRequested),token);}
                 catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
                 {
                     result.Errors.Add(new(job.Id,job.Name,"[휴지통 정리]",ex.Message,0,0,"",""));

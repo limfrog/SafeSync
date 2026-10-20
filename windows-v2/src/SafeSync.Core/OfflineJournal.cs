@@ -34,6 +34,20 @@ public static class OfflineJournal
             ? $"volume:{info.Volume}:id:{info.IndexHigh}:{info.IndexLow}"
             : "created:"+Directory.GetCreationTimeUtc(root).Ticks;
     }
+    // Unlike the optional journal optimization, destructive decisions must not
+    // fall back to a fabricated timestamp when opening the directory fails.
+    public static string RequiredRootIdentity(string root)
+    {
+        PathPolicy.RejectLinks(root,root);
+        using var handle=CreateFile(root,0x80,7,IntPtr.Zero,3,0x02000000,IntPtr.Zero);
+        if(handle.IsInvalid || !GetFileInformationByHandle(handle,out var info))
+            throw new IOException("백업 폴더의 연결 및 식별 정보를 확인할 수 없습니다.",new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()));
+        if((info.Attributes&0x10)==0)throw new IOException("백업 위치가 폴더가 아닙니다.");
+        if((info.Attributes&0x400)!=0)throw new IOException("연결 지점은 백업 루트로 사용하지 않습니다.");
+        return info.IndexHigh!=0 || info.IndexLow!=0
+            ? $"volume:{info.Volume}:id:{info.IndexHigh}:{info.IndexLow}"
+            : $"volume:{info.Volume}:created:{info.Created.dwHighDateTime}:{info.Created.dwLowDateTime}";
+    }
     private static string? Resolve(SafeFileHandle volume,long id)
     {
         var descriptor=new FileId {Size=(uint)Marshal.SizeOf<FileId>(),Id=unchecked((ulong)id)};
