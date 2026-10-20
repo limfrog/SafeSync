@@ -6,55 +6,190 @@ struct CloudAccountsView: View {
     @Environment(\.dismiss) private var dismiss
     @ViewState private var provider = CloudProvider.dropbox
     @ViewState private var name = ""
-    @ViewState private var googleClientID = ""
-    @ViewState private var dropboxKey = ""
-    @ViewState private var developerSettings = false
-    private let publicDropboxKey = "08al8ot9uye36k9"
-    var clientID: String { provider == .dropbox ? (dropboxKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? publicDropboxKey : dropboxKey) : googleClientID }
-    @ViewState private var clientSecret = ""
+    @ViewState private var showAccounts = false
+    private var registration: DesktopCloudRegistration { .load(provider: provider) }
     @ViewState private var busy = false
     @ViewState private var error: String?
     @ViewState private var login: OAuthLogin?
+    private var providerName: String { provider == .dropbox ? "Dropbox" : "Google Drive" }
+    private var accent: Color { provider == .dropbox ? .blue : .indigo }
+    private var canConnect: Bool {
+        !busy && registration.isAvailable
+    }
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("클라우드 계정").font(.title2.bold())
-            List(store.accounts) { account in
-                HStack { VStack(alignment: .leading) { Text(account.name).font(.headline); Text(account.provider.title).font(.caption).foregroundStyle(.secondary) }; Spacer(); Button("연결 검증") { store.validateCloudAccount(account) }.disabled(store.validatingCloud || busy); Button("연결 해제") { store.disconnect(account) }.disabled(busy) }
-            }.frame(height: 150)
-            TabView(selection: $provider) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Dropbox 공식 로그인 페이지에서 본인 계정으로 로그인하고 SafeSync 연결을 허용하세요.").foregroundStyle(.secondary)
-                    TextField("계정 표시 이름", text: $name)
-                    DisclosureGroup("개발자 설정 · 일반 사용자는 변경할 필요가 없습니다", isExpanded: $developerSettings) {
-                        TextField("Dropbox App key (기본 SafeSync 앱)", text: $dropboxKey).padding(.top, 8)
-                        Text("개인 앱을 사용한다면 Full Dropbox 권한과 http://127.0.0.1:53682/ 리디렉션을 등록하세요.").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                    }
-                    Spacer(minLength: 0)
-                }.padding(16).tabItem { Text("Dropbox") }.tag(CloudProvider.dropbox)
-                VStack(alignment: .leading, spacing: 12) {
-                    TextField("계정 표시 이름", text: $name)
-                    TextField("Google Client ID", text: $googleClientID)
-                    SecureField("Google Client Secret", text: $clientSecret)
-                    Text("Google Drive API를 활성화한 ‘데스크톱 앱’ OAuth 클라이언트를 사용하세요. 백업 폴더 접근 동의를 요청합니다.").font(.caption).foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                }.padding(16).tabItem { Text("Google Drive") }.tag(CloudProvider.googleDrive)
-            }.frame(height: 235).disabled(busy)
-            if let report = store.cloudValidationReport { Text(report).font(.caption).textSelection(.enabled) }
-            if let error { Text(error).foregroundStyle(.red).font(.caption) }
-            HStack {
-                Button("닫기") { login?.cancel(); dismiss() }.keyboardShortcut(.cancelAction)
-                if busy { ProgressView().controlSize(.small); Text("브라우저에서 로그인을 완료하세요."); Button("취소") { login?.cancel() } }
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                Image(systemName: "externaldrive.badge.icloud")
+                    .font(.system(size: 25, weight: .medium)).foregroundStyle(.tint)
+                    .frame(width: 54, height: 54).background(.tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 14))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("클라우드 연결").font(.system(size: 23, weight: .bold))
+                    Text("내 클라우드를 SafeSync의 백업 공간으로 연결하세요.").foregroundStyle(.secondary)
+                }
                 Spacer()
-                Button("브라우저에서 계정 연결") { connect() }.buttonStyle(.borderedProminent).disabled(busy || clientID.trimmingCharacters(in: .whitespaces).isEmpty || name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }.padding(24)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    connectedAccounts
+                    VStack(alignment: .leading, spacing: 14) {
+                        sectionTitle("새 계정 연결", subtitle: "사용할 클라우드 서비스를 선택하세요.")
+                        Picker("클라우드 서비스", selection: $provider) {
+                            Text("Dropbox").tag(CloudProvider.dropbox)
+                            Text("Google Drive").tag(CloudProvider.googleDrive)
+                        }.pickerStyle(.segmented).labelsHidden().controlSize(.large)
+                        connectionForm
+                    }
+                    if let report = store.cloudValidationReport {
+                        notice(report, symbol: "info.circle", color: .secondary)
+                    }
+                    if let error { notice(error, symbol: "exclamationmark.circle", color: .red) }
+                }.padding(24)
             }
-        }.padding(24).frame(width: 680, height: 640).onDisappear { login?.cancel() }
+            Divider()
+            HStack(spacing: 12) {
+                Button("닫기") { login?.cancel(); dismiss() }.keyboardShortcut(.cancelAction)
+                Spacer()
+                if busy {
+                    ProgressView().controlSize(.small)
+                    Text("브라우저에서 로그인 중…").font(.callout).foregroundStyle(.secondary)
+                    Button("취소") { login?.cancel() }
+                } else {
+                    Label("인증 정보는 Mac의 키체인에 보관됩니다", systemImage: "lock.shield")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Button { connect() } label: {
+                    Label("\(providerName) 연결", systemImage: "arrow.up.right")
+                        .padding(.horizontal, 6)
+                }.buttonStyle(.borderedProminent).controlSize(.large).disabled(!canConnect)
+            }.padding(.horizontal, 24).padding(.vertical, 18)
+        }
+        .frame(width: 740, height: 650)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onDisappear { login?.cancel() }
+    }
+    private var connectedAccounts: some View {
+        DisclosureGroup(isExpanded: $showAccounts) {
+            if store.accounts.isEmpty {
+                HStack(spacing: 12) {
+                    Image(systemName: "cloud").font(.title2).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("첫 번째 클라우드를 연결해 보세요").font(.callout.weight(.medium))
+                        Text("연결한 계정은 백업 작업에서 선택할 수 있습니다.").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }.padding(18).frame(maxWidth: .infinity).background(cardBackground)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(store.accounts) { account in
+                        HStack(spacing: 12) {
+                            Image(systemName: "externaldrive.fill.badge.icloud")
+                                .font(.title3).foregroundStyle(account.provider == .dropbox ? Color.blue : Color.indigo)
+                                .frame(width: 38, height: 38).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(account.name).font(.callout.weight(.semibold)).lineLimit(1)
+                                Text((account.provider == .dropbox ? "Dropbox" : "Google Drive")).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("연결 검증") { store.validateCloudAccount(account) }.disabled(store.validatingCloud || busy)
+                            Button("연결 해제") { store.disconnect(account) }.disabled(busy || store.validatingCloud)
+                        }.padding(14)
+                        if account.id != store.accounts.last?.id { Divider().padding(.leading, 64) }
+                    }
+                }.background(cardBackground).padding(.top, 10)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("연결된 계정").font(.headline)
+                Text("\(store.accounts.count)").font(.caption.weight(.semibold))
+                    .padding(.horizontal, 7).padding(.vertical, 2).background(.quaternary, in: Capsule())
+                Spacer()
+                Text("계정 관리").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: .controlBackgroundColor))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(0.08)))
+    }
+    private var connectionForm: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                Image(systemName: "cloud.fill").font(.title2).foregroundStyle(accent)
+                    .frame(width: 42, height: 42).background(accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(providerName).font(.headline)
+                    Text("공식 로그인 페이지에서 안전하게 연결합니다.").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            VStack(alignment: .leading, spacing: 14) {
+                connectionStep("1", title: "계정으로 로그인", detail: "브라우저에서 사용할 계정을 선택합니다.")
+                connectionStep("2", title: "SafeSync 연결 허용", detail: "서비스에서 요청하는 접근 권한을 확인합니다.")
+                connectionStep("3", title: "백업 폴더 선택", detail: "연결한 계정으로 새 백업 작업을 만들 수 있습니다.")
+            }
+            Divider()
+            inputField("계정 이름 (선택)", hint: "예: 개인 백업 · 비워 두어도 됩니다", text: $name, symbol: "person.crop.circle")
+            if !registration.isAvailable {
+                notice("Google Drive 연결은 배포 준비 중입니다. 연결을 지원하는 업데이트를 설치해 주세요.", symbol: "info.circle", color: .secondary)
+            }
+            Label("연결 후 백업할 폴더를 직접 선택할 수 있습니다.", systemImage: "folder")
+                .font(.caption).foregroundStyle(.secondary)
+        }.padding(20).background(cardBackground).disabled(busy)
+    }
+    private func connectionStep(_ number: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(number).font(.caption.weight(.semibold)).foregroundStyle(accent)
+                .frame(width: 24, height: 24).background(accent.opacity(0.09), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.callout.weight(.medium))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+    private var fieldBackground: some View {
+        RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.14)))
+    }
+    private func inputField(_ title: String, hint: String, text: Binding<String>, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title).font(.callout.weight(.medium))
+            HStack(spacing: 10) {
+                Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 18)
+                TextField(hint, text: text).textFieldStyle(.plain).accessibilityLabel(title)
+            }.padding(12).background(fieldBackground)
+        }
+    }
+    private func sectionTitle(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.headline)
+            Text(subtitle).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    private func notice(_ text: String, symbol: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: symbol)
+            Text(text).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }.font(.caption).foregroundStyle(color).padding(12)
+            .background(color.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
     }
     func connect() {
+        guard canConnect else { return }
+        let registration = registration
         busy = true; error = nil
-        let account = CloudAccount(provider: provider, name: name.trimmingCharacters(in: .whitespaces), clientID: clientID.trimmingCharacters(in: .whitespacesAndNewlines))
+        let enteredName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var accountName = enteredName
+        if accountName.isEmpty {
+            accountName = providerName
+            var suffix = 2
+            while store.accounts.contains(where: { $0.name == accountName }) {
+                accountName = "\(providerName) \(suffix)"; suffix += 1
+            }
+        }
+        let account = CloudAccount(provider: provider, name: accountName, clientID: registration.clientID)
         let connection = OAuthLogin(); login = connection
         Task { @MainActor in
-            do { try await connection.connect(account, clientSecret: clientSecret); try store.addAccount(account); name = ""; googleClientID = ""; dropboxKey = ""; clientSecret = "" }
+            do { try await connection.connect(account, clientSecret: registration.clientSecret); try store.addAccount(account); name = ""; showAccounts = true }
             catch is CancellationError { self.error = "연결을 취소했습니다." }
             catch { self.error = error.localizedDescription }
             busy = false; login = nil

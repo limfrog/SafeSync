@@ -27,8 +27,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>SafeSync</string>
 <key>CFBundleIconFile</key><string>SafeSync</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.0</string>
-<key>CFBundleVersion</key><string>9</string>
+<key>CFBundleShortVersionString</key><string>0.3.7</string>
+<key>CFBundleVersion</key><string>16</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSDocumentsFolderUsageDescription</key><string>선택한 문서 폴더의 파일을 백업합니다.</string>
@@ -38,6 +38,16 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>NSNetworkVolumesUsageDescription</key><string>선택한 네트워크 폴더에 백업을 읽고 기록합니다.</string>
 </dict></plist>
 PLIST
+# No user token, web client secret or raw OAuth JSON is copied into the release.
+# A Desktop OAuth client is public: its registration can be extracted from the app.
+rm -f "$app/Contents/Resources/GoogleDesktopOAuth.plist"
+oauth_client_file="${GOOGLE_OAUTH_CLIENT_FILE:-$PWD/.build/private/GoogleDesktopOAuth.json}"
+if [[ -f "$oauth_client_file" || -n "${GOOGLE_OAUTH_CLIENT_FILE:-}" ]]; then
+    python3 scripts/package-google-oauth.py "$oauth_client_file" "$app/Contents/Resources/GoogleDesktopOAuth.plist"
+elif [[ "${REQUIRE_GOOGLE_OAUTH:-0}" == "1" ]]; then
+    echo "Google Desktop OAuth registration is required for this release." >&2
+    exit 1
+fi
 identity="${SIGNING_IDENTITY:--}"
 if [[ "$identity" == "-" ]]; then
     codesign --force --deep --sign - "$app"

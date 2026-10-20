@@ -25,7 +25,7 @@ public struct DropboxStorage: RemoteStorage {
     public func metadata(_ id: String) async throws -> RemoteItem? {
         if id.isEmpty { return RemoteItem(id: "dropbox-root-" + account.id.uuidString, name: "Dropbox", parent: "", folder: true, locator: "") }
         do { return try parse(await rpc("files/get_metadata", ["path": id])) }
-        catch let error as APIError where error.status == 409 { return nil }
+        catch let error as APIError where error.status == 409 && error.code == "path/not_found" { return nil }
     }
     public func createFolder(name: String, parent: String) async throws -> RemoteItem {
         let result = try await rpc("files/create_folder_v2", ["path": join(parent, name), "autorename": false])
@@ -81,7 +81,7 @@ public struct DropboxStorage: RemoteStorage {
         var page: [String: Any]
         if let cursor = previous?.cursor {
             do { page = try await rpc("files/list_folder/continue", ["cursor": cursor]) }
-            catch let error as APIError where error.status == 409 { return try await inventory(root: root, previous: nil) }
+            catch let error as APIError where error.status == 409 && error.code == "reset" { return try await inventory(root: root, previous: nil) }
         } else { index.nodes = [:]; page = try await rpc("files/list_folder", ["path": root, "recursive": true, "include_deleted": true]) }
         // Dropbox parents are paths. Use paths as graph node keys, including folders.
         while true {

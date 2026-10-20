@@ -6,34 +6,13 @@ import SafeSyncCore
 // Explicit alias selects the property wrapper on SDKs that also declare a State macro.
 typealias ViewState<Value> = SwiftUI.State<Value>
 
-enum BrandIcon {
-    static var image: NSImage {
-        let url = Bundle.main.resourceURL?.appendingPathComponent("SafeSync.png")
-        let original = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/SafeSync.png")
-        let image = url.flatMap { NSImage(contentsOf: $0) } ?? NSImage(contentsOf: original) ?? NSImage()
-        image.isTemplate = false
-        return image
-    }
-    static func menuImage(angle: CGFloat, warning: Bool) -> NSImage {
-        let icon = image
-        let result = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
-            NSGraphicsContext.saveGraphicsState()
-            let transform = AffineTransform(translationByX: 8, byY: 8)
-            var rotation = AffineTransform(); rotation.rotate(byRadians: angle)
-            var composed = transform; composed.append(rotation); composed.translate(x: -8, y: -8)
-            (composed as NSAffineTransform).concat()
-            icon.draw(in: rect.insetBy(dx: 1, dy: 1))
-            NSGraphicsContext.restoreGraphicsState()
-            if warning { NSColor.systemOrange.setFill(); NSBezierPath(ovalIn: NSRect(x: 11, y: 0, width: 5, height: 5)).fill() }
-            return true
-        }
-        result.isTemplate = false; return result
-    }
-}
-
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?
-    func applicationDidFinishLaunching(_ notification: Notification) { statusBar = StatusBarController(store: Store.shared) }
+    private var presentation: AppPresentation?
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        presentation = AppPresentation()
+        statusBar = StatusBarController(store: Store.shared)
+    }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { statusBar?.showMain(); return true }
 }
@@ -70,6 +49,9 @@ enum BrandIcon {
         Window("About SafeSync", id: "about") {
             AboutView().preferredColorScheme(colorScheme)
         }.windowResizability(.contentSize).defaultPosition(.center)
+        Window("SafeSync · 확인할 메시지", id: "messages") {
+            MessagesView().environmentObject(store).preferredColorScheme(colorScheme)
+        }.defaultSize(width: 980, height: 580).defaultPosition(.center)
         Settings { SettingsView().environmentObject(store).preferredColorScheme(colorScheme) }
 
     }
@@ -85,7 +67,10 @@ struct MainView: View {
                 VStack(alignment: .leading) { Text("SafeSync").font(.title.bold()); Text("파일을 안전하게, 백업은 자동으로").foregroundStyle(.secondary) }
                 Spacer()
                 Label(store.runningCount > 0 ? "동기화 중 \(store.runningCount)" : "자동 검사 대기", systemImage: "circle.fill").foregroundStyle(.green).font(.caption)
-                Button("확인할 메시지 \(store.issues.count)") { store.navigate(.sync); store.detailTab = .conflicts }
+                Button("확인할 메시지 \(store.messageRows.count)") {
+                    AppPresentation.showInDock()
+                    openWindow(id: "messages")
+                }
             }.padding(8)
             HStack(spacing: 20) {
                 ForEach(WorkspaceTab.allCases, id: \.self) { tab in
@@ -103,7 +88,7 @@ struct MainView: View {
             }
             HStack { Text("macOS \(AppInformation.version) · 로컬 · Dropbox · Google Drive"); Spacer(); Text("작업 \(store.jobs.count)개") }.font(.caption).foregroundStyle(.secondary)
         }.padding(16).frame(minWidth: 1060, minHeight: 680)
-        .onAppear { store.openAppWindow = { id in if id == "progress" { store.navigate(.sync) } else if id == "trash" { store.navigate(.trash) }; openWindow(id: id == "about" ? "about" : "main") } }
+        .onAppear { store.openAppWindow = { id in AppPresentation.showInDock(); if id == "progress" { store.navigate(.sync) } else if id == "trash" { store.navigate(.trash) }; openWindow(id: id == "about" || id == "messages" ? id : "main") } }
         .sheet(item: $store.editing) { JobEditor(job: $0).environmentObject(store) }
         .confirmationDialog("‘\(store.deleteRequest?.name ?? "")’ 작업을 삭제할까요?", isPresented: Binding(get: { store.deleteRequest != nil }, set: { if !$0 { store.deleteRequest = nil } }), titleVisibility: .visible) {
             Button("작업 삭제", role: .destructive) { store.confirmDelete() }; Button("취소", role: .cancel) { store.deleteRequest = nil }

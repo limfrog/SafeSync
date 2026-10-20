@@ -142,6 +142,7 @@ func fail(_ value: String) { fatalError(value) }
         try await tests.testChangedRootsRejected(); print("PASS changed roots cannot reuse manifest")
         print("10 filesystem integration checks passed")
         try await CloudChecks.run()
+        try await DropboxMetadataChecks.run()
         try await IncrementalChecks.run()
         try JobListChecks.run()
         try await ImprovementChecks.run()

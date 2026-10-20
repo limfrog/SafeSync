@@ -94,7 +94,11 @@ public actor SyncCoordinator {
         // Complete both enumerations before allowing any file or directory deletion.
         let left = try tree(BackupEngine.canonical(job.source))
         let right = if let storage { try await remoteTree(job.cloudFolderID!, storage: storage) } else { try tree(BackupEngine.canonical(job.destination)) }
-        let all = left.union(right).union(state.files.keys).subtracting(deferredPaths)
+        let discovered = left.union(right).union(state.files.keys).subtracting(deferredPaths)
+        let excluded = discovered.filter { path in
+            job.cloudProvider.map { CloudPathPolicy.isExcluded(path, provider: $0) } ?? false
+        }
+        let all = discovered.subtracting(excluded)
         // Files first; directories missing on one side are deleted only after their children.
         var snapshots: [String: FileComparison] = [:]
         for path in all.sorted() { snapshots[path] = try await FileComparisons.read(job: job, path: path, storage: storage) }
@@ -107,6 +111,7 @@ public actor SyncCoordinator {
             return $0 < $1
         }
         var result = BackupResult()
+        result.evaluatedPaths.formUnion(excluded); result.skipped += excluded.count
         for (offset, path) in paths.enumerated() {
             try Task.checkCancellation(); result.evaluatedPaths.insert(path)
             progress(BackupProgress(path: path, completed: offset, total: paths.count, stage: "양방향 비교·반영"))

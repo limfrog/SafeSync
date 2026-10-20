@@ -1,6 +1,5 @@
-SafeSync macOS 0.3.0 (9) — 2026-10-20
-Windows reference: 1.0.0-preview.10 / 54452ef
-63 integration scenarios passed.
+macOS 0.3.7 — 2026-10-20
+67 integration scenarios passed. Filesystem and simulated-cloud checks; not full production-cloud validation.
 
 PASS copy, skip, verified overwrite, deletion and restore
 PASS conflict isolation and keep both
@@ -12,6 +11,7 @@ PASS externally deleted backup preserved
 PASS interrupted atomic exchange recovery
 PASS corrupt manifest stops deletion
 PASS changed roots cannot reuse manifest
+10 filesystem integration checks passed
 PASS Dropbox API: copy, skip, overwrite, remote trash and restore
 PASS Google Drive API: copy, skip, overwrite, remote trash and restore
 PASS Dropbox API: checksum failure preserves original
@@ -22,6 +22,10 @@ PASS Dropbox API: conflict keep-both, deletion and retention cleanup
 PASS Google Drive API: conflict keep-both, deletion and retention cleanup
 PASS Dropbox API: remote change during upload is preserved
 PASS Google Drive API: remote change during upload is preserved
+PASS Dropbox reserved metadata and legacy failed publish do not block ordinary backups; source, staged copy and journal preserved
+PASS Dropbox two-way repeated runs exclude reserved OS metadata without conflicts or local deletion
+PASS reserved-name policy is Dropbox-specific and does not exclude arbitrary hidden files
+PASS Dropbox 409 reserved names, missing paths and write permissions have distinct sanitized messages
 PASS durable change queue retains events received during a running backup and falls back after seven days
 PASS incremental nested change, directory deletion and no-change run without unrelated file comparisons
 PASS local retention removes only expired trash after recovery
@@ -46,10 +50,12 @@ PASS parallel upload failure isolates one file and preserves its previous versio
 PASS parallel cancellation waits for children, releases lease and permits safe retry
 PASS incremental directory deletion clears stale issues without discarding untracked backups or unrelated conflicts
 PASS unavailable FSEvents service requests full scan (live event delivery unavailable in this shell)
+12 improvement checks passed
 PASS cloud folder creation uses current parent, trims Korean names and rejects duplicate folders
 PASS unsafe/reserved folder names and collisions with existing files are rejected
 PASS Google Drive adapter sends folder MIME type and selected parent and returns selectable folder ID (mock HTTP)
 PASS folder creation failure surfaces to picker without automatically repeating the mutation
+4 folder creation checks passed
 PASS two-way initial union copies both directions and empty directories
 PASS two-way baseline detects backup edit independent of clock and preserves old source in source trash
 PASS two-way simultaneous edits remain conflicts without advancing common baseline
@@ -65,8 +71,3 @@ PASS duplicate parent folders preserve all children and never grant automatic de
 PASS remote empty folder deletion and ID-preserving directory trash restore
 PASS two-way cancellation at a file boundary prevents mutation and releases the persistent lease for retry
 PASS Windows job-list round-trip preserves TwoWay mode
-
-Universal arm64/x86_64 production build passed; ad-hoc code signature verified.
-Native isolated QA: tabs, direction column, session history/read-only historical result, conflict comparison, confirmation, reverse copy, source trash preservation and restore/pause verified.
-Settings inspection: native automation pipe closed when opening Settings; settings/cloud-account tabs and login were not visually verified.
-Live Google Drive/Dropbox two-way transfers, NAS, sleep/wake, physical Intel Mac and notarization remain unverified.

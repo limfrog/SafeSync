@@ -105,7 +105,16 @@ public actor CloudBackupEngine {
         let directory = transactionDirectory(job)
         guard fm.fileExists(atPath: directory.path) else { return }
         for url in try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) where url.pathExtension == "json" {
-            _ = try await finish(Storage.load(Transaction.self, from: url), storage: storage)
+            let transaction = try Storage.load(Transaction.self, from: url)
+            if CloudPathPolicy.isExcluded(transaction.path, provider: storage.provider) {
+                // Keep both remote copies and the complete journal. A reserved-name publish
+                // cannot succeed and must not block unrelated backups on every restart.
+                let retained = dataDirectory.appendingPathComponent("cloud/excluded-transactions/\(job.id)")
+                try fm.createDirectory(at: retained, withIntermediateDirectories: true)
+                try fm.moveItem(at: url, to: retained.appendingPathComponent(UUID().uuidString + ".json"))
+                continue
+            }
+            _ = try await finish(transaction, storage: storage)
             try fm.removeItem(at: url)
         }
     }
@@ -114,6 +123,7 @@ public actor CloudBackupEngine {
         var staging: String; var snapshot: URL; var digest: String; var jobID: UUID
     }
     private func prepare(file: URL, path: String, stamp: FileStamp, job: BackupJob, storage: any RemoteStorage) async throws -> PreparedUpload {
+        guard !CloudPathPolicy.isExcluded(path, provider: storage.provider) else { throw BackupError.unsafe("Dropbox가 지원하지 않는 시스템 메타데이터 파일은 전송에서 제외됩니다.") }
         let root = job.cloudFolderID!, parentPath = (path as NSString).deletingLastPathComponent
         let parent = try await storage.folder(path: parentPath, root: root)
         let staging = try await storage.ensureFolder(name: ".safesync-staging", parent: root)
@@ -188,9 +198,12 @@ public actor CloudBackupEngine {
             remote = folded
         } else { remote = listed }
         func entry(_ path: String) -> RemoteItem? { remote[storage.provider == .dropbox ? path.lowercased() : path] }
-        let files: [String: FileStamp]
-        if let changedPaths, !fullScan, !state.files.isEmpty { files = try SourceScanner.reconcile(root: source, known: state.files.mapValues(\.source), changed: changedPaths) }
-        else { files = try SourceScanner.files(source) }
+        let scannedFiles: [String: FileStamp]
+        if let changedPaths, !fullScan, !state.files.isEmpty { scannedFiles = try SourceScanner.reconcile(root: source, known: state.files.mapValues(\.source), changed: changedPaths) }
+        else { scannedFiles = try SourceScanner.files(source) }
+        let excluded = Set(scannedFiles.keys).union(state.files.keys).filter { CloudPathPolicy.isExcluded($0, provider: storage.provider) }
+        result.evaluatedPaths.formUnion(excluded); result.skipped += excluded.count
+        let files = scannedFiles.filter { !CloudPathPolicy.isExcluded($0.key, provider: storage.provider) }
         if storage.provider == .dropbox, Set(files.keys.map { $0.lowercased() }).count != files.count { throw BackupError.unsafe("원본에 대소문자만 다른 파일이 있습니다. Dropbox는 두 파일을 구분할 수 없습니다.") }
         // Include removed paths that never had a successful manifest entry (for stale conflict/wait cleanup).
         result.evaluatedPaths.formUnion((changedPaths ?? []).filter { !deferredPaths.contains($0) })
@@ -275,7 +288,7 @@ public actor CloudBackupEngine {
             }
         }
         if job.mirrorDeletes {
-            for path in state.files.keys.sorted() where files[path] == nil && !deferredPaths.contains(path) {
+            for path in state.files.keys.sorted() where files[path] == nil && !deferredPaths.contains(path) && !CloudPathPolicy.isExcluded(path, provider: storage.provider) {
                 result.evaluatedPaths.insert(path)
                 try Task.checkCancellation()
                 do {

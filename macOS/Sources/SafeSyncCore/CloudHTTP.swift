@@ -3,6 +3,7 @@ import Foundation
 public struct APIError: LocalizedError, Sendable {
     public var status: Int
     public var summary: String
+    public var code: String? = nil
     public var errorDescription: String? { "클라우드 요청 실패 (\(status)): \(summary)" }
 }
 public enum HTTP {
@@ -31,9 +32,36 @@ public enum HTTP {
         guard let http = response as? HTTPURLResponse else { throw BackupError.unsafe("HTTP 응답을 확인할 수 없습니다.") }
         guard accepted.contains(http.statusCode) else {
             // Never include token endpoints, Authorization headers or resumable URLs in errors.
-            throw APIError(status: http.statusCode, summary: http.statusCode == 401 ? "인증이 만료되었습니다. 계정을 다시 연결하세요." : http.statusCode == 409 ? "원격 파일 상태가 달라졌습니다. 다시 검사하세요." : http.statusCode == 429 ? "요청 한도를 초과했습니다. 잠시 후 재시도합니다." : "서비스 응답을 확인하고 다시 시도하세요.")
+            throw responseError(status: http.statusCode, url: request.url!, data: data)
         }
         return (data, http)
+    }
+    /// Only tagged error codes are inspected. Never echo error_summary, paths or tokens.
+    public static func responseError(status: Int, url: URL, data: Data) -> APIError {
+        var summary = status == 401 ? "인증이 만료되었습니다. 계정을 다시 연결하세요." : status == 409 ? "원격 요청을 처리하지 못했습니다. 경로·이름·권한을 확인하세요." : status == 429 ? "요청 한도를 초과했습니다. 잠시 후 재시도합니다." : "서비스 응답을 확인하고 다시 시도하세요."
+        var code: String?
+        if ["api.dropboxapi.com", "content.dropboxapi.com"].contains(url.host ?? ""),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           var tagged = object["error"] as? [String: Any] {
+            let allowed = Set(["path", "from_lookup", "from_write", "to", "disallowed_name", "not_found", "not_file", "not_folder", "conflict", "file", "folder", "no_write_permission", "insufficient_space", "reset", "other"])
+            var tags: [String] = []
+            for _ in 0..<5 {
+                guard let tag = tagged[".tag"] as? String, allowed.contains(tag) else { break }
+                tags.append(tag)
+                guard let next = tagged[tag] as? [String: Any] else { break }
+                tagged = next
+            }
+            if !tags.isEmpty { code = tags.joined(separator: "/") }
+            if status == 409 {
+                if tags.contains("disallowed_name") { summary = "Dropbox가 지원하지 않는 파일 이름입니다. .DS_Store·desktop.ini·Thumbs.db는 자동 제외됩니다." }
+                else if tags.contains("not_found") { summary = "Dropbox에서 요청한 파일 또는 폴더를 찾을 수 없습니다. 위치와 접근 권한을 확인하세요." }
+                else if tags.contains("no_write_permission") { summary = "Dropbox 폴더에 쓰기 권한이 없습니다." }
+                else if tags.contains("insufficient_space") { summary = "Dropbox 저장 공간이 부족합니다." }
+                else if tags.contains("conflict") { summary = "Dropbox 대상 위치에 같은 이름의 항목이 있습니다. 기존 사본을 보존했습니다." }
+                else if tags.contains("reset") { summary = "Dropbox 변경 목록이 만료되었습니다. 전체 목록을 다시 확인합니다." }
+            }
+        }
+        return APIError(status: status, summary: summary, code: code)
     }
     public static func date(_ string: String?) -> Date {
         guard let string else { return .distantPast }
@@ -79,7 +107,7 @@ public actor CloudAuthorization {
             defer { try? FileManager.default.removeItem(at: temporary) }
             guard let http = response as? HTTPURLResponse else { throw BackupError.unsafe("다운로드 응답이 없습니다.") }
             if http.statusCode == 401 && attempt == 0 { continue }
-            guard (200...299).contains(http.statusCode) else { throw APIError(status: http.statusCode, summary: "파일 다운로드를 완료하지 못했습니다.") }
+            guard (200...299).contains(http.statusCode) else { throw HTTP.responseError(status: http.statusCode, url: url, data: (try? Data(contentsOf: temporary)) ?? Data()) }
             try Task.checkCancellation()
             try FileManager.default.moveItem(at: temporary, to: destination); return
         }

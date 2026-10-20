@@ -4,3 +4,8 @@
 build/
 *.app/
 *.dmg
+
+# Developer-only OAuth build inputs; never source or user tokens
+client_secret*.json
+GoogleDesktopOAuth.plist
+__pycache__/
