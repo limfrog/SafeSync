@@ -9,6 +9,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         public PauseGate Pause { get; } = new();
         public Task Task { get; set; } = Task.CompletedTask;
         public DeferredResolutions? Deferred {get;set;}
+        public ComparedResolutions? Executing {get;set;}
     }
     private readonly BackupEngine engine = new(store);
     private readonly CancellationTokenSource stop = new();
@@ -38,20 +39,41 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     public bool IsRunning(string id) => running.ContainsKey(id);
     public int RunningCount => running.Count;
     public int QueuedResolutionCount(string id){lock(launchLock)return running.TryGetValue(id,out var current) ? current.Deferred?.Choices.Count ?? 0 : 0;}
+    public (ConflictAction? Action,bool Executing) ResolutionState(string id,string path)
+    {
+        lock(launchLock)
+        {
+            if(!running.TryGetValue(id,out var current))return (null,false);
+            if(current.Executing?.TryGetValue(path,out var executing)==true)return (executing,true);
+            return current.Deferred?.Choices.TryGetValue(path,out var pending)==true ? (pending,false) : (null,false);
+        }
+    }
+    public string[] ResolutionPaths(string id)
+    {lock(launchLock)return running.TryGetValue(id,out var current) ? (current.Deferred?.Choices.Keys.AsEnumerable() ?? []).Concat(current.Executing?.Keys.AsEnumerable() ?? []).Distinct(StringComparer.OrdinalIgnoreCase).ToArray() : [];}
     public bool TryQueueResolutions(BackupJob job,ComparedResolutions choices)
     {
         lock(launchLock)
         {
             if(choices.Count==0 || stop.IsCancellationRequested || updateHolds>0 || job.Stopped || !running.TryGetValue(job.Id,out var current))return false;
+            if(choices.Keys.Any(path=>current.Executing?.ContainsKey(path)==true))return false;
             var pending=current.Deferred ?? new DeferredResolutions(job);
             pending.Merge(job,choices);current.Deferred=pending;
         }
         StateChanged?.Invoke(job);return true;
     }
-    public void CancelQueuedResolutions(BackupJob job)
+    public void CancelQueuedResolutions(BackupJob job,IEnumerable<string>? paths=null)
     {
         bool canceled;
-        lock(launchLock){canceled=running.TryGetValue(job.Id,out var current) && current.Deferred!=null;if(canceled)current!.Deferred=null;}
+        lock(launchLock)
+        {
+            canceled=false;
+            if(running.TryGetValue(job.Id,out var current) && current.Deferred is {} pending)
+            {
+                foreach(var path in paths?.ToArray() ?? pending.Choices.Keys.ToArray())
+                {canceled|=pending.Choices.Remove(path);pending.Choices.Comparisons.Remove(path);}
+                if(pending.Choices.Count==0)current.Deferred=null;
+            }
+        }
         if(canceled)ResolutionsCanceled?.Invoke(job,"사용자가 예약한 파일 처리를 취소했습니다. 파일은 변경하지 않았습니다.");
         StateChanged?.Invoke(job);
     }
@@ -162,7 +184,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         lock(launchLock)
         {
         if (stop.IsCancellationRequested || updateHolds>0 || job.Paused || job.Stopped || (job.DestinationType != "Local" && CloudFactory==null)) return Task.CompletedTask;
-        var current = new Running();
+        var current = new Running {Executing=resolutions as ComparedResolutions};
         if (!running.TryAdd(job.Id,current)) return running.TryGetValue(job.Id,out var active) ? active.Task : Task.CompletedTask;
         var captured = changed.TryGetValue(job.Id,out var changes) ? changes.ToArray() : [];
         try {PersistQueue();}catch {running.TryRemove(job.Id,out _);throw;}
@@ -208,7 +230,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                     {
                         // Keep ownership of the job across both passes: automatic
                         // retries/manual starts cannot overtake an accepted queue.
-                        resolutions=deferred!.Choices;full=false;captured=[];changes=null;
+                        resolutions=deferred!.Choices;current.Executing=deferred.Choices;full=false;captured=[];changes=null;
                     }
                     else
                     {

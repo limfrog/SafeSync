@@ -22,7 +22,10 @@ internal sealed partial class DesktopController
         public FileComparison? Snapshot {get;set;}
         private ConflictAction? action;
         public ConflictAction? Action {get=>action;set{action=value;PropertyChanged?.Invoke(this,new(nameof(ActionText)));}}
-        public string ActionText=>!IsFile ? "연결·권한·실행 안내" : Action switch{ConflictAction.Overwrite=>"→ 원본으로 백업 덮어쓰기",ConflictAction.UseBackup=>"← 백업으로 원본 덮어쓰기",ConflictAction.KeepBoth=>"두 사본 모두 보관",ConflictAction.Ignore=>"이번 동기화에서 제외",ConflictAction.NormalizeDuplicates=>"중복 이름만 정리 · 사본 보존",_=>"처리 방법 미선택"};
+        public Func<(ConflictAction? Action,bool Executing)>? Scheduled {get;set;}
+        private static string Describe(ConflictAction? value)=>value switch{ConflictAction.Overwrite=>"→ 원본으로 백업 덮어쓰기",ConflictAction.UseBackup=>"← 백업으로 원본 덮어쓰기",ConflictAction.KeepBoth=>"두 사본 모두 보관",ConflictAction.Ignore=>"이번 동기화에서 제외",ConflictAction.NormalizeDuplicates=>"중복 이름만 정리 · 사본 보존",_=>"처리 방법 미선택"};
+        public string ActionText {get{var scheduled=Scheduled?.Invoke();return !IsFile ? "연결·권한·실행 안내" : scheduled?.Action is {} choice ? (scheduled?.Executing==true ? "처리 중 · " : "예약 · ")+Describe(choice) : Describe(Action);}}
+        public void RefreshScheduled()=>PropertyChanged?.Invoke(this,new(nameof(ActionText)));
         public event PropertyChangedEventHandler? PropertyChanged;
         public bool IsFile {get{try{return Kind!="작업 안내" && Issue.File is not ("[작업]" or "[휴지통 정리]") && !PathPolicy.Internal(PathPolicy.Relative(Issue.File));}catch(Exception ex) when(ex is ArgumentException or InvalidDataException){return false;}}}
     }
@@ -67,6 +70,13 @@ internal sealed partial class DesktopController
         foreach(var issue in run?.Errors ?? Array.Empty<FileIssue>())if(!rows.Any(r=>r.Issue.File==issue.File))rows.Add(new(issue,"오류"));
         if(rows.Count==0 && problemStore.Get(job.Id) is {File.Length:>0} problem)rows.Add(new(new(job.Id,job.Name,problem.File,problem.Message,0,0,"",""),"오류"));
         rows.Add(new(new(job.Id,job.Name,"[작업]",run?.FailureReason.Length>0 ? run.FailureReason : problemStore.Get(job.Id)?.Message ?? "작업 연결과 실행 상태를 확인합니다.",0,0,"",""),"작업 안내"));
+        void ScheduledRows()
+        {
+            foreach(var path in scheduler.ResolutionPaths(job.Id))
+                if(!rows.Any(r=>string.Equals(r.Issue.File,path,StringComparison.OrdinalIgnoreCase)))rows.Add(new(new(job.Id,job.Name,path,"사용자가 지정한 파일 처리",0,0,"",""),"예약 처리"));
+            foreach(var row in rows){row.Scheduled=()=>scheduler.ResolutionState(job.Id,row.Issue.File);row.RefreshScheduled();}
+        }
+        ScheduledRows();
         var list=window.Find<ListBox>("ComparisonFiles");list.ItemsSource=rows;
         var lifetime=new CancellationTokenSource();auxiliaryTokens.Add(lifetime);CancellationTokenSource? selectionToken=null;
         bool busy=false,applying=false,closed=false;
@@ -86,15 +96,18 @@ internal sealed partial class DesktopController
         void Text(string name,string value)=>window.Find<TextBlock>(name).Text=value;
         void Buttons()
         {
-            var selected=SelectedRows();bool ready=CanChoose() && !busy && selected.Length>0 && selected.All(r=>r.IsFile && r.Snapshot!=null);
+            ScheduledRows();
+            var selected=SelectedRows();bool selectable=CanChoose() && selected.Length>0 && selected.All(r=>r.IsFile && !scheduler.ResolutionState(job.Id,r.Issue.File).Executing);
+            bool ready=selectable && !busy && selected.All(r=>r.Snapshot!=null);
             window.Find<Button>("CompareForwardButton").IsEnabled=ready && selected.All(r=>r.Snapshot!.CanForward);
             window.Find<Button>("CompareReverseButton").IsEnabled=ready && selected.All(r=>r.Snapshot!.CanReverse);
             window.Find<Button>("CompareKeepBothButton").IsEnabled=ready && selected.All(r=>r.Snapshot!.CanForward && r.Snapshot.Backup is {Exists:true,Folder:false});
-            window.Find<Button>("CompareIgnoreButton").IsEnabled=CanChoose() && !applying && selected.Length>0 && selected.All(r=>r.IsFile);
+            window.Find<Button>("CompareIgnoreButton").IsEnabled=selectable && !applying;
             window.Find<Button>("CompareDuplicatesButton").IsEnabled=ready && selected.All(r=>r.Snapshot!.Readable && r.Snapshot.Duplicates is {Groups.Length:>0});
             window.Find<Button>("CompareApplyButton").IsEnabled=CanChoose() && !busy && rows.Any(r=>r.Action!=null);
-            window.Find<Button>("CompareApplyButton").Content=Queueable() ? "선택한 처리 예약" : "선택한 처리 적용";
-            window.Find<Button>("CompareCancelQueuedButton").IsEnabled=scheduler.QueuedResolutionCount(job.Id)>0;
+            window.Find<Button>("CompareApplyButton").Content="선택한 처리 적용";
+            window.Find<Button>("CompareApplyButton").Visibility=scheduler.IsRunning(job.Id) ? Visibility.Collapsed : Visibility.Visible;
+            window.Find<Button>("CompareCancelQueuedButton").IsEnabled=selected.Any(r=>scheduler.ResolutionState(job.Id,r.Issue.File) is {Action:not null,Executing:false});
             window.Find<Button>("CompareRefreshButton").Content=CurrentReview() ? "정보 다시 확인" : "현재 파일 다시 비교";
             window.Find<Button>("CompareRefreshButton").IsEnabled=!busy && SameJob() && (Queueable() || (!scheduler.IsRunning(job.Id) && sessionHistory.Latest(job.Id)?.IsActive!=true)) && selected.Length>0;
             window.Find<Button>("CompareStopButton").Visibility=scheduler.IsRunning(job.Id) || sessionHistory.Latest(job.Id)?.IsActive==true ? Visibility.Visible : Visibility.Collapsed;
@@ -127,8 +140,8 @@ internal sealed partial class DesktopController
             Side("Backup",row.Snapshot?.Backup,row.Snapshot?.BackupError ?? "",historical,row.Issue);
             if(!historical && row.Snapshot==null)foreach(var side in new[]{"Source","Backup"})foreach(var field in new[]{"Size","Created","Modified","State"})Text("Compare"+side+field,row.IsFile ? "확인 중…" : "파일별 정보 없음");
             if(!historical && row.Snapshot==null && row.Action==ConflictAction.Ignore)foreach(var side in new[]{"Source","Backup"})foreach(var field in new[]{"Size","Created","Modified","State"})Text("Compare"+side+field,"이번 실행 제외 · 정보 확인 생략");
-            Text("ComparisonStatus",!SameJob() ? "작업 위치 또는 계정이 변경된 기록입니다. 현재 작업의 문제 해결을 열어 주세요." : Queueable() ? "실행 중에도 처리 방법을 선택할 수 있습니다. ‘선택한 처리 예약’을 누르면 현재 동기화가 끝난 뒤 실행합니다. 대기 중 파일·위치가 바뀌면 덮어쓰지 않고 재확인을 요청합니다." : scheduler.IsRunning(job.Id) || sessionHistory.Latest(job.Id)?.IsActive==true ? "작업 종료 중입니다. 대기 상태가 되면 ‘현재 파일 다시 비교’를 선택하세요." : historical ? "이전 결과를 그대로 적용하지 않습니다. ‘현재 파일 다시 비교’를 누르면 이 목록의 현재 파일을 확인한 뒤 처리 방법을 선택할 수 있습니다." : !row.IsFile ? "계정·연결·권한 오류는 아래 ‘연결 · 권한 문제 해결’에서 처리하세요." : row.Snapshot==null ? "파일 정보를 확인하는 중입니다…" : "현재 파일 정보입니다. 처리 적용 직전에 위치·계정·파일 정보를 다시 검사합니다.");
-            Text("ComparisonChoiceHint",SelectedRows().Length>1 ? $"선택한 {SelectedRows().Length}개 파일에 같은 방법을 지정합니다." : row.ActionText+" · 처리 방법을 고른 뒤 적용하세요.");
+            Text("ComparisonStatus",!SameJob() ? "작업 위치 또는 계정이 변경된 기록입니다. 현재 작업의 문제 해결을 열어 주세요." : scheduler.ResolutionState(job.Id,row.Issue.File).Executing ? "이 파일의 예약 처리를 시작했습니다. 처리 중에는 방법을 바꾸지 않습니다." : Queueable() ? "처리 버튼을 누르면 바로 예약됩니다. 현재 동기화 전체가 끝나기 전에는 다른 버튼으로 변경할 수 있으며 마지막 선택을 실행합니다. 확인 정보가 바뀌면 덮어쓰지 않고 재확인을 요청합니다. 작업·앱 종료 시 미실행 예약은 취소됩니다." : scheduler.IsRunning(job.Id) || sessionHistory.Latest(job.Id)?.IsActive==true ? "작업 종료 중입니다. 대기 상태가 되면 ‘현재 파일 다시 비교’를 선택하세요." : historical ? "이전 결과를 그대로 적용하지 않습니다. ‘현재 파일 다시 비교’를 누르면 이 목록의 현재 파일을 확인한 뒤 처리 방법을 선택할 수 있습니다." : !row.IsFile ? "계정·연결·권한 오류는 아래 ‘연결 · 권한 문제 해결’에서 처리하세요." : row.Snapshot==null ? "파일 정보를 확인하는 중입니다…" : "현재 파일 정보입니다. 처리 적용 직전에 위치·계정·파일 정보를 다시 검사합니다.");
+            Text("ComparisonChoiceHint",SelectedRows().Length>1 ? $"선택한 {SelectedRows().Length}개 파일에 같은 방법을 지정합니다."+(Queueable() ? " 버튼을 누르면 바로 예약됩니다." : "") : row.ActionText+(scheduler.ResolutionState(job.Id,row.Issue.File).Executing ? " · 이미 시작한 처리는 변경할 수 없습니다." : Queueable() ? " · 다른 버튼으로 변경하거나 예약을 취소할 수 있습니다." : " · 처리 방법을 고른 뒤 적용하세요."));
             var plan=row.Snapshot?.Duplicates;
             Text("ComparisonDuplicatesText",plan==null ? "" : "중복 경로가 있습니다. 아래 ID 순서의 첫 사본을 현재 백업으로 표시합니다. 처리 적용 시 나머지 사본(폴더는 내부 파일 전체)은 같은 위치의 .SafeSync-conflict- 이름으로 보존합니다. 삭제하지 않습니다.\n"+string.Join("\n",plan.Groups.Select(g=>g.Relative+"\n"+string.Join("\n",g.Items.Select((i,index)=>$"  {(index==0 ? "사용" : "이름 보존")} · ID {i.Id} · {(i.Folder ? "폴더" : i.Length.ToString("N0")+" B")} · 생성 {Date(i.CreatedUtc.ToString("O"))} · 수정 {Date(i.ModifiedUtc.ToString("O"))}")))));
         }
@@ -166,34 +179,37 @@ internal sealed partial class DesktopController
         void Choose(ConflictAction action)
         {
             if(!CanChoose() || applying || (busy && action!=ConflictAction.Ignore))return;
+            if(SelectedRows().Any(r=>scheduler.ResolutionState(job.Id,r.Issue.File).Executing))return;
             if(busy){selectionToken?.Cancel();busy=false;}
+            if(Queueable())
+            {
+                var selected=SelectedRows().Where(r=>r.IsFile).ToArray();var choices=new ComparedResolutions();
+                foreach(var row in selected)
+                {if(row.Snapshot!=null)choices.Choose(row.Snapshot,action);else if(action==ConflictAction.Ignore)choices.Add(row.Issue.File,action);else return;}
+                if(!scheduler.TryQueueResolutions(job,choices))
+                {Text("ComparisonStatus","현재 동기화가 끝났거나 처리가 시작되어 예약하지 않았습니다. 현재 파일을 다시 확인하세요.");Buttons();return;}
+                foreach(var row in selected)row.Action=null;
+                Log(job.Name+$": 파일 처리 {selected.Length}개 예약 변경 · "+action+". 현재 동기화 전체 완료 후 마지막 선택을 실행합니다.");
+                if(selected.FirstOrDefault() is {} rowToShow)Display(rowToShow);Buttons();return;
+            }
             foreach(var row in SelectedRows())if(row.IsFile && (action==ConflictAction.Ignore || row.Snapshot!=null))row.Action=action;
             if(SelectedRows().FirstOrDefault() is {} currentRow)Display(currentRow);Buttons();
         }
         async Task ApplyAsync()
         {
-            if(!CanChoose() || busy){Text("ComparisonStatus","재확인 후 상태가 바뀌었습니다. 현재 파일 정보를 다시 확인하세요.");Buttons();return;}
+            if(!Writable() || busy){Text("ComparisonStatus","재확인 후 상태가 바뀌었습니다. 현재 파일 정보를 다시 확인하세요.");Buttons();return;}
             var selected=rows.Where(r=>r.Action!=null).ToArray();if(selected.Length==0)return;
             string summary=string.Join("\n",selected.GroupBy(r=>r.Action).Select(g=>$"{g.First().ActionText}: {g.Count()}개"));
             var duplicateGroups=selected.Where(r=>r.Action!=ConflictAction.Ignore).SelectMany(r=>r.Snapshot?.Duplicates?.Groups ?? []).DistinctBy(g=>g.Relative).ToArray();
             string duplicateNotice=duplicateGroups.Length==0 ? "" : "\n\n중복 이름 보존 대상:\n"+string.Join("\n",duplicateGroups.Select(g=>$"{g.Relative}: {g.Items.Length-1}개 사본의 이름 변경"))+"\n폴더인 경우 내부 파일 전체가 바뀐 폴더 이름 아래 보존됩니다. 삭제하지 않습니다. 이후 새 이름도 일반 파일·폴더로 동기화될 수 있습니다.";
-            bool queue=Queueable();
-            if(!Confirm(summary+"\n\n덮어쓰기 전 사본은 SafeSync 휴지통에 보관합니다.\n‘둘 다 보관’은 기존 백업을 같은 폴더의 다른 이름으로 남기고 원본을 복사합니다.\n‘이번 동기화에서 제외’는 영구 제외가 아니며 다음 실행에서 다시 확인합니다."+duplicateNotice+(queue ? "\n\n현재 동기화 전체가 끝난 뒤 예약을 실행합니다. 대기 중 파일·연결이 바뀌면 처리를 보류합니다. 같은 파일을 다시 예약하면 마지막 선택을 사용합니다. 작업 종료·앱 종료·업데이트 시 미실행 예약은 취소됩니다." : "")+"\n\n이 처리를 "+(queue ? "예약" : "적용")+"할까요?"))return;
-            if(!CanChoose()){Text("ComparisonStatus","확인하는 동안 작업 상태가 바뀌었습니다. 현재 파일을 다시 확인한 뒤 선택하세요.");Buttons();return;}
+            if(!Confirm(summary+"\n\n덮어쓰기 전 사본은 SafeSync 휴지통에 보관합니다.\n‘둘 다 보관’은 기존 백업을 같은 폴더의 다른 이름으로 남기고 원본을 복사합니다.\n‘이번 동기화에서 제외’는 영구 제외가 아니며 다음 실행에서 다시 확인합니다."+duplicateNotice+"\n\n이 처리를 적용할까요?"))return;
+            if(!Writable()){Text("ComparisonStatus","확인하는 동안 작업 상태가 바뀌었습니다. 현재 파일을 다시 확인한 뒤 선택하세요.");Buttons();return;}
             var decisions=new ComparedResolutions();
             foreach(var row in selected)
             {
                 if(row.Action!=ConflictAction.Ignore && row.Snapshot==null)return;
                 if(row.Snapshot!=null)decisions.Choose(row.Snapshot,row.Action!.Value);
                 else decisions.Add(row.Issue.File,ConflictAction.Ignore);
-            }
-            if(queue)
-            {
-                if(!scheduler.TryQueueResolutions(job,decisions))
-                {Text("ComparisonStatus","현재 동기화가 끝났거나 종료 요청이 생겨 예약하지 않았습니다. 현재 파일을 다시 비교한 뒤 적용하세요.");Buttons();return;}
-                foreach(var row in selected)row.Action=null;
-                Log(job.Name+$": 파일 처리 {selected.Length}개 예약. 현재 동기화 전체 완료 후 재검증하여 실행합니다.");
-                Text("ComparisonStatus",$"{scheduler.QueuedResolutionCount(job.Id)}개 파일 처리 예약됨 · 현재 동기화가 끝나기를 기다리고 있습니다.");Buttons();return;
             }
             busy=true;applying=true;Buttons();Text("ComparisonStatus","선택한 파일을 안전하게 처리하고 있습니다. 결과는 동기화 상태 창에서 확인할 수 있습니다.");
             try
@@ -216,7 +232,7 @@ internal sealed partial class DesktopController
             Log(job.Name+": 문제 해결을 위해 현재 파일을 안전하게 마친 뒤 대기합니다. 종료 후 현재 파일을 다시 비교하세요.");
         });
         Click(window,"CompareApplyButton",()=>TrackAuxiliary(ApplyAsync()));
-        Click(window,"CompareCancelQueuedButton",()=>{scheduler.CancelQueuedResolutions(job);Text("ComparisonStatus","미실행 파일 처리 예약을 취소했습니다. 현재 동기화는 계속됩니다.");Buttons();});
+        Click(window,"CompareCancelQueuedButton",()=>{scheduler.CancelQueuedResolutions(job,SelectedRows().Where(r=>r.IsFile).Select(r=>r.Issue.File));Text("ComparisonStatus","선택한 파일의 미실행 예약을 취소했습니다. 현재 동기화는 계속됩니다.");Buttons();});
         Click(window,"CompareRecoveryButton",()=>{list.SelectedItem=rows.First(r=>r.Issue.File=="[작업]");RefreshRecoveryWindows();});
         Click(window,"CompareSourceTrashButton",()=>ShowLocalTrash(job,job.Source));
         System.Collections.Specialized.NotifyCollectionChangedEventHandler historyChanged=(_,_)=>

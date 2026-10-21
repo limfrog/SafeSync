@@ -1,7 +1,7 @@
 namespace SafeSync.Core;
 
 // Session-only, explicit user choices. These retain the inspected file versions;
-// finishing the current run never grants authority over different later bytes.
+// finishing the current run never bypasses the existing file-version guards.
 internal sealed class DeferredResolutions(BackupJob job)
 {
     private readonly string binding=Binding(job);

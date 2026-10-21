@@ -32,17 +32,19 @@ internal sealed partial class DesktopController
                 await reached.Task.WaitAsync(TimeSpan.FromSeconds(15));
                 var panel=ShowFileComparison(job,oldRun);
                 async Task Ready(){for(int i=0;i<250 && !panel.Find<Button>("CompareForwardButton").IsEnabled;i++)await Task.Delay(20);}
-                async Task Accept(){var answer=app.Dispatcher.BeginInvoke(()=>app.Windows.OfType<Window>().Single(w=>w.Title=="SafeSync 확인").DialogResult=true);panel.Find<Button>("CompareApplyButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await answer;}
                 await Ready();
                 Check(panel.Find<Button>("CompareForwardButton").IsEnabled && panel.Find<Button>("CompareReverseButton").IsEnabled && panel.Find<Button>("CompareKeepBothButton").IsEnabled,"Active job disables file decision buttons");
-                Check(panel.Find<Button>("CompareRefreshButton").IsEnabled && (string)panel.Find<Button>("CompareApplyButton").Content=="선택한 처리 예약","Active job lacks refresh or queue label");
-                panel.Find<Button>("CompareForwardButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Accept();
+                Check(panel.Find<Button>("CompareRefreshButton").IsEnabled && panel.Find<Button>("CompareApplyButton").Visibility==Visibility.Collapsed,"Active job still requires a separate reservation/apply button");
+                panel.Find<Button>("CompareForwardButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(scheduler.QueuedResolutionCount(job.Id)==1 && File.ReadAllText(Path.Combine(backup,"a.txt"))=="right" && !File.Exists(Path.Combine(backup,"z.txt")),"UI choice mutated files before normal sync finished");
+                panel.Find<Button>("CompareReverseButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Check(scheduler.QueuedResolutionCount(job.Id)==1 && scheduler.ResolutionState(job.Id,"a.txt").Action==ConflictAction.UseBackup,"Clicking a different button did not replace the queued action");
+                Check(((ComparisonRow)panel.Find<ListBox>("ComparisonFiles").SelectedItem).ActionText.Contains("예약") && !app.Windows.OfType<Window>().Any(w=>w.Title=="SafeSync 확인"),"One-click reservation is invisible or opened an extra confirmation");
                 ClearProblemWorkspace();panel=ShowFileComparison(job,oldRun);await Ready();
                 Check(panel.Find<Button>("CompareCancelQueuedButton").IsEnabled && panel.Find<TextBlock>("ComparisonSummary").Text.Contains("실행 대기 1개"),"Recreated panel lost or concealed accepted queue");
                 panel.Find<Button>("CompareCancelQueuedButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(scheduler.QueuedResolutionCount(job.Id)==0 && !panel.Find<Button>("CompareCancelQueuedButton").IsEnabled,"UI cannot cancel pending choices");
-                panel.Find<Button>("CompareKeepBothButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Accept();
+                panel.Find<Button>("CompareKeepBothButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(scheduler.QueuedResolutionCount(job.Id)==1,"UI cannot requeue after cancel");
                 release.Set();await task.WaitAsync(TimeSpan.FromSeconds(20));await Task.Delay(100);
                 Check(File.ReadAllText(Path.Combine(backup,"a.txt"))=="left" && File.ReadAllText(Path.Combine(backup,"z.txt"))=="normal last file","Deferred UI choice did not run after complete normal sync");

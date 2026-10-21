@@ -27,8 +27,8 @@ internal static class DeferredResolutionTests
             var choices=new ComparedResolutions();choices.Choose(await FileComparisons.ReadAsync(job,"a-conflict.txt",remote,default),ConflictAction.KeepBoth);
             await using var scheduler=new BackupScheduler(new ConfigStore(Path.Combine(home,"data"))){CloudFactory=remote==null ? null : _=>remote};
             using var release=new ManualResetEventSlim();var reached=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            int started=0,finished=0,canceled=0;bool block=false,ordered=true;BackupResult? last=null;
-            scheduler.Started+=_=>{if(Interlocked.Increment(ref started)>1 && !LastExists())ordered=false;};
+            int started=0,finished=0,canceled=0;bool block=false,ordered=true,executionGuard=true;BackupResult? last=null;
+            scheduler.Started+=_=>{if(Interlocked.Increment(ref started)>1){if(!LastExists())ordered=false;if(scheduler.TryQueueResolutions(job,choices))executionGuard=false;}};
             scheduler.Completed+=(_,result)=>{last=result;Interlocked.Increment(ref finished);};
             scheduler.ResolutionsCanceled+=(_,_)=>Interlocked.Increment(ref canceled);
             scheduler.Progress+=p=>
@@ -42,9 +42,19 @@ internal static class DeferredResolutionTests
                 await reached.Task.WaitAsync(TimeSpan.FromSeconds(20));
                 check(scheduler.TryQueueResolutions(job,choices),label+" did not accept choices while running");
                 check(scheduler.QueuedResolutionCount(job.Id)==1 && Right()=="right preserved",label+" applied before current run completed");
+                var replacement=new ComparedResolutions();replacement.Choose(choices.Comparisons["a-conflict.txt"],ConflictAction.UseBackup);
+                check(scheduler.TryQueueResolutions(job,replacement) && scheduler.ResolutionState(job.Id,"a-conflict.txt").Action==ConflictAction.UseBackup && scheduler.QueuedResolutionCount(job.Id)==1,label+" replacement added another command instead of updating the choice");
+                check(scheduler.TryQueueResolutions(job,choices) && scheduler.ResolutionState(job.Id,"a-conflict.txt").Action==ConflictAction.KeepBoth,label+" last button did not win");
                 // The scheduler owns a copy, not the editable UI dictionary.
                 choices["a-conflict.txt"]=ConflictAction.UseBackup;choices.Comparisons.Clear();
-                if(scenario=="cancel")scheduler.CancelQueuedResolutions(job);
+                if(scenario=="cancel")
+                {
+                    var ignored=new ComparedResolutions{{"z-finish.txt",ConflictAction.Ignore}};
+                    check(scheduler.TryQueueResolutions(job,ignored) && scheduler.QueuedResolutionCount(job.Id)==2,label+" could not queue another independent file");
+                    scheduler.CancelQueuedResolutions(job,["a-conflict.txt"]);
+                    check(scheduler.QueuedResolutionCount(job.Id)==1 && scheduler.ResolutionState(job.Id,"z-finish.txt").Action==ConflictAction.Ignore,label+" selected cancellation removed another file's reservation");
+                    scheduler.CancelQueuedResolutions(job,["z-finish.txt"]);
+                }
                 if(scenario=="stop")scheduler.StopJob(job);
                 if(scenario=="binding")job.SyncMode="TwoWay";
                 if(scenario=="stale"){File.WriteAllText(Path.Combine(source,"a-conflict.txt"),"changed while waiting");File.SetLastWriteTimeUtc(Path.Combine(source,"a-conflict.txt"),DateTime.UtcNow.AddDays(-3));}
@@ -55,6 +65,7 @@ internal static class DeferredResolutionTests
                 release.Set();await task.WaitAsync(TimeSpan.FromSeconds(25));
                 if(holding!=null)(await holding).Dispose();
                 check(scheduler.RunningCount==0 && scheduler.QueuedResolutionCount(job.Id)==0,label+" left running ownership or queue behind");
+                check(executionGuard,label+" allowed an already executing choice to be replaced or queued twice");
                 if(scenario is "apply" or "pause")
                 {
                     check(started==2 && finished==2 && ordered,label+" follow-up overtook normal work or overlapped it");
@@ -65,7 +76,7 @@ internal static class DeferredResolutionTests
                 else if(scenario=="stale")
                 {check(started==2 && last!.Conflicts.Any(i=>i.File=="a-conflict.txt"),label+" stale file did not remain a conflict");check(Right()=="right preserved",label+" overwrote a file changed during the wait");}
                 else
-                {check(started==1 && canceled==1,label+" canceled intent ran or was silently discarded");check(Right()=="right preserved",label+" canceled intent changed backup");}
+                {check(started==1 && canceled==(scenario=="cancel" ? 2 : 1),label+" canceled intent ran or was silently discarded");check(Right()=="right preserved",label+" canceled intent changed backup");}
             }
             finally{release.Set();await task.WaitAsync(TimeSpan.FromSeconds(25));}
         }
