@@ -1,6 +1,6 @@
 # Windows restart reproduction
 
-This is a diagnostic test of the unchanged Windows preview.14 production `SafeSync.Core` and `BackupScheduler`. It does not change synchronization decisions, installers, the update feed or the website. Baseline source commit: `bfca3da53ce5bc81e02fe2c538e3277f33c0cb14`.
+This diagnostic harness executes the repository's production `SafeSync.Core` and `BackupScheduler` without substituting their synchronization decisions. The original preview.14 baseline is `bfca3da53ce5bc81e02fe2c538e3277f33c0cb14`; its failures are retained in `../../RESTART-REPRODUCTION-20261022.md`. The preview.15 repair is documented in `../../PREVIEW15-VALIDATION.md`.
 
 The `Windows restart reproduction` GitHub workflow runs on Windows Server 2022 and 2025 hosted runners. It creates an isolated NTFS virtual disk with a USN journal and a loopback SMB share. It does not connect to the owner's PC, NAS or cloud accounts and uses no account secrets.
 
@@ -22,6 +22,8 @@ Correctness checks fail the workflow. Performance is reported separately, not hi
 
 Every completed child process is followed by an independent inventory of both endpoints, saved as `*.inventory.json`. File-content equality is recorded separately from clean job status, so spurious directory conflicts cannot be misreported as lost file data. Individual run reports also include the actual issue reasons. Results for the unchanged preview.14 engine are documented in `../../RESTART-REPRODUCTION-20261022.md`; a failed reproduction is deliberately preserved as a failure.
 
+The repaired engine is additionally required to save real NTFS checkpoints and perform zero full scans/comparison-path work on the second unchanged NTFS restart. This requirement applies to the isolated journal-capable runner volume, not to unsupported SMB paths or standard-user accounts denied volume read access. The optional workflow packaging step builds and validates an installer on the Windows 2022 runner; it does not deploy that installer or alter the update feed.
+
 `Copied=0` does **not** mean no full rescan or content reads. `ContentVerificationPaths=0` in two-way mode does **not** mean hashes were not read, because that engine does not emit the same content-hash stage. Elapsed run time includes the scheduler's initial timer wait; it is not a throughput benchmark. Exact disk read bytes and network transfer bytes are not instrumented.
 
 The report's full-scan conditions are observations of persisted state and a read-only preflight, not a new production reason-reporting feature. The production stage events show whether a full scan actually happened.
@@ -35,4 +37,4 @@ The report's full-scan conditions are observations of persisted state and a read
 
 The checkpoint kill is deterministic and narrow; it must not be described as a complete mid-transfer crash test. SMB loopback findings must not be described as testing the actual NAS.
 
-Workflow artifacts contain only generated test files/settings and are retained for seven days. No installer or public download is updated by this workflow.
+Report artifacts contain only generated test files/settings and are retained for seven days. A separately named package artifact contains the verified application/installer when that step is enabled. No public download is updated by this workflow.

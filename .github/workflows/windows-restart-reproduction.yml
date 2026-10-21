@@ -9,6 +9,9 @@ on:
       - 'windows-v2/src/SafeSync.Core/**'
       - 'windows-v2/tests/SafeSync.Tests/**'
       - 'windows-v2/Directory.Build.props'
+      - 'windows-v2/README-ko.md'
+      - 'windows-v2/PREVIEW15-VALIDATION.md'
+      - 'windows-v2/scripts/Build.ps1'
   workflow_dispatch:
   workflow_call:
 
