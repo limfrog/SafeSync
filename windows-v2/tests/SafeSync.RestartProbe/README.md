@@ -20,6 +20,8 @@ The `Windows restart reproduction` GitHub workflow runs on Windows Server 2022 a
 
 Correctness checks fail the workflow. Performance is reported separately, not hidden by a green check: full-folder scans, unique compared paths, explicit one-way content-hash progress stages, copied/skipped/trashed counts and elapsed run time are recorded in `summary.json` and `summary.md`.
 
+Every completed child process is followed by an independent inventory of both endpoints, saved as `*.inventory.json`. File-content equality is recorded separately from clean job status, so spurious directory conflicts cannot be misreported as lost file data. Individual run reports also include the actual issue reasons. Results for the unchanged preview.14 engine are documented in `../../RESTART-REPRODUCTION-20261022.md`; a failed reproduction is deliberately preserved as a failure.
+
 `Copied=0` does **not** mean no full rescan or content reads. `ContentVerificationPaths=0` in two-way mode does **not** mean hashes were not read, because that engine does not emit the same content-hash stage. Elapsed run time includes the scheduler's initial timer wait; it is not a throughput benchmark. Exact disk read bytes and network transfer bytes are not instrumented.
 
 The report's full-scan conditions are observations of persisted state and a read-only preflight, not a new production reason-reporting feature. The production stage events show whether a full scan actually happened.
