@@ -9,7 +9,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         public PauseGate Pause { get; } = new();
         public Task Task { get; set; } = Task.CompletedTask;
         public DeferredResolutions? Deferred {get;set;}
-        public ComparedResolutions? Executing {get;set;}
+        public IReadOnlyDictionary<string,ConflictAction>? Executing {get;set;}
     }
     private readonly BackupEngine engine = new(store);
     private readonly CancellationTokenSource stop = new();
@@ -184,7 +184,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         lock(launchLock)
         {
         if (stop.IsCancellationRequested || updateHolds>0 || job.Paused || job.Stopped || (job.DestinationType != "Local" && CloudFactory==null)) return Task.CompletedTask;
-        var current = new Running {Executing=resolutions as ComparedResolutions};
+        var current = new Running {Executing=resolutions?.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.OrdinalIgnoreCase)};
         if (!running.TryAdd(job.Id,current)) return running.TryGetValue(job.Id,out var active) ? active.Task : Task.CompletedTask;
         var captured = changed.TryGetValue(job.Id,out var changes) ? changes.ToArray() : [];
         try {PersistQueue();}catch {running.TryRemove(job.Id,out _);throw;}
@@ -230,7 +230,12 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                     {
                         // Keep ownership of the job across both passes: automatic
                         // retries/manual starts cannot overtake an accepted queue.
-                        resolutions=deferred!.Choices;current.Executing=deferred.Choices;full=false;captured=[];changes=null;
+                        resolutions=deferred!.Choices;
+                        // Duplicate preparation may legitimately normalize the
+                        // engine's dictionary. UI state must read its own stable
+                        // copy, never enumerate that dictionary concurrently.
+                        current.Executing=deferred.Choices.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.OrdinalIgnoreCase);
+                        full=false;captured=[];changes=null;
                     }
                     else
                     {
