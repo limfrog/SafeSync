@@ -153,7 +153,9 @@ enum TwoWayChecks {
                     if p.stage == "양방향 비교·반영" { started.signal(); _ = proceed.wait(timeout: .now() + 5) }
                 })
             }
-            let reached = await Task.detached { started.wait(timeout: .now() + 5) == .success }.value
+            let reached = await withCheckedContinuation { continuation in
+                DispatchQueue.global().async { continuation.resume(returning: started.wait(timeout: .now() + 5) == .success) }
+            }
             check(reached); worker.cancel(); proceed.signal()
             do { _ = try await worker.value; fail("Canceled sync continued") } catch is CancellationError {} catch { throw error }
             checkFalse(FileManager.default.fileExists(atPath: target.appendingPathComponent("cancel").path))

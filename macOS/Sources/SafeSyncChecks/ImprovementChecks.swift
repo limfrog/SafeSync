@@ -170,9 +170,20 @@ struct ImprovementChecks {
         print("PASS unavailable FSEvents service requests full scan (live event delivery unavailable in this shell)")
         return
     }
+    checkFalse(watcher.historyReady)
     try Data("new file".utf8).write(to: root.appendingPathComponent("pending.txt"))
-    check(await watcher.flushPendingEvents())
-    // Flush is the manual-run barrier; it must deliver the preceding edit before the journal checkpoint.
+    checkFalse(await watcher.flushPendingEvents())
+    check(BackupScanPolicy.requiresFullScan(explicit: false, watcherReady: false, journal: ChangeJournal(), network: false))
+    // The daemon subscription is asynchronous. A fresh stream must request a
+    // conservative inventory, not pretend that an empty first flush is complete.
+    // Separately prove real delivery and replay completion, with a bounded wait.
+    for _ in 0..<50 {
+        if watcher.historyReady && paths.contains(where: { $0.hasSuffix("/pending.txt") }) { break }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        _ = await watcher.flushPendingEvents()
+    }
+    check(watcher.historyReady)
     check(paths.contains { $0.hasSuffix("/pending.txt") })
-    print("PASS real FSEvents flush delivers immediate manual-backup changes without blocking main callbacks")
+    check(await watcher.flushPendingEvents())
+    print("PASS real FSEvents startup requests a safe inventory, completes replay and delivers live changes without blocking main callbacks")
 }
