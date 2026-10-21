@@ -20,3 +20,5 @@ aa09346d6523f6f933436934741d49bc6a534f1b9567aae325949c8e0aed9f06  SafeSync-macOS
 b4c8aa751b7dab5c1c449f1df69bdb016203aea0ccbb5c826210e54b19cce85c  SafeSync-Setup-1.0.0-preview.14.exe
 3910066ae2e741cf3cfc9211ee31b6133ee229d1e7bba669538344af705d3210  SafeSync-Windows-1.0.0-preview.14.zip
 44753d73519986b54bd8d763d86b2043c432772fbb8b29e0b8d8ee84d3f13049  SafeSync-macOS-0.3.11-universal.zip
+5e4cc3fed2d9588d8317fecf19bd44feb03a41c165c2fe70e9ff51d8fbfc7380  SafeSync-Setup-1.0.0-preview.15.exe
+d4b2be6363f49bcc9f3dcdcebb85a585b1ebd448fc079eb7059d35735f6172af  SafeSync-Windows-1.0.0-preview.15.zip
