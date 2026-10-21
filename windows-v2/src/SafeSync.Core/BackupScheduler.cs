@@ -188,6 +188,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         {
         if (stop.IsCancellationRequested || updateHolds>0 || job.Paused || job.Stopped || (job.DestinationType != "Local" && CloudFactory==null)) return Task.CompletedTask;
         var current = new Running {Executing=resolutions?.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.OrdinalIgnoreCase)};
+        var runBinding=new DeferredResolutions(job);
         if (!running.TryAdd(job.Id,current)) return running.TryGetValue(job.Id,out var active) ? active.Task : Task.CompletedTask;
         var captured = changed.TryGetValue(job.Id,out var changes) ? changes.ToArray() : [];
         try {PersistQueue();}catch {running.TryRemove(job.Id,out _);throw;}
@@ -237,7 +238,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                     if(deferred!=null && (!completedNormally || !deferred.Matches(job)))
                     {canceled="현재 작업이 실패했거나 위치·연결이 변경되어 예약한 파일 처리를 취소했습니다. 현재 파일을 다시 확인하세요.";deferred=null;}
                     bool allowed=!stop.IsCancellationRequested && updateHolds==0 && !job.Stopped;
-                    bool retryNetwork=allowed && !networkRetried && (networkErrors.Length>0 || transientFailure);
+                    bool retryNetwork=allowed && runBinding.Matches(job) && !networkRetried && (networkErrors.Length>0 || transientFailure);
                     continueRun=allowed && (deferred!=null || retryNetwork);
                     if(continueRun)
                     {

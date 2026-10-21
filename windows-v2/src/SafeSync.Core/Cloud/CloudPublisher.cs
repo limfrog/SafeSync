@@ -206,7 +206,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
                 }
                 await ContinueAsync(journal,record,pause,token);
             }
-            catch(Exception ex) when(ex is IOException or HttpRequestException){failures.Add((record.Relative,ex));}
+            catch(Exception ex) when(ex is IOException or HttpRequestException || (NetworkFailures.IsTransient(ex) && !token.IsCancellationRequested && !pause.IsStopRequested)){failures.Add((record.Relative,ex));}
         }
         return failures;
     }

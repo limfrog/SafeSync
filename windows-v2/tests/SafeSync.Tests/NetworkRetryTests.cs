@@ -28,7 +28,7 @@ internal static class NetworkRetryTests
 
         foreach(var provider in new[]{"GoogleDrive","Dropbox"})
         foreach(var mode in new[]{"OneWay","TwoWay"})
-        foreach(var scenario in new[]{"once","persistent","stop","permanent","timeout"})
+        foreach(var scenario in new[]{"once","persistent","persistent-timeout","stop","permanent","timeout"})
             await Scenario(provider,mode,scenario);
         await OuterFailure();
 
@@ -43,17 +43,17 @@ internal static class NetworkRetryTests
             remote.BeforeUpload=()=>
             {
                 int attempt=Interlocked.Increment(ref attempts);
-                if(scenario=="persistent" || attempt==1)
+                if(scenario.StartsWith("persistent") || attempt==1)
                 {
                     if(scenario=="permanent")throw new CloudApiException(HttpStatusCode.Forbidden,"test upload");
-                    if(scenario=="timeout")throw new TaskCanceledException("HTTP timeout",new TimeoutException());
+                    if(scenario is "timeout" or "persistent-timeout")throw new TaskCanceledException("HTTP timeout",new TimeoutException());
                     throw new CloudApiException(HttpStatusCode.ServiceUnavailable,"test upload");
                 }
             };
             var job=new BackupJob{Source=source,DestinationType=provider,CloudAccountId=remote.AccountId,CloudFolderId=remote.Root,SyncMode=mode,TriggerType="Scheduled",ScheduleTime="23:59"};
             var data=new ConfigStore(Path.Combine(home,"data"));await using var scheduler=new BackupScheduler(data){CloudFactory=_=>remote};
             var results=new List<BackupResult>();var failures=new List<Exception>();
-            scheduler.Started+=_=>{if(++started>1 && scenario!="persistent" && !remote.Files.ContainsKey("z.txt"))ordered=false;};
+            scheduler.Started+=_=>{if(++started>1 && !scenario.StartsWith("persistent") && !remote.Files.ContainsKey("z.txt"))ordered=false;};
             scheduler.Completed+=(_,result)=>{results.Add(result);if(scenario=="stop")scheduler.StopJob(job);};
             scheduler.Failed+=(_,error)=>failures.Add(error);
             scheduler.SetJobs([job]);
@@ -69,7 +69,7 @@ internal static class NetworkRetryTests
                 check(System.Text.Encoding.UTF8.GetString(remote.Bytes("a.txt"))=="retry this original",label+" changed file content");
                 check(results[^1].Conflicts.Any(i=>i.File=="c-conflict.txt") && System.Text.Encoding.UTF8.GetString(remote.Bytes("c-conflict.txt"))=="newer backup preserved",label+" auto retry overwrote a real conflict");
             }
-            if(scenario=="persistent")
+            if(scenario.StartsWith("persistent"))
             {
                 check(results[^1].Errors.Count>0 && data.LoadState(job).Files.Any(e=>e.Status=="Failed"),label+" persistent failure erased retry state");
                 scheduler.Start();await Task.Delay(2300);
