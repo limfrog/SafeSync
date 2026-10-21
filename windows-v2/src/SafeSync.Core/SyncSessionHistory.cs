@@ -38,6 +38,7 @@ public sealed class SyncRun : INotifyPropertyChanged
     public IReadOnlyList<FileIssue> Locked {get;private set;}=[];
     public IReadOnlyList<FileIssue> Errors {get;private set;}=[];
     public string FailureReason {get;private set;}="";
+    public bool AutomaticNetworkRetry {get;private set;}
     public string StartedText=>StartedUtc.ToLocalTime().ToString("MM-dd HH:mm:ss");
     public string EndedText=>EndedUtc?.ToLocalTime().ToString("HH:mm:ss") ?? "—";
     public string DurationText {get{var elapsed=(EndedUtc ?? updatedUtc)-StartedUtc;if(elapsed<TimeSpan.Zero)elapsed=TimeSpan.Zero;return $"{(int)elapsed.TotalHours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";}}
@@ -49,9 +50,9 @@ public sealed class SyncRun : INotifyPropertyChanged
     public string ErrorsText=>IsActive ? "—" : (Errors.Count+(FailureReason.Length>0 ? 1 : 0)).ToString("N0");
     public string StatusText=>Outcome switch
     {
-        SyncRunOutcome.Running=>"진행 중",SyncRunOutcome.Paused=>"일시정지",SyncRunOutcome.Failed=>"실패",SyncRunOutcome.Canceled=>"중단됨",
+        SyncRunOutcome.Running=>"진행 중",SyncRunOutcome.Paused=>"일시정지",SyncRunOutcome.Failed=>AutomaticNetworkRetry ? "네트워크 오류" : "실패",SyncRunOutcome.Canceled=>"중단됨",
         SyncRunOutcome.Stopping=>"종료 중…",SyncRunOutcome.Waiting=>"대기 중",
-        SyncRunOutcome.Attention=>Errors.Count>0 ? "오류 확인" : Conflicts.Count>0 ? "충돌 확인" : "사용 중 파일 대기",
+        SyncRunOutcome.Attention=>Errors.Count>0 && Errors.All(NetworkFailures.Automatic) && Conflicts.Count==0 ? "네트워크 오류" : Errors.Count>0 ? "오류 확인" : Conflicts.Count>0 ? "충돌 확인" : "사용 중 파일 대기",
         _=>Copied==0 && Trashed==0 ? "변경 없음" : "완료"
     };
     public string Tone=>Outcome switch {SyncRunOutcome.Failed=>"Danger",SyncRunOutcome.Attention=>Errors.Count>0 ? "Danger" : "Warning",SyncRunOutcome.Completed=>"Success",SyncRunOutcome.Running=>"Active",_=>"Muted"};
@@ -68,7 +69,7 @@ public sealed class SyncRun : INotifyPropertyChanged
         Copied=result.Copied;Skipped=result.Skipped;Trashed=result.Trashed;Conflicts=result.Conflicts.ToArray();Locked=result.Locked.ToArray();Errors=result.Errors.ToArray();EndedUtc=updatedUtc=now;
         Outcome=stopped ? SyncRunOutcome.Waiting : result.Canceled ? SyncRunOutcome.Canceled : Conflicts.Count+Locked.Count+Errors.Count>0 ? SyncRunOutcome.Attention : SyncRunOutcome.Completed;Changed();
     }
-    internal void Fail(Exception exception,DateTimeOffset now){FailureReason=exception.Message;EndedUtc=updatedUtc=now;Outcome=SyncRunOutcome.Failed;Changed();}
+    internal void Fail(Exception exception,DateTimeOffset now){FailureReason=exception.Message;AutomaticNetworkRetry=NetworkFailures.IsTransient(exception);EndedUtc=updatedUtc=now;Outcome=SyncRunOutcome.Failed;Changed();}
     private void Changed()=>PropertyChanged?.Invoke(this,new PropertyChangedEventArgs(""));
 }
 

@@ -67,8 +67,8 @@ internal sealed partial class DesktopController
         var window=Views.LoadElement("FileComparison");
         var rows=new ObservableCollection<ComparisonRow>();
         foreach(var issue in run?.Conflicts ?? Array.Empty<FileIssue>())rows.Add(new(issue,"충돌"));
-        foreach(var issue in run?.Errors ?? Array.Empty<FileIssue>())if(!rows.Any(r=>r.Issue.File==issue.File))rows.Add(new(issue,"오류"));
-        if(rows.Count==0 && problemStore.Get(job.Id) is {File.Length:>0} problem)rows.Add(new(new(job.Id,job.Name,problem.File,problem.Message,0,0,"",""),"오류"));
+        foreach(var issue in run?.Errors ?? Array.Empty<FileIssue>())if(!NetworkFailures.Automatic(issue) && !rows.Any(r=>r.Issue.File==issue.File))rows.Add(new(issue,"오류"));
+        if(rows.Count==0 && problemStore.Get(job.Id) is {File.Length:>0} problem && problem.Kind!="Network" && !NetworkFailures.LegacyMessage(problem.Message))rows.Add(new(new(job.Id,job.Name,problem.File,problem.Message,0,0,"",""),"오류"));
         rows.Add(new(new(job.Id,job.Name,"[작업]",run?.FailureReason.Length>0 ? run.FailureReason : problemStore.Get(job.Id)?.Message ?? "작업 연결과 실행 상태를 확인합니다.",0,0,"",""),"작업 안내"));
         void ScheduledRows()
         {

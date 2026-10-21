@@ -116,7 +116,10 @@ public sealed record SyncSide(long Length, string Modified, string Created, stri
 public enum ConflictAction { Overwrite, KeepBoth, Ignore, UseBackup, NormalizeDuplicates }
 public sealed record FileIssue(string JobId, string JobName, string File, string Reason,
     long SourceSize, long BackupSize, string SourceModified, string BackupModified,string WaitingSinceUtc="",int RetryCount=0,string LastAttemptUtc="",
-    string SourceCreated="",string BackupCreated="",bool? SourceExists=null,bool? BackupExists=null);
+    string SourceCreated="",string BackupCreated="",bool? SourceExists=null,bool? BackupExists=null,bool AutomaticNetworkRetry=false)
+{
+    [JsonIgnore] public string Handling=>NetworkFailures.Automatic(this) ? "자동 재시도" : "확인 필요";
+}
 public sealed record BackupProgress(string JobId, string JobName, string Stage, string CurrentFile,
     int Completed, int Total, long Bytes = 0, long TotalBytes = 0);
 public sealed class BackupResult

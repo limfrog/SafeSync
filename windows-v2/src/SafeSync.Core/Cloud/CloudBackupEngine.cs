@@ -31,7 +31,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             foreach(var failure in recovery)
             {
                 pending.Add(failure.Relative);blocked.Add(failure.Relative);
-                var issue=Issue(failure.Relative,failure.Error.Message,null,null);
+                var issue=Issue(failure.Relative,failure.Error.Message,null,null) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(failure.Error)};
                 if(failure.Error is CloudConflictException)result.Conflicts.Add(issue);else result.Errors.Add(issue);
             }
             bool full=forceFull || journalInvalid || (reconcileOffline && offline.RequiresScan) || state.FullScanRequired || !DateTime.TryParse(state.LastFullScanUtc,out _);
@@ -150,18 +150,18 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                         entries[relative]=new(){RelativePath=relative,Length=snapshot.Length,SourceFileId=sourceFileId,CreationTimeUtc=snapshot.CreatedUtc.ToString("O"),LastWriteTimeUtc=snapshot.ModifiedUtc.ToString("O"),Status="BackedUp",RemoteId=final.Id,LastAttemptUtc=DateTime.UtcNow.ToString("O"),DeletionSourceVerified=true};
                         lock(checkpointLock){catalog.Update(relative,final);result.Copied++;}handled=true;
                     }
-                    catch(OperationCanceledException){throw;}
-                    catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or HttpRequestException)
+                    catch(OperationCanceledException ex) when(!NetworkFailures.IsTransient(ex) || token.IsCancellationRequested || pause.IsStopRequested){throw;}
+                    catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or HttpRequestException || NetworkFailures.IsTransient(ex))
                     {
                         bool locked=ex is IOException && (ex.HResult&0xFFFF) is 32 or 33;
-                        var issue=Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,target);
+                        var issue=Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,target) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(ex)};
                         string status=locked ? "Locked" : ex is CloudConflictException ? "Conflict" : "Failed";
                         var oldEntry=entries.GetValueOrDefault(relative);
                         if((!info.Exists || ex is BackupRootUnavailableException) && oldEntry!=null){oldEntry.Status=status;oldEntry.LastError=issue.Reason;entries[relative]=oldEntry;}
                         else entries[relative]=FileEntry.From(info,relative,status,issue.Reason);
                         if(locked)issue=LockTracking.Update(entries[relative],oldEntry,issue);
                         lock(checkpointLock){if(locked)result.Locked.Add(issue);else if(ex is CloudConflictException)result.Conflicts.Add(issue);else result.Errors.Add(issue);}
-                        if(ex is HttpRequestException or CloudApiException or BackupRootUnavailableException)stopWork=true;
+                        if(ex is BackupRootUnavailableException || (ex is HttpRequestException or CloudApiException && !NetworkFailures.IsTransient(ex)))stopWork=true;
                     }
                     finally
                     {
@@ -196,9 +196,9 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                             await remote.DeleteAsync(".safesync-trash/"+PathPolicy.Relative(batch.Name),token);
                         }
                 }
-                catch(Exception ex) when(ex is IOException or HttpRequestException){result.Errors.Add(Issue("[휴지통 정리]",ex.Message,null,null));}
+                catch(Exception ex) when(ex is IOException or HttpRequestException || NetworkFailures.IsTransient(ex)){result.Errors.Add(Issue("[휴지통 정리]",ex.Message,null,null) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(ex)});}
             }
-            catch(OperationCanceledException){result.Canceled=true;}
+            catch(OperationCanceledException ex) when(!NetworkFailures.IsTransient(ex) || token.IsCancellationRequested || pause.IsStopRequested){result.Canceled=true;}
             finally{state.CheckpointActive=pending.Count>0;Save();catalog.Save();}
             return result;
             void Save(){state.PendingPaths=pending.Order(StringComparer.OrdinalIgnoreCase).ToList();state.Files=entries.Values.OrderBy(f=>f.RelativePath,StringComparer.OrdinalIgnoreCase).ToList();store.SaveState(state);}

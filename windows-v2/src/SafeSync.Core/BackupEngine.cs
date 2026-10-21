@@ -175,7 +175,7 @@ public sealed class BackupEngine(ConfigStore store)
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
                         var locked = ex is IOException && ((ex.HResult & 0xFFFF) is 32 or 33);
-                        var issue = Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,new FileInfo(destination));
+                        var issue = Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,new FileInfo(destination)) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(ex)};
                         var oldEntry=entries.GetValueOrDefault(relative);
                         if((!info.Exists || ex is BackupRootUnavailableException) && oldEntry!=null)
                         {oldEntry.Status=ex is Cloud.CloudConflictException ? "Conflict" : "Failed";oldEntry.LastError=issue.Reason;entries[relative]=oldEntry;}
@@ -205,7 +205,7 @@ public sealed class BackupEngine(ConfigStore store)
                 try {roots.Check();result.Trashed += await Task.Run(() => new TrashService().RemoveExpired(job.Destination,retentionDays,token,pause.ThrowIfStopRequested)+new TrashService().RemoveExpired(job.Source,retentionDays,token,pause.ThrowIfStopRequested),token);}
                 catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
                 {
-                    result.Errors.Add(new(job.Id,job.Name,"[휴지통 정리]",ex.Message,0,0,"",""));
+                    result.Errors.Add(new(job.Id,job.Name,"[휴지통 정리]",ex.Message,0,0,"","",AutomaticNetworkRetry:NetworkFailures.IsTransient(ex)));
                 }
             }
             catch (OperationCanceledException) { result.Canceled = true; }

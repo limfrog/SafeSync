@@ -132,6 +132,7 @@ internal sealed class MemoryRemote(string provider) : IRemoteStore
     private readonly Dictionary<string,byte[]> content=new(StringComparer.OrdinalIgnoreCase);
     public bool CorruptUpload,FailBeforePublish,LosePublishResponse,CorruptPublish,CorruptDownload;
     public Action<string>? BeforeStat;
+    public Action? BeforeUpload;
     public Task InitializeAsync(CancellationToken token){token.ThrowIfCancellationRequested();return Task.CompletedTask;}
     public Task<RemoteItem?> StatAsync(string path,CancellationToken token){token.ThrowIfCancellationRequested();BeforeStat?.Invoke(path);return Task.FromResult(path.Length==0 ? new RemoteItem(Root,"Test root",true,0,DateTime.MinValue,DateTime.MinValue,"","") : Files.GetValueOrDefault(path));}
     public Task<IReadOnlyList<RemoteItem>> ListAsync(string directory,CancellationToken token){token.ThrowIfCancellationRequested();return Task.FromResult<IReadOnlyList<RemoteItem>>(Files.Where(k=>RemotePath.Parent(k.Key)==directory).Select(k=>k.Value).ToArray());}
@@ -149,7 +150,7 @@ internal sealed class MemoryRemote(string provider) : IRemoteStore
     public byte[] Bytes(string path)=>content[path];
     public async Task<RemoteItem> UploadAsync(UploadSnapshot snapshot,string path,UploadSession session,Action save,PauseGate pause,CancellationToken token)
     {
-        await pause.WaitAsync(token);await EnsureFolderAsync(RemotePath.Parent(path),token);content[path]=File.ReadAllBytes(snapshot.Path);
+        await pause.WaitAsync(token);BeforeUpload?.Invoke();await EnsureFolderAsync(RemotePath.Parent(path),token);content[path]=File.ReadAllBytes(snapshot.Path);
         var item=new RemoteItem(Guid.NewGuid().ToString(),RemotePath.Name(path),false,snapshot.Length,snapshot.ModifiedUtc,snapshot.CreatedUtc,CorruptUpload ? "bad" : snapshot.Hash,"1");CorruptUpload=false;Files[path]=item;session.Offset=snapshot.Length;save();return item;
     }
     public async Task<RemoteItem> MoveAsync(string from,string to,CancellationToken token)

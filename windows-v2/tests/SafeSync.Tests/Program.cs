@@ -209,6 +209,7 @@ try
     await RecoveryRegressionTests.RunAsync(testRoot,Check);
     await FileComparisonTests.RunAsync(testRoot,Check);
     await DeferredResolutionTests.RunAsync(testRoot,Check);
+    await NetworkRetryTests.RunAsync(testRoot,Check);
     await DuplicateResolutionTests.RunAsync(testRoot,Check);
     JobProblemTests.Run(testRoot,Check);
     await ParityTests.RunAsync(testRoot,Check);

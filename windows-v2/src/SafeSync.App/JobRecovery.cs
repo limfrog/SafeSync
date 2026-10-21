@@ -27,8 +27,8 @@ internal sealed partial class DesktopController
     }
     private void RememberResultProblem(BackupJob job,BackupResult result)
     {
-        var issue=result.Errors.FirstOrDefault() ?? result.Conflicts.FirstOrDefault();
-        if(issue!=null)RememberProblem(job,JobProblem.Classify(issue.Reason,job.DestinationType!="Local",result.Errors.Count>0 ? "" : "Conflict",issue.File));
+        var issue=result.Errors.FirstOrDefault(i=>!NetworkFailures.Automatic(i)) ?? result.Conflicts.FirstOrDefault() ?? result.Errors.FirstOrDefault();
+        if(issue!=null)RememberProblem(job,JobProblem.Classify(issue.Reason,job.DestinationType!="Local",NetworkFailures.Automatic(issue) ? "Network" : result.Conflicts.Contains(issue) ? "Conflict" : "",issue.File));
         else if(!result.Canceled)RememberProblem(job,null);
     }
     private void ReplaceRecoveryJob(string oldId,BackupJob replacement)

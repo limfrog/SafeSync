@@ -55,7 +55,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                 foreach(var failure in await publisher.RecoverAsync(resolutions,pause,token))
                 {
                     blocked.Add(failure.Relative);pending.Add(failure.Relative);
-                    var issue=Issue(failure.Relative,failure.Error.Message,null,null);
+                    var issue=Issue(failure.Relative,failure.Error.Message,null,null) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(failure.Error)};
                     if(failure.Error is CloudConflictException)result.Conflicts.Add(issue);else result.Errors.Add(issue);
                 }
             // Enumerations must finish successfully BEFORE ANY deletion. Access
@@ -265,11 +265,11 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                             }
                         }
                     }
-                    catch(OperationCanceledException){throw;}
-                    catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or HttpRequestException)
+                    catch(OperationCanceledException ex) when(!NetworkFailures.IsTransient(ex) || token.IsCancellationRequested || pause.IsStopRequested){throw;}
+                    catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or HttpRequestException || NetworkFailures.IsTransient(ex))
                     {
                         bool locked=ex is IOException && (ex.HResult&0xFFFF) is 32 or 33;
-                        var issue=Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,a,b);
+                        var issue=Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,a,b) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(ex)};
                         // Preserve the LAST SUCCESSFUL pair on failure. Replacing
                         // it with today's partial state can propagate wrong deletes.
                         var entry=previous ?? new FileEntry {RelativePath=relative};
@@ -279,7 +279,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                         if(locked)issue=LockTracking.Update(entry,prior,issue);
                         entries[relative]=entry;
                         if(locked)result.Locked.Add(issue);else if(ex is CloudConflictException)result.Conflicts.Add(issue);else result.Errors.Add(issue);
-                        if(ex is HttpRequestException or CloudApiException)stopRemote=true;
+                        if(ex is HttpRequestException or CloudApiException && !NetworkFailures.IsTransient(ex))stopRemote=true;
                     }
                     finally
                     {
@@ -307,7 +307,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                         }
                     }
                 }
-                catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or HttpRequestException){result.Errors.Add(Issue("휴지통",ex.Message,null,null));}
+                catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or HttpRequestException || NetworkFailures.IsTransient(ex)){result.Errors.Add(Issue("휴지통",ex.Message,null,null) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(ex)});}
             }
             catch(OperationCanceledException) when(token.IsCancellationRequested || pause.IsStopRequested){result.Canceled=true;}
             finally{Save();catalog?.Save();}

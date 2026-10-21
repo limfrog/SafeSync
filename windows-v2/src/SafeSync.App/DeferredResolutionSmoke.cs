@@ -11,6 +11,28 @@ namespace SafeSync.App;
 
 internal sealed partial class DesktopController
 {
+    private int TestNetworkRetryUi()
+    {
+        int assertions=0;void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);assertions++;}
+        foreach(var mode in new[]{"Light","Dark"})
+        {
+            config.ThemeMode=mode;Theme.Apply(Main,mode);
+            var job=new BackupJob{Name="네트워크 자동 재시도",Source=Path.Combine(store.Root,"network-ui-"+mode),Destination=Path.Combine(store.Root,"network-backup-"+mode)};
+            config.Jobs=[job];RefreshJobs();
+            var result=new BackupResult();result.Errors.Add(new(job.Id,job.Name,"offline.txt","예기치 않은 네트워크 오류가 발생했습니다.",0,0,"","",AutomaticNetworkRetry:true));
+            OnStarted(job);OnCompleted(job,result);var run=sessionHistory.Latest(job.Id)!;
+            var panel=ShowFileComparison(job,run);
+            var window=progressWindow!;
+            Check(panel.Find<ListBox>("ComparisonFiles").Items.OfType<ComparisonRow>().All(r=>!r.IsFile),"Transient network failure appeared in file decision list");
+            Check(!panel.Find<Button>("CompareForwardButton").IsEnabled && !panel.Find<Button>("CompareIgnoreButton").IsEnabled,"Network-only error enabled a manual overwrite or ignore");
+            Check(window.Find<DataGrid>("ProgressErrorGrid").Items.OfType<FileIssue>().Single().Handling=="자동 재시도","Network error was removed from error history");
+            Check(!window.Find<Button>("CompareErrorsButton").IsEnabled && window.Find<TextBlock>("ProblemTabHeader").Text=="문제 해결 0","Network-only error requires problem resolution");
+            Check(!noticeLedger.Entries.Any(e=>e.JobId==job.Id) && job.Status=="네트워크 재시도 대기","Network-only error raised a notice or claimed completion");
+            ClearProblemWorkspace();
+        }
+        return assertions;
+    }
+
     private async Task<int> TestDeferredResolutionUiAsync()
     {
         int assertions=0;void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);assertions++;}
@@ -22,7 +44,7 @@ internal sealed partial class DesktopController
             File.WriteAllText(Path.Combine(backup,"a.txt"),"right");File.SetLastWriteTimeUtc(Path.Combine(backup,"a.txt"),DateTime.UtcNow.AddDays(-1));
             File.WriteAllText(Path.Combine(source,"z.txt"),"normal last file");
             var job=new BackupJob{Name="실행 중 처리 예약 검사",Source=source,Destination=backup};config.Jobs=[job];RefreshJobs();
-            var previous=new BackupResult();previous.Errors.Add(new(job.Id,job.Name,"a.txt","이전 실행의 네트워크 오류",4,5,"",""));OnStarted(job);OnCompleted(job,previous);var oldRun=sessionHistory.Latest(job.Id)!;
+            var previous=new BackupResult();previous.Errors.Add(new(job.Id,job.Name,"a.txt","이전 실행의 일반 파일 오류",4,5,"",""));OnStarted(job);OnCompleted(job,previous);var oldRun=sessionHistory.Latest(job.Id)!;
             var reached=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);using var release=new ManualResetEventSlim();bool blocked=false;
             void Block(BackupProgress p){if(p.JobId==job.Id && p.CurrentFile=="z.txt" && !blocked){blocked=true;reached.TrySetResult();if(!release.Wait(TimeSpan.FromSeconds(25)))throw new TimeoutException();}}
             scheduler.Progress+=Block;var lease=scheduler.AcquireRunLease;scheduler.AcquireRunLease=null;

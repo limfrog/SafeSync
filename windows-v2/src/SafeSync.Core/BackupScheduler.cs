@@ -16,6 +16,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     private readonly ConcurrentDictionary<string,Running> running = new();
     private readonly ConcurrentDictionary<string,ConcurrentDictionary<string,long>> changed = new();
     private readonly ConcurrentDictionary<string,DateTime> retries = new();
+    private readonly ConcurrentDictionary<string,int> networkAttempts=new();
     private readonly ConcurrentDictionary<string,DateTime> remotePoll=new();
     private readonly ConcurrentDictionary<string,bool> reconcile = new();
     private readonly ConcurrentDictionary<string,FileSystemWatcher> watchers = new();
@@ -97,6 +98,8 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         public void Dispose(){var value=Interlocked.Exchange(ref owner,null);if(value!=null)lock(value.launchLock)value.updateHolds--;}
     }
     public bool IsStopping => stop.IsCancellationRequested;
+    private void ScheduleNetworkRetry(BackupJob job)
+    {int attempt=networkAttempts.AddOrUpdate(job.Id,1,(_,n)=>Math.Min(n+1,5));retries[job.Id]=DateTime.UtcNow+TimeSpan.FromSeconds(Math.Min(300,30*Math.Pow(2,attempt-1)));}
     private string QueuePath => Path.Combine(store.Root,"pending-changes-v2.json");
 
     public void SetJobs(IEnumerable<BackupJob> source)
@@ -190,33 +193,39 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         try {PersistQueue();}catch {running.TryRemove(job.Id,out _);throw;}
         current.Task = Task.Run(async () =>
         {
-            bool continueRun=true;
+            bool continueRun=true,networkRetried=false,networkPass=false;
             while(continueRun)
             {
             bool completedNormally=false;
+            FileIssue[] networkErrors=[];bool transientFailure=false;
             try
             {
                 Started?.Invoke(job);
+                if(networkPass)Progress?.Invoke(new(job.Id,job.Name,"네트워크 오류 자동 재시도","",0,0));
                 using var lease=AcquireRunLease?.Invoke();
                 var reporter = new DirectProgress(p => Progress?.Invoke(p));
                 var result = await engine.RunAsync(job,full,captured.Select(p => p.Key),current.Pause,reporter,stop.Token,
                     resolutions,reconcile.ContainsKey(job.Id),RetentionDays);
+                networkErrors=result.Errors.Where(NetworkFailures.Automatic).ToArray();
                 if (!result.Canceled)
                 {
                     reconcile.TryRemove(job.Id,out _);
                     if (changes != null)
                         foreach (var item in captured) ((ICollection<KeyValuePair<string,long>>)changes).Remove(item);
                     Interlocked.Increment(ref queueVersion);PersistQueue();
-                    if (result.Locked.Count > 0 || result.Errors.Count > 0) retries[job.Id]=DateTime.UtcNow+(result.Errors.Count>0 ? TimeSpan.FromMinutes(1) : LockedRetryDelay);
+                    if(networkErrors.Length>0)ScheduleNetworkRetry(job);
+                    else if (result.Locked.Count > 0 || result.Errors.Count > 0) retries[job.Id]=DateTime.UtcNow+(result.Errors.Count>0 ? TimeSpan.FromMinutes(1) : LockedRetryDelay);
                     else retries.TryRemove(job.Id,out _);
+                    if(networkErrors.Length==0)networkAttempts.TryRemove(job.Id,out _);
                 }
                 remotePoll[job.Id]=DateTime.UtcNow.AddMinutes(1);Completed?.Invoke(job,result);
                 completedNormally=!result.Canceled;
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException ex) when(stop.IsCancellationRequested || !NetworkFailures.IsTransient(ex)) { }
             catch (Exception ex)
             {
-                retries[job.Id]=DateTime.UtcNow.AddMinutes(1);
+                transientFailure=NetworkFailures.IsTransient(ex);
+                if(transientFailure)ScheduleNetworkRetry(job);else retries[job.Id]=DateTime.UtcNow.AddMinutes(1);
                 Failed?.Invoke(job,ex);
             }
             finally
@@ -225,17 +234,31 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                 lock(launchLock)
                 {
                     var deferred=current.Deferred;current.Deferred=null;
-                    continueRun=deferred!=null && completedNormally && !stop.IsCancellationRequested && updateHolds==0 && !job.Stopped && deferred.Matches(job);
+                    if(deferred!=null && (!completedNormally || !deferred.Matches(job)))
+                    {canceled="현재 작업이 실패했거나 위치·연결이 변경되어 예약한 파일 처리를 취소했습니다. 현재 파일을 다시 확인하세요.";deferred=null;}
+                    bool allowed=!stop.IsCancellationRequested && updateHolds==0 && !job.Stopped;
+                    bool retryNetwork=allowed && !networkRetried && (networkErrors.Length>0 || transientFailure);
+                    continueRun=allowed && (deferred!=null || retryNetwork);
                     if(continueRun)
                     {
                         // Keep ownership of the job across both passes: automatic
                         // retries/manual starts cannot overtake an accepted queue.
-                        resolutions=deferred!.Choices;
+                        var next=new ComparedResolutions();
+                        if(retryNetwork && resolutions is ComparedResolutions previous)
+                        {
+                            foreach(var issue in networkErrors)
+                                if(previous.TryGetValue(issue.File,out var action) && previous.Comparisons.TryGetValue(issue.File,out var comparison))next.Choose(comparison,action);
+                            foreach(var (path,action) in previous.Where(p=>p.Value==ConflictAction.Ignore))next[path]=action;
+                        }
+                        if(deferred!=null)foreach(var (path,action) in deferred.Choices)
+                        {next[path]=action;if(deferred.Choices.Comparisons.TryGetValue(path,out var comparison))next.Comparisons[path]=comparison;else next.Comparisons.Remove(path);}
+                        resolutions=next.Count>0 ? next : null;
                         // Duplicate preparation may legitimately normalize the
                         // engine's dictionary. UI state must read its own stable
                         // copy, never enumerate that dictionary concurrently.
-                        current.Executing=deferred.Choices.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.OrdinalIgnoreCase);
+                        current.Executing=resolutions?.ToDictionary(p=>p.Key,p=>p.Value,StringComparer.OrdinalIgnoreCase);
                         full=false;captured=[];changes=null;
+                        networkPass=retryNetwork;if(retryNetwork)networkRetried=true;
                     }
                     else
                     {

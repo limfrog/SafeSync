@@ -278,11 +278,11 @@ internal sealed partial class DesktopController
         RememberResultProblem(job,result);
         RecordRun(()=>sessionHistory.Complete(job,result));
         results[job.Id]=result;restoredLocked[job.Id]=result.Locked.ToArray();progress.Remove(job.Id);
-        job.Status=job.Stopped ? "대기 중" : result.Canceled ? "중단됨" : result.Errors.Count>0 ? "오류 있음" : result.Conflicts.Count>0 ? "충돌 확인" : result.Locked.Count>0 ? "사용 중 파일 대기" : "완료";
+        job.Status=job.Stopped ? "대기 중" : result.Canceled ? "중단됨" : result.Errors.Count>0 && result.Errors.All(NetworkFailures.Automatic) && result.Conflicts.Count==0 ? "네트워크 재시도 대기" : result.Errors.Count>0 ? "오류 있음" : result.Conflicts.Count>0 ? "충돌 확인" : result.Locked.Count>0 ? "사용 중 파일 대기" : "완료";
         Log($"{job.Name}: 복사 {result.Copied}, 동일 {result.Skipped}, 충돌 {result.Conflicts.Count}, 사용 중 {result.Locked.Count}, 오류 {result.Errors.Count}");
         int newNotices=noticeLedger.Apply(job.Id,result);
         notices.Clear();foreach(var notice in noticeLedger.Entries)notices.Add(notice.JobId+"|"+notice.File+"|"+notice.Message);
-        if(!smoke && newNotices>0 && result.Errors.Count>0 && config.SoundOnBackupError && Main.IsVisible && Main.WindowState==WindowState.Normal)System.Media.SystemSounds.Exclamation.Play();
+        if(!smoke && newNotices>0 && result.Errors.Any(i=>!NetworkFailures.Automatic(i)) && config.SoundOnBackupError && Main.IsVisible && Main.WindowState==WindowState.Normal)System.Media.SystemSounds.Exclamation.Play();
         else if(!smoke && !result.Canceled && result.Errors.Count==0 && config.SoundOnBackupComplete && Main.IsVisible && Main.WindowState==WindowState.Normal)System.Media.SystemSounds.Asterisk.Play();
         Jobs.Items.Refresh();UpdateNotices();RefreshProgress();RefreshActions();RefreshRecoveryWindows();Save();
     }
@@ -290,10 +290,10 @@ internal sealed partial class DesktopController
     {
         RememberProblem(job,JobProblem.From(ex,job.DestinationType!="Local"));
         RecordRun(()=>sessionHistory.Fail(job,ex));
-        progress.Remove(job.Id);job.Status="실패";Log(job.Name+": "+ex.Message);
+        progress.Remove(job.Id);job.Status=NetworkFailures.IsTransient(ex) ? "네트워크 재시도 대기" : "실패";Log(job.Name+": "+ex.Message);
         if(ex is CloudBindingException && job.DestinationType!="Local")
         {job.CloudBindingReviewRequired=true;scheduler.StopJob(job);job.Status="클라우드 연결 확인 필요";Save();RefreshActions();}
-        bool fresh=noticeLedger.Add(job.Id,ex.Message);
+        bool fresh=!NetworkFailures.IsTransient(ex) && noticeLedger.Add(job.Id,ex.Message);
         notices.Remove(job.Id+"|"+ex.Message);
         var visibleNotice=noticeLedger.Entries.FirstOrDefault(n=>n.JobId==job.Id && n.File.Length==0 && n.Message==ex.Message);
         if(visibleNotice!=null)notices.Add(NoticeKey(visibleNotice));

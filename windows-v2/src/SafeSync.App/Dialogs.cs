@@ -297,7 +297,7 @@ internal sealed partial class DesktopController
             }));
             Click(progressWindow,"ApplyConflictActionsButton",()=>{if(ComparisonRunJob() is {} job)ShowFileComparison(job,SelectedRun,(progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem as ConflictRow)?.Issue.File);});
             progressWindow.Find<DataGrid>("ProgressConflictGrid").MouseDoubleClick+=(_,_)=>{if(ComparisonRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem is ConflictRow row)ShowFileComparison(job,SelectedRun,row.Issue.File);};
-            progressWindow.Find<DataGrid>("ProgressErrorGrid").MouseDoubleClick+=(_,_)=>{if(ComparisonRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressErrorGrid").SelectedItem is FileIssue issue)ShowFileComparison(job,SelectedRun,issue.File);};
+            progressWindow.Find<DataGrid>("ProgressErrorGrid").MouseDoubleClick+=(_,_)=>{if(ComparisonRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressErrorGrid").SelectedItem is FileIssue issue && !NetworkFailures.Automatic(issue))ShowFileComparison(job,SelectedRun,issue.File);};
             Click(progressWindow,"CompareErrorsButton",()=>{if(ComparisonRunJob() is {} job)ShowFileComparison(job,SelectedRun);});
         }
         Theme.Apply(progressWindow,config.ThemeMode);
@@ -353,11 +353,12 @@ internal sealed partial class DesktopController
         window.Find<DataGrid>("ProgressLockedGrid").ItemsSource=locked.Select(i=>new {FileDisplay=i.JobName+"\n"+i.File,StatusText=i.Reason,WaitingSince=LocalTime(i.WaitingSinceUtc),RetryCount=i.RetryCount.ToString()+"회",LastAttempt=i.LastAttemptUtc.Length>0 ? LocalTime(i.LastAttemptUtc) : run?.EndedText ?? "—"}).ToArray();
         window.Find<Button>("RetryLockedButton").IsEnabled=run!=null ? sessionHistory.IsLatest(run) && !run.IsActive && locked.Count>0 && currentJob?.Paused==false : Selected?.Paused==false && restoredLocked.GetValueOrDefault(Selected.Id,[]).Length>0;
         var errors=(run?.Errors ?? Array.Empty<FileIssue>()).ToList();
-        if(run?.FailureReason.Length>0)errors.Add(new(run.JobId,run.JobName,"[작업]",run.FailureReason,0,0,"",""));
+        if(run?.FailureReason.Length>0)errors.Add(new(run.JobId,run.JobName,"[작업]",run.FailureReason,0,0,"","",AutomaticNetworkRetry:run.AutomaticNetworkRetry));
         window.Find<DataGrid>("ProgressErrorGrid").ItemsSource=errors;
         window.Find<TextBlock>("ErrorsTabHeader").Text=$"오류 {errors.Count:N0}";
-        window.Find<TextBlock>("ErrorSummaryText").Text=errors.Count==0 ? "이 실행에서 기록된 오류가 없습니다." : $"오류 {errors.Count:N0}개 · 원인을 확인한 뒤 해당 작업을 다시 실행하세요.";
-        window.Find<Button>("CompareErrorsButton").IsEnabled=ComparisonRunJob()!=null && errors.Count>0;
+        int networkErrors=errors.Count(NetworkFailures.Automatic);
+        window.Find<TextBlock>("ErrorSummaryText").Text=errors.Count==0 ? "이 실행에서 기록된 오류가 없습니다." : networkErrors>0 ? $"오류 {errors.Count:N0}개 · 일시적 네트워크 {networkErrors:N0}개는 자동 재시도됩니다. 과거 이력은 당시 기록입니다." : $"오류 {errors.Count:N0}개 · 원인을 확인한 뒤 해당 작업을 다시 실행하세요.";
+        window.Find<Button>("CompareErrorsButton").IsEnabled=ComparisonRunJob()!=null && errors.Any(i=>!NetworkFailures.Automatic(i));
         var choices=conflictRunId==run?.RunId ? conflictRows.ToDictionary(r=>r.Issue.JobId+"|"+r.Issue.File,r=>r.Action) : new Dictionary<string,ConflictAction?>();
         conflictRunId=run?.RunId ?? "";
         bool canResolve=run!=null && !run.IsActive && sessionHistory.IsLatest(run) && currentJob!=null;
@@ -368,7 +369,7 @@ internal sealed partial class DesktopController
         window.Find<TextBlock>("ConflictTabHeader").Text=$"충돌 {conflictRows.Count:N0}";
         foreach(var name in new[]{"ConflictAllOverwriteButton","ConflictAllRenameButton","ConflictAllIgnoreButton","ApplyConflictActionsButton"})window.Find<Button>(name).IsEnabled=canResolve && conflictRows.Any(r=>r.CanResolve);
         window.Find<Button>("ApplyConflictActionsButton").IsEnabled=ComparisonRunJob()!=null && conflictRows.Count>0;
-        window.Find<TextBlock>("ProblemTabHeader").Text=$"문제 해결 {conflictRows.Count+errors.Count:N0}";
+        window.Find<TextBlock>("ProblemTabHeader").Text=$"문제 해결 {conflictRows.Count+errors.Count-networkErrors:N0}";
         if(window.Find<TabItem>("ProblemTab").IsSelected)
         {
             if(currentJob!=null)EnsureProblemWorkspace(currentJob,run);
@@ -543,6 +544,7 @@ internal sealed partial class DesktopController
         assertions+=await TestFailureRecoveryAsync(previewDirectory);
         assertions+=await TestFileComparisonUiAsync(previewDirectory);
         assertions+=await TestDeferredResolutionUiAsync();
+        assertions+=TestNetworkRetryUi();
         config.ThemeMode="Light";
         return assertions;
     }
