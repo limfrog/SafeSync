@@ -2,7 +2,7 @@ name: Windows restart reproduction
 
 on:
   push:
-    branches: ['codex/windows-restart-reproduction-*']
+    branches: [main, 'codex/windows-restart-reproduction-*']
     paths:
       - '.github/workflows/windows-restart-reproduction.yml'
       - 'windows-v2/tests/SafeSync.RestartProbe/**'
