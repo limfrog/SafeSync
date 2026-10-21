@@ -13,7 +13,9 @@ public struct ChangeJournal: Codable, Sendable {
         if requireFull { fullScanGeneration = sequence }
         if let eventID { self.eventID = max(self.eventID ?? 0, eventID) }
     }
-    public func needsFullScan(now: Date = Date()) -> Bool { fullScanGeneration != nil || lastFullScan == nil || now.timeIntervalSince(lastFullScan!) > 7 * 86400 }
+    // Time away alone is not evidence of lost events. Explicit recovery, a missing
+    // checkpoint or an unhealthy watcher still requests a complete inventory.
+    public func needsFullScan(now: Date = Date()) -> Bool { fullScanGeneration != nil || lastFullScan == nil }
     public mutating func acknowledge(through checkpoint: UInt64, full: Bool, retry: [String], now: Date = Date()) {
         pending = pending.filter { $0.value > checkpoint }
         if full {
@@ -27,6 +29,7 @@ public extension SourceScanner {
     static func reconcile(root: URL, known: [String: FileStamp], changed: Set<String>) throws -> [String: FileStamp] {
         if changed.contains("") { return try files(root) }
         let fm = FileManager.default
+        let rootGuard = try LocalRootGuard(root.path)
         var result = known
         for path in changed.sorted() {
             guard !path.hasPrefix("/"), !path.split(separator: "/").contains("..") else { throw BackupError.unsafe("잘못된 변경 경로입니다.") }
@@ -36,6 +39,7 @@ public extension SourceScanner {
             do { values = try candidate.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]) }
             catch let error as NSError {
                 if error.domain == NSCocoaErrorDomain && (error.code == NSFileReadNoSuchFileError || error.code == NSFileNoSuchFileError) {
+                    guard try rootGuard.confirmedMissing(path) else { throw BackupError.fileBusy("변경 확인 중 원본이 다시 나타났습니다.") }
                     for key in Array(result.keys) where key == path || key.hasPrefix(path + "/") { result.removeValue(forKey: key) }; continue
                 }
                 throw error
@@ -48,6 +52,7 @@ public extension SourceScanner {
         }
         // Readability of the root is checked even when no file changed.
         guard fm.isReadableFile(atPath: root.path) else { throw BackupError.unsafe("원본 위치를 읽을 수 없습니다.") }
+        try rootGuard.verify()
         return result
     }
 }

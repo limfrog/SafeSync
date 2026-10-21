@@ -13,9 +13,10 @@ struct IncrementalChecks {
         checkEqual(Set(journal.pending.keys), Set(["failed"])); check(!journal.needsFullScan())
         let persisted = try JSONDecoder().decode(ChangeJournal.self, from: JSONEncoder().encode(journal))
         checkEqual(persisted.pending, journal.pending)
-        check(journal.needsFullScan(now: Date().addingTimeInterval(8 * 86400)))
+        check(!journal.needsFullScan(now: Date().addingTimeInterval(8 * 86400)))
+        check(!journal.needsFullScan(now: Date().addingTimeInterval(365 * 86400)))
         journal.record(paths: [], eventID: 12, requireFull: true); check(journal.needsFullScan())
-        print("PASS durable change queue retains events received during a running backup and falls back after seven days")
+        print("PASS durable change queue retains in-flight events without age-only full rescans")
         let (root, job, engine) = try BackupTests().fixture(); defer { try? FileManager.default.removeItem(at: root) }
         let src = URL(fileURLWithPath: job.source), dst = URL(fileURLWithPath: job.destination), tests = BackupTests()
         try FileManager.default.createDirectory(at: src.appendingPathComponent("nested"), withIntermediateDirectories: true)

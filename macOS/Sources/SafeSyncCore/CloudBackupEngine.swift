@@ -6,13 +6,15 @@ public actor CloudBackupEngine {
     private let dataDirectory: URL
     private let fm = FileManager.default
     private var active: Set<String> = []
-    private struct Record: Codable { var source: FileStamp; var remote: RemoteItem }
+    private struct Record: Codable { var source: FileStamp; var remote: RemoteItem; var verificationVersion: Int? = 1 }
     private struct State: Codable {
         var source: String
         var root: String
         var account: UUID
         var files: [String: Record] = [:]
         var inventory: RemoteIndex?
+        var sourceIdentity: String?
+        var remoteRootIdentity: String?
     }
     private struct Transaction: Codable {
         var path: String
@@ -46,6 +48,13 @@ public actor CloudBackupEngine {
     }
     private func fresh(_ previous: RemoteItem, storage: any RemoteStorage) async throws -> RemoteItem {
         guard let item = try await storage.metadata(previous.id), item.revision == previous.revision, item.parent == previous.parent, item.name == previous.name else { throw BackupError.unsafe("백업 파일이 검사 후 변경되었습니다. 현재 파일을 보존하고 다시 검사합니다.") }; return item
+    }
+    private func verifyRemoteRoot(_ job: BackupJob, storage: any RemoteStorage, expected: String?) async throws -> String {
+        guard let folder = try await storage.metadata(job.cloudFolderID!), folder.folder,
+              expected == nil || folder.id == expected else {
+            throw BackupError.unsafe("클라우드 폴더가 이전 백업과 다르거나 연결할 수 없습니다. 기존 파일을 보존합니다.")
+        }
+        return folder.id
     }
     private func matching(_ expected: RemoteItem, _ actual: RemoteItem) -> Bool {
         expected.id == actual.id && expected.size == actual.size && expected.hash != nil && expected.hash == actual.hash && expected.hashKind == actual.hashKind
@@ -121,9 +130,11 @@ public actor CloudBackupEngine {
     private struct PreparedUpload: Sendable {
         var file: URL; var path: String; var stamp: FileStamp; var parent: String
         var staging: String; var snapshot: URL; var digest: String; var jobID: UUID
+        var sourceGuard: LocalRootGuard
     }
     private func prepare(file: URL, path: String, stamp: FileStamp, job: BackupJob, storage: any RemoteStorage) async throws -> PreparedUpload {
         guard !CloudPathPolicy.isExcluded(path, provider: storage.provider) else { throw BackupError.unsafe("Dropbox가 지원하지 않는 시스템 메타데이터 파일은 전송에서 제외됩니다.") }
+        let sourceGuard = try LocalRootGuard(job.source, expected: loaded(job).sourceIdentity)
         let root = job.cloudFolderID!, parentPath = (path as NSString).deletingLastPathComponent
         let parent = try await storage.folder(path: parentPath, root: root)
         let staging = try await storage.ensureFolder(name: ".safesync-staging", parent: root)
@@ -136,7 +147,8 @@ public actor CloudBackupEngine {
         if !fm.fileExists(atPath: snapshot.path) { try fm.copyItem(at: file, to: snapshot) }
         guard try FileStamp(file) == stamp else { throw BackupError.fileBusy("전송 사본 준비 중 원본이 변경되어 사용 중 대기합니다.") }
         guard try BackupEngine.hash(snapshot) == digest else { throw BackupError.unsafe("전송 사본의 체크섬이 일치하지 않습니다. 기존 백업을 보존합니다.") }
-        return PreparedUpload(file: file, path: path, stamp: stamp, parent: parent, staging: staging.locator, snapshot: snapshot, digest: digest, jobID: job.id)
+        try sourceGuard.verify()
+        return PreparedUpload(file: file, path: path, stamp: stamp, parent: parent, staging: staging.locator, snapshot: snapshot, digest: digest, jobID: job.id, sourceGuard: sourceGuard)
     }
     private nonisolated static func upload(_ prepared: PreparedUpload, storage: any RemoteStorage, progress: @Sendable (String, Int64?) -> Void) async throws -> RemoteItem {
         progress("임시 업로드", 0)
@@ -152,6 +164,7 @@ public actor CloudBackupEngine {
         progress("서버 체크섬 검증", nil)
         guard let verified = try await storage.metadata(staged.id) else { throw BackupError.unsafe("업로드한 파일을 찾을 수 없습니다.") }
         try ContentHash.verify(verified, file: snapshot)
+        try prepared.sourceGuard.verify()
         let sourceLock = try FileAccess.readLock(file); defer { FileAccess.unlock(sourceLock) }
         guard try FileStamp(file) == stamp, try BackupEngine.hash(file) == digest else { throw BackupError.fileBusy("업로드 중 원본이 변경되어 사용 중 대기합니다. 기존 백업은 보존됩니다.") }
         try Task.checkCancellation()
@@ -165,6 +178,8 @@ public actor CloudBackupEngine {
             guard try await storage.children(parent).filter({ $0.name == name }).isEmpty else { throw BackupError.unsafe("전송 중 같은 이름의 백업 파일이 생겼습니다. 다시 검사하세요.") }
         }
         let tx = Transaction(path: path, parent: parent, name: name, staged: verified, previous: previous, archiveParent: archiveParent, archiveName: archiveName)
+        _ = try await verifyRemoteRoot(job, storage: storage, expected: loaded(job).remoteRootIdentity)
+        try prepared.sourceGuard.verify()
         let journal = transactionDirectory(job).appendingPathComponent("\(UUID()).json")
         try Storage.save(tx, to: journal)
         progress("안전한 교체 및 이전 버전 보존", nil)
@@ -181,9 +196,15 @@ public actor CloudBackupEngine {
     public func run(_ job: BackupJob, storage: any RemoteStorage, fullScan: Bool = false, changedPaths: Set<String>? = nil, deferredPaths: Set<String> = [], progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }) async throws -> BackupResult {
         try BackupEngine.validate(job)
         let token = try lease(job); defer { release(token) }
+        var state = try loaded(job), result = BackupResult()
+        let sourceGuard = try LocalRootGuard(job.source, expected: state.sourceIdentity)
+        let legacy = state.sourceIdentity == nil || state.remoteRootIdentity == nil
+        let remoteRoot = try await verifyRemoteRoot(job, storage: storage, expected: state.remoteRootIdentity)
+        try sourceGuard.verify()
+        state.sourceIdentity = sourceGuard.identity; state.remoteRootIdentity = remoteRoot
+        try Storage.save(state, to: stateURL(job))
         progress(BackupProgress(path: "이전 전송 복구 확인", completed: 0, total: 1))
         try await recover(job, storage: storage)
-        var state = try loaded(job), result = BackupResult()
         progress(BackupProgress(path: "클라우드 변경 목록 확인", completed: 0, total: 1))
         let index = try await storage.inventory(root: job.cloudFolderID!, previous: fullScan ? nil : state.inventory)
         state.inventory = index
@@ -199,7 +220,7 @@ public actor CloudBackupEngine {
         } else { remote = listed }
         func entry(_ path: String) -> RemoteItem? { remote[storage.provider == .dropbox ? path.lowercased() : path] }
         let scannedFiles: [String: FileStamp]
-        if let changedPaths, !fullScan, !state.files.isEmpty { scannedFiles = try SourceScanner.reconcile(root: source, known: state.files.mapValues(\.source), changed: changedPaths) }
+        if let changedPaths, !fullScan, !legacy, !state.files.isEmpty { scannedFiles = try SourceScanner.reconcile(root: source, known: state.files.mapValues(\.source), changed: changedPaths) }
         else { scannedFiles = try SourceScanner.files(source) }
         let excluded = Set(scannedFiles.keys).union(state.files.keys).filter { CloudPathPolicy.isExcluded($0, provider: storage.provider) }
         result.evaluatedPaths.formUnion(excluded); result.skipped += excluded.count
@@ -209,8 +230,8 @@ public actor CloudBackupEngine {
         result.evaluatedPaths.formUnion((changedPaths ?? []).filter { !deferredPaths.contains($0) })
         let paths = files.keys.filter { path in
             guard !deferredPaths.contains(path) else { return false }
-            guard let changedPaths, !fullScan else { return true }
-            return groups[path, default: []].count > 1 || state.files[path] == nil || entry(path)?.revision != state.files[path]?.remote.revision || entry(path)?.id != state.files[path]?.remote.id || changedPaths.contains { path == $0 || path.hasPrefix($0 + "/") || $0.isEmpty }
+            guard let changedPaths, !fullScan, !legacy else { return true }
+            return groups[path, default: []].count > 1 || state.files[path]?.verificationVersion != 1 || entry(path)?.revision != state.files[path]?.remote.revision || entry(path)?.id != state.files[path]?.remote.id || changedPaths.contains { path == $0 || path.hasPrefix($0 + "/") || $0.isEmpty }
         }.sorted()
         struct Candidate: Sendable { var file: URL; var path: String; var stamp: FileStamp; var previous: RemoteItem?; var offset: Int }
         var candidates: [Candidate] = []
@@ -218,6 +239,7 @@ public actor CloudBackupEngine {
             result.evaluatedPaths.insert(path)
             try Task.checkCancellation(); progress(BackupProgress(path: path, completed: offset, total: paths.count))
             do {
+                try sourceGuard.verify()
                 let file = try SourceScanner.file(source, path: path), stamp = files[path]!
                 let inspection = try await RemoteDuplicates.inspect(path: path, root: job.cloudFolderID!, storage: storage)
                 if !inspection.groups.isEmpty || inspection.candidates.count > 1 {
@@ -233,8 +255,9 @@ public actor CloudBackupEngine {
                     result.skipped += 1; continue
                 }
                 if let existing = entry(path) {
-                    if !fullScan, let old = state.files[path], old.source == stamp, old.remote.revision == existing.revision, old.remote.id == existing.id { result.skipped += 1; continue }
                     if let hash = existing.hash, let kind = existing.hashKind, existing.size == stamp.size, try ContentHash.compute(file, kind: kind) == hash {
+                        guard try FileStamp(file) == stamp else { throw BackupError.fileBusy("파일 비교 중 원본이 변경되었습니다.") }
+                        try sourceGuard.verify()
                         state.files[path] = Record(source: stamp, remote: existing); result.skipped += 1; continue
                     }
                     if existing.modified.timeIntervalSince(stamp.modified) >= -(storage.provider == .dropbox ? 1 : 0.001) {
@@ -292,28 +315,37 @@ public actor CloudBackupEngine {
                 result.evaluatedPaths.insert(path)
                 try Task.checkCancellation()
                 do {
-                    var directory: ObjCBool = false
-                    guard fm.fileExists(atPath: source.path, isDirectory: &directory), directory.boolValue else { throw BackupError.unsafe("원본 연결이 끊겨 삭제 처리를 멈춥니다.") }
-                    let original = source.appendingPathComponent(path)
-                    if (try? fm.attributesOfItem(atPath: original.path)) != nil { continue }
+                    guard state.files[path]?.verificationVersion == 1 else {
+                        throw BackupError.unsafe("이전 버전 기록의 원본을 재확인하지 못해 클라우드 자동 삭제를 보류합니다. 파일 비교에서 확인하세요.")
+                    }
+                    guard try sourceGuard.confirmedMissing(path) else { continue }
                     let duplicateCheck = try await RemoteDuplicates.inspect(path: path, root: job.cloudFolderID!, storage: storage)
                     guard duplicateCheck.groups.isEmpty, duplicateCheck.candidates.count <= 1 else { throw BackupError.unsafe("중복 사본이 있어 자동 삭제를 보류합니다.") }
                     if let previous = entry(path) {
                         _ = try await fresh(previous, storage: storage)
                         let archive = try await archiveLocation(previous, path: path, root: job.cloudFolderID!, storage: storage)
+                        _ = try await verifyRemoteRoot(job, storage: storage, expected: state.remoteRootIdentity)
+                        _ = try await fresh(previous, storage: storage)
+                        guard try sourceGuard.confirmedMissing(path) else { continue }
                         _ = try await storage.move(previous, name: "payload", parent: archive)
                         result.removed += 1
                     }
+                    try sourceGuard.verify()
                     state.files.removeValue(forKey: path); try Storage.save(state, to: stateURL(job))
                 } catch { result.issues.append(FileAccess.issue(error, jobID: job.id, path: path)) }
             }
         }
+        try sourceGuard.verify()
         try Storage.save(state, to: stateURL(job))
         progress(BackupProgress(path: "완료", completed: paths.count, total: paths.count)); return result
     }
     public func resolve(_ issue: BackupIssue, job: BackupJob, storage: any RemoteStorage, action: ConflictAction) async throws {
         guard action == .overwrite || action == .keepBoth else { throw BackupError.unsafe("파일 비교 화면에서 처리를 선택하세요.") }
         let token = try lease(job); defer { release(token) }
+        let stateBefore = try loaded(job)
+        let sourceGuard = try LocalRootGuard(job.source, expected: stateBefore.sourceIdentity)
+        _ = try await verifyRemoteRoot(job, storage: storage, expected: stateBefore.remoteRootIdentity)
+        try sourceGuard.verify()
         try await recover(job, storage: storage)
         guard let id = issue.remoteID, let previous = try await storage.metadata(id), previous.revision == issue.remoteRevision else { throw BackupError.unsafe("충돌 후 클라우드 파일이 변경되었습니다. 다시 검사하세요.") }
         let file = try SourceScanner.file(BackupEngine.canonical(job.source), path: issue.path), stamp = try FileStamp(file)

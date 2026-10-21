@@ -148,5 +148,6 @@ func fail(_ value: String) { fatalError(value) }
         try await ImprovementChecks.run()
         try await FolderCreationChecks.run()
         try await TwoWayChecks.run()
+        try await SafetyPortChecks.run()
     }
 }

@@ -55,7 +55,10 @@ public enum FileComparisons {
     }
     public static func identity(_ url: URL) throws -> String {
         let info = try FileManager.default.attributesOfItem(atPath: url.path)
-        return "\(info[.systemNumber] ?? "?"):\(info[.systemFileNumber] ?? "?")"
+        guard let device = info[.systemNumber] as? NSNumber, let inode = info[.systemFileNumber] as? NSNumber else {
+            throw BackupError.unsafe("파일시스템 식별정보를 확인할 수 없습니다: \(url.path)")
+        }
+        return "\(device):\(inode)"
     }
     public static func local(root: String, path: String) throws -> ComparedFile? {
         try validatePath(path)

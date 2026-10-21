@@ -140,22 +140,27 @@ public actor BackupEngine {
     public func run(_ job: BackupJob, fullScan: Bool = false, changedPaths: Set<String>? = nil, deferredPaths: Set<String> = [], progress: @Sendable (BackupProgress) -> Void = { _ in }) throws -> BackupResult {
         try Self.validate(job)
         let root = Self.canonical(job.destination), source = Self.canonical(job.source)
-        let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }
-        try recover(root)
         var manifest = try loadManifest(job), result = BackupResult()
+        let sourceGuard = try LocalRootGuard(job.source, expected: manifest.sourceIdentity)
+        let targetGuard = try LocalRootGuard(job.destination, expected: manifest.destinationIdentity)
+        let legacy = manifest.sourceIdentity == nil || manifest.destinationIdentity == nil
+        let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }
+        try sourceGuard.verify(); try targetGuard.verify()
+        try recover(root)
         if let oldSource = manifest.sourceRoot, let oldDestination = manifest.destinationRoot {
             guard oldSource == source.path, oldDestination == root.path else { throw BackupError.unsafe("작업 경로가 이전 백업 기록과 다릅니다. 새 작업으로 등록하세요.") }
         }
         manifest.sourceRoot = source.path; manifest.destinationRoot = root.path
+        manifest.sourceIdentity = sourceGuard.identity; manifest.destinationIdentity = targetGuard.identity
         let files: [String: FileStamp]
-        if let changedPaths, !fullScan, !manifest.files.isEmpty { files = try SourceScanner.reconcile(root: source, known: manifest.files.mapValues(\.source), changed: changedPaths) }
+        if let changedPaths, !fullScan, !legacy, !manifest.files.isEmpty { files = try SourceScanner.reconcile(root: source, known: manifest.files.mapValues(\.source), changed: changedPaths) }
         else { files = try scan(source) }
         // Include removed paths that never had a successful manifest entry (for stale conflict/wait cleanup).
         result.evaluatedPaths.formUnion((changedPaths ?? []).filter { !deferredPaths.contains($0) })
         let paths = files.keys.filter { path in
             guard !deferredPaths.contains(path) else { return false }
-            guard let changedPaths, !fullScan else { return true }
-            return manifest.files[path] == nil || changedPaths.contains { path == $0 || path.hasPrefix($0 + "/") || $0.isEmpty }
+            guard let changedPaths, !fullScan, !legacy else { return true }
+            return manifest.files[path]?.verificationVersion != 1 || changedPaths.contains { path == $0 || path.hasPrefix($0 + "/") || $0.isEmpty }
         }.sorted()
         for (index, path) in paths.enumerated() {
             result.evaluatedPaths.insert(path)
@@ -163,15 +168,17 @@ public actor BackupEngine {
             progress(BackupProgress(path: path, completed: index, total: paths.count, size: files[path]?.size, stage: "파일 비교·검증"))
             try Task.checkCancellation()
             do {
+                try sourceGuard.verify(); try targetGuard.verify()
                 let src = try child(source, path), dst = try child(root, path), stamp = files[path]!
                 let sourceLock = try FileAccess.readLock(src); defer { FileAccess.unlock(sourceLock) }
                 let targetLock = fm.fileExists(atPath: dst.path) ? try FileAccess.readLock(dst) : nil
                 defer { if let targetLock { FileAccess.unlock(targetLock) } }
                 if fm.fileExists(atPath: dst.path) {
                     let backup = try FileStamp(dst)
-                    if let old = manifest.files[path], old.source == stamp, old.backup == backup, !fullScan { result.skipped += 1; continue }
                     let digest = try Self.hash(src)
                     if try Self.hash(dst) == digest {
+                        guard try FileStamp(src) == stamp else { throw BackupError.fileBusy("파일 비교 중 원본이 변경되었습니다.") }
+                        try sourceGuard.verify(); try targetGuard.verify()
                         manifest.files[path] = FileRecord(source: stamp, backup: backup, hash: digest)
                         result.skipped += 1; continue
                     }
@@ -189,9 +196,12 @@ public actor BackupEngine {
                         try? fm.removeItem(at: preserved)
                         throw BackupError.unsafe("삭제된 백업을 보호하는 동안 원본이 변경되었습니다.")
                     }
+                    try sourceGuard.verify(); try targetGuard.verify()
                     try archive(preserved, path: path, root: root)
                 }
-                let digest = try transfer(src, to: dst, path: path, root: root, expected: stamp)
+                let digest = try transfer(src, to: dst, path: path, root: root, expected: stamp, validate: {
+                    try sourceGuard.verify(); try targetGuard.verify()
+                })
                 manifest.files[path] = FileRecord(source: stamp, backup: try FileStamp(dst), hash: digest)
                 result.copied += 1
                 try Storage.save(manifest, to: manifestURL(job))
@@ -203,19 +213,27 @@ public actor BackupEngine {
                 result.evaluatedPaths.insert(path)
                 try Task.checkCancellation()
                 do {
-                    // Never infer deletion from a disconnected or unreadable source.
-                    var isDir: ObjCBool = false
-                    guard fm.fileExists(atPath: source.path, isDirectory: &isDir), isDir.boolValue else { throw BackupError.unsafe("원본 연결이 끊겨 삭제 처리를 중단합니다.") }
-                    let original = try child(source, path)
-                    // A skipped symbolic link or an unreadable entry is not a deletion.
-                    if (try? fm.attributesOfItem(atPath: original.path)) != nil { continue }
+                    try targetGuard.verify()
+                    guard manifest.files[path]?.verificationVersion == 1 else {
+                        throw BackupError.unsafe("이전 버전 기록의 원본을 재확인하지 못해 자동 삭제를 보류합니다. 파일 비교에서 확인하세요.")
+                    }
+                    guard try sourceGuard.confirmedMissing(path) else { continue }
                     let dst = try child(root, path)
-                    if fm.fileExists(atPath: dst.path) { try archive(dst, path: path, root: root); result.removed += 1 }
+                    if !(try targetGuard.confirmedMissing(path)) {
+                        guard let backup = try FileComparisons.local(root: root.path, path: path), !backup.folder,
+                              backup.hash == manifest.files[path]?.hash else {
+                            throw BackupError.unsafe("삭제 비교 후 백업 내용 또는 파일 종류가 변경되어 보존합니다.")
+                        }
+                        try targetGuard.verify()
+                        guard try sourceGuard.confirmedMissing(path) else { continue }
+                        try archive(dst, path: path, root: root); result.removed += 1
+                    }
                     manifest.files.removeValue(forKey: path)
                     try Storage.save(manifest, to: manifestURL(job))
                 } catch { result.issues.append(FileAccess.issue(error, jobID: job.id, path: path)) }
             }
         }
+        try sourceGuard.verify(); try targetGuard.verify()
         try Storage.save(manifest, to: manifestURL(job))
         progress(BackupProgress(path: "완료", completed: paths.count, total: paths.count))
         return result
@@ -224,7 +242,11 @@ public actor BackupEngine {
         guard action == .overwrite || action == .keepBoth else { throw BackupError.unsafe("파일 비교 화면에서 처리를 선택하세요.") }
         try Self.validate(job)
         let root = Self.canonical(job.destination), source = Self.canonical(job.source)
+        var manifest = try loadManifest(job)
+        let sourceGuard = try LocalRootGuard(job.source, expected: manifest.sourceIdentity)
+        let targetGuard = try LocalRootGuard(job.destination, expected: manifest.destinationIdentity)
         let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }
+        try sourceGuard.verify(); try targetGuard.verify()
         try recover(root)
         let src = try child(source, issue.path), dst = try child(root, issue.path)
         let stamp = try FileStamp(src)
@@ -234,8 +256,10 @@ public actor BackupEngine {
             try fm.copyItem(at: dst, to: sibling)
             guard try Self.hash(sibling) == Self.hash(dst) else { throw BackupError.unsafe("이전 버전 복사 검증에 실패했습니다.") }
         }
-        let digest = try transfer(src, to: dst, path: issue.path, root: root, expected: stamp)
-        var manifest = try loadManifest(job)
+        let digest = try transfer(src, to: dst, path: issue.path, root: root, expected: stamp, validate: {
+            try sourceGuard.verify(); try targetGuard.verify()
+        })
+        manifest.sourceIdentity = sourceGuard.identity; manifest.destinationIdentity = targetGuard.identity
         manifest.files[issue.path] = FileRecord(source: stamp, backup: try FileStamp(dst), hash: digest)
         try Storage.save(manifest, to: manifestURL(job))
     }

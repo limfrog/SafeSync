@@ -6,6 +6,10 @@ actor MemoryCloud: RemoteStorage {
     private var items: [String: RemoteItem] = [:]
     private var data: [String: Data] = [:]
     private var counter = 0
+    private var rootIdentity: String?
+    private var trashUploadHook: (@Sendable () -> Void)?
+    func setRootIdentity(_ value: String) { rootIdentity = value }
+    func onTrashUpload(_ action: @escaping @Sendable () -> Void) { trashUploadHook = action }
     var uploadDelay: UInt64 = 0
     var activeUploads = 0
     var maximumUploads = 0
@@ -22,7 +26,7 @@ actor MemoryCloud: RemoteStorage {
     func setMutation(_ value: Bool) { mutateOnUpload = value }
     private func location(_ name: String, parent: String, id: String) -> String { provider == .dropbox ? (parent + "/" + name).lowercased() : id }
     func children(_ parent: String) -> [RemoteItem] { items.values.filter { $0.parent == parent } }
-    func metadata(_ id: String) -> RemoteItem? { if id == "" || id == "root" { return RemoteItem(id: id, name: "root", parent: "", folder: true, locator: id) }; return items[id] ?? items.values.first { $0.locator == id } }
+    func metadata(_ id: String) -> RemoteItem? { if id == "" || id == "root" { return RemoteItem(id: rootIdentity ?? id, name: "root", parent: "", folder: true, locator: id) }; return items[id] ?? items.values.first { $0.locator == id } }
     func createFolder(name: String, parent: String) -> RemoteItem {
         counter += 1; let id = "id-\(counter)"
         let item = RemoteItem(id: id, name: name, parent: parent, folder: true, revision: String(counter), locator: location(name, parent: parent, id: id))
@@ -31,6 +35,7 @@ actor MemoryCloud: RemoteStorage {
     func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String, progress: @Sendable (Int64, Int64) -> Void) async throws -> RemoteItem {
         activeUploads += 1; maximumUploads = max(maximumUploads, activeUploads)
         defer { activeUploads -= 1 }
+        if name == "metadata.json", let hook = trashUploadHook { trashUploadHook = nil; hook() }
         if uploadDelay > 0 { try await Task.sleep(nanoseconds: uploadDelay) }
         if let failName, resumeKey.contains("|" + failName + "|") { throw BackupError.unsafe("Injected file upload failure") }
         if mutateOnUpload, let old = items.values.first(where: { $0.name == "a.txt" }) {

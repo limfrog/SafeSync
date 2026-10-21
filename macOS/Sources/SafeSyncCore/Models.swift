@@ -41,11 +41,14 @@ public struct FileRecord: Codable, Sendable {
     public var source: FileStamp
     public var backup: FileStamp
     public var hash: String
+    public var verificationVersion: Int? = 1
 }
 public struct Manifest: Codable, Sendable {
     public var files: [String: FileRecord] = [:]
     public var sourceRoot: String?
     public var destinationRoot: String?
+    public var sourceIdentity: String?
+    public var destinationIdentity: String?
     public init() {}
 }
 public struct BackupIssue: Identifiable, Codable, Sendable {
