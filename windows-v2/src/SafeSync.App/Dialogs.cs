@@ -542,6 +542,7 @@ internal sealed partial class DesktopController
         assertions+=await TestRecoveryUiAsync(previewDirectory);
         assertions+=await TestFailureRecoveryAsync(previewDirectory);
         assertions+=await TestFileComparisonUiAsync(previewDirectory);
+        assertions+=await TestDeferredResolutionUiAsync();
         config.ThemeMode="Light";
         return assertions;
     }

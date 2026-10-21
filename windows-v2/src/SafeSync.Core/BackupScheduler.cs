@@ -8,6 +8,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     {
         public PauseGate Pause { get; } = new();
         public Task Task { get; set; } = Task.CompletedTask;
+        public DeferredResolutions? Deferred {get;set;}
     }
     private readonly BackupEngine engine = new(store);
     private readonly CancellationTokenSource stop = new();
@@ -29,12 +30,31 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     public event Action<BackupJob>? Started;
     public event Action<BackupJob,BackupResult>? Completed;
     public event Action<BackupJob,Exception>? Failed;
+    public event Action<BackupJob,string>? ResolutionsCanceled;
     public Func<IDisposable>? AcquireRunLease { get; set; }
     public Func<BackupJob,Cloud.IRemoteStore>? CloudFactory {get=>engine.CloudFactory;set=>engine.CloudFactory=value;}
     public int RetentionDays { get; set; } = 100;
     public TimeSpan LockedRetryDelay {get;set;}=TimeSpan.FromSeconds(20);
     public bool IsRunning(string id) => running.ContainsKey(id);
     public int RunningCount => running.Count;
+    public int QueuedResolutionCount(string id){lock(launchLock)return running.TryGetValue(id,out var current) ? current.Deferred?.Choices.Count ?? 0 : 0;}
+    public bool TryQueueResolutions(BackupJob job,ComparedResolutions choices)
+    {
+        lock(launchLock)
+        {
+            if(choices.Count==0 || stop.IsCancellationRequested || updateHolds>0 || job.Stopped || !running.TryGetValue(job.Id,out var current))return false;
+            var pending=current.Deferred ?? new DeferredResolutions(job);
+            pending.Merge(job,choices);current.Deferred=pending;
+        }
+        StateChanged?.Invoke(job);return true;
+    }
+    public void CancelQueuedResolutions(BackupJob job)
+    {
+        bool canceled;
+        lock(launchLock){canceled=running.TryGetValue(job.Id,out var current) && current.Deferred!=null;if(canceled)current!.Deferred=null;}
+        if(canceled)ResolutionsCanceled?.Invoke(job,"사용자가 예약한 파일 처리를 취소했습니다. 파일은 변경하지 않았습니다.");
+        StateChanged?.Invoke(job);
+    }
     private int updateHolds;
     public async Task<IDisposable> HoldForUpdateAsync(CancellationToken token)
     {
@@ -148,6 +168,10 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
         try {PersistQueue();}catch {running.TryRemove(job.Id,out _);throw;}
         current.Task = Task.Run(async () =>
         {
+            bool continueRun=true;
+            while(continueRun)
+            {
+            bool completedNormally=false;
             try
             {
                 Started?.Invoke(job);
@@ -165,6 +189,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                     else retries.TryRemove(job.Id,out _);
                 }
                 remotePoll[job.Id]=DateTime.UtcNow.AddMinutes(1);Completed?.Invoke(job,result);
+                completedNormally=!result.Canceled;
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
@@ -172,7 +197,29 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                 retries[job.Id]=DateTime.UtcNow.AddMinutes(1);
                 Failed?.Invoke(job,ex);
             }
-            finally { running.TryRemove(job.Id,out _);StateChanged?.Invoke(job); }
+            finally
+            {
+                string? canceled=null;
+                lock(launchLock)
+                {
+                    var deferred=current.Deferred;current.Deferred=null;
+                    continueRun=deferred!=null && completedNormally && !stop.IsCancellationRequested && updateHolds==0 && !job.Stopped && deferred.Matches(job);
+                    if(continueRun)
+                    {
+                        // Keep ownership of the job across both passes: automatic
+                        // retries/manual starts cannot overtake an accepted queue.
+                        resolutions=deferred!.Choices;full=false;captured=[];changes=null;
+                    }
+                    else
+                    {
+                        running.TryRemove(job.Id,out _);
+                        if(deferred!=null)canceled="현재 작업이 중단·실패했거나 위치·연결이 변경되어 예약한 파일 처리를 취소했습니다. 현재 파일을 다시 확인하세요.";
+                    }
+                }
+                if(canceled!=null)ResolutionsCanceled?.Invoke(job,canceled);
+                StateChanged?.Invoke(job);
+            }
+            }
         });
         return current.Task;
         }

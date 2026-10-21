@@ -7,10 +7,12 @@ on:
       - '.github/workflows/windows-restart-reproduction.yml'
       - 'windows-v2/tests/SafeSync.RestartProbe/**'
       - 'windows-v2/src/SafeSync.Core/**'
+      - 'windows-v2/src/SafeSync.App/**'
       - 'windows-v2/tests/SafeSync.Tests/**'
       - 'windows-v2/Directory.Build.props'
       - 'windows-v2/README-ko.md'
       - 'windows-v2/PREVIEW15-VALIDATION.md'
+      - 'windows-v2/PREVIEW16-VALIDATION.md'
       - 'windows-v2/scripts/Build.ps1'
   workflow_dispatch:
   workflow_call:
@@ -83,10 +85,10 @@ jobs:
         if: success() && matrix.os == 'windows-2022'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-preview15-package
+          name: windows-preview16-package
           path: |
-            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.15.exe
-            windows-v2/artifacts/SafeSync-1.0.0-preview.15-Windows-x64.zip
+            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.16.exe
+            windows-v2/artifacts/SafeSync-1.0.0-preview.16-Windows-x64.zip
           if-no-files-found: error
           retention-days: 7
       - name: Upload synthetic test reports even on failure

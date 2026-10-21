@@ -84,6 +84,7 @@ internal sealed partial class DesktopController
         scheduler.Started += job=>app.Dispatcher.BeginInvoke(()=>OnStarted(job));
         scheduler.Completed += (job,result) => app.Dispatcher.BeginInvoke(() => OnCompleted(job,result));
         scheduler.Failed += (job,error) => app.Dispatcher.BeginInvoke(() => OnFailed(job,error));
+        scheduler.ResolutionsCanceled += (job,reason)=>app.Dispatcher.BeginInvoke(()=>Log(job.Name+": "+reason));
         scheduler.StateChanged += job=>app.Dispatcher.BeginInvoke(()=>
         {
             if(job.Stopped)job.Status=job.CloudBindingReviewRequired ? "클라우드 연결 확인 필요" : scheduler.IsRunning(job.Id) ? "종료 중…" : "대기 중";
