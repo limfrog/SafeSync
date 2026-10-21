@@ -26,8 +26,8 @@ struct AboutView: View {
             Text("버전 \(AppInformation.version) (\(AppInformation.build)) · macOS").foregroundStyle(.secondary)
             Text("파일을 안전하게, 백업은 자동으로").font(.callout)
             Divider().padding(.vertical, 6)
-            LabeledContent("제작자", value: "임호")
-            LabeledContent("이메일") { Text("limfrog75@gmail.com").textSelection(.enabled) }
+            LabeledContent("개발자", value: "Horizon Entertainment")
+            LabeledContent("이메일") { Link("apps@horizonent.co.kr", destination: URL(string: "mailto:apps@horizonent.co.kr")!) }
             Link("GitHub · 소스 및 업데이트", destination: URL(string: "https://github.com/limfrog/SafeSync")!)
                 .padding(.top, 8)
         }.padding(30).frame(width: 390)

@@ -1,0 +1,42 @@
+name: Build macOS application
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'macOS/**'
+      - '.github/workflows/build-macos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Universal application
+        working-directory: macOS
+        run: ARCHITECTURE=universal ./scripts/build-app.sh
+      - name: Preserve published desktop registration and verify bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous="$RUNNER_TEMP/safesync-previous"
+          ditto -x -k dist/SafeSync-macOS-0.3.7-universal.zip "$previous"
+          registration="$previous/SafeSync.app/Contents/Resources/GoogleDesktopOAuth.plist"
+          test -f "$registration"
+          cp "$registration" macOS/build/SafeSync.app/Contents/Resources/GoogleDesktopOAuth.plist
+          codesign --force --deep --sign - macOS/build/SafeSync.app
+          codesign --verify --deep --strict macOS/build/SafeSync.app
+          plutil -lint macOS/build/SafeSync.app/Contents/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' macOS/build/SafeSync.app/Contents/Info.plist)" = '0.3.8'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSHumanReadableCopyright' macOS/build/SafeSync.app/Contents/Info.plist)" = 'SafeSync · Horizon Entertainment'
+          lipo -info macOS/build/SafeSync.app/Contents/MacOS/SafeSync
+          ditto -c -k --sequesterRsrc --keepParent macOS/build/SafeSync.app "$RUNNER_TEMP/SafeSync-macOS-0.3.8-universal.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SafeSync-macOS-0.3.8-universal
+          path: ${{ runner.temp }}/SafeSync-macOS-0.3.8-universal.zip
+          retention-days: 7
