@@ -63,7 +63,12 @@ public static class OfflineJournal
     {
         root=PathPolicy.Root(root);var volumeRoot=Path.GetPathRoot(root);
         if(!OperatingSystem.IsWindows() || volumeRoot==null || volumeRoot.Length!=3 || volumeRoot[1]!=':')return new(null,true,[]);
-        using var volume=CreateFile(@"\\.\"+volumeRoot[..2],0,7,IntPtr.Zero,3,0,IntPtr.Zero);
+        // A metadata-only (zero-access) handle can open successfully while NTFS
+        // rejects FSCTL_QUERY_USN_JOURNAL with ERROR_INVALID_FUNCTION. Request
+        // read access, never write access or an elevation prompt. If the current
+        // account cannot open that handle, retain the metadata-only compatibility
+        // path; failure still means a safe scan, not an empty change set.
+        using var volume=OpenJournalVolume(volumeRoot);
         if(volume.IsInvalid)return new(null,true,[]);
         int outputSize=1024*1024;var output=Marshal.AllocHGlobal(outputSize);var input=Marshal.AllocHGlobal(Marshal.SizeOf<ReadData>());
         try
@@ -108,5 +113,13 @@ public static class OfflineJournal
             return new(checkpoint,false,paths.ToArray());
         }
         finally{Marshal.FreeHGlobal(input);Marshal.FreeHGlobal(output);}
+    }
+    private static SafeFileHandle OpenJournalVolume(string volumeRoot)
+    {
+        var name=@"\\.\"+volumeRoot[..2];
+        var handle=CreateFile(name,0x80000000,7,IntPtr.Zero,3,0,IntPtr.Zero);
+        if(!handle.IsInvalid)return handle;
+        handle.Dispose();
+        return CreateFile(name,0,7,IntPtr.Zero,3,0,IntPtr.Zero);
     }
 }

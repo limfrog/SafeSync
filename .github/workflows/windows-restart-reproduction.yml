@@ -2,11 +2,13 @@ name: Windows restart reproduction
 
 on:
   push:
-    branches: [main, 'codex/windows-restart-reproduction-*']
+    branches: [main, 'codex/windows-restart-reproduction-*', 'codex/fix-restart-index-*']
     paths:
       - '.github/workflows/windows-restart-reproduction.yml'
       - 'windows-v2/tests/SafeSync.RestartProbe/**'
       - 'windows-v2/src/SafeSync.Core/**'
+      - 'windows-v2/tests/SafeSync.Tests/**'
+      - 'windows-v2/Directory.Build.props'
   workflow_dispatch:
   workflow_call:
 
@@ -56,7 +58,7 @@ jobs:
           @("SAFESYNC_PROBE_LOCAL=$letter`:\fixtures", "SAFESYNC_PROBE_UNC=\\localhost\$share", "SAFESYNC_PROBE_REPORT=$report", "SAFESYNC_PROBE_SHARE=$share", "SAFESYNC_PROBE_VHD=$vhd") | Add-Content $env:GITHUB_ENV
           git rev-parse HEAD | Set-Content (Join-Path $report 'tested-commit.txt')
           Get-ChildItem windows-v2/src/SafeSync.Core -File -Recurse | Get-FileHash -Algorithm SHA256 | Select-Object Path,Hash | ConvertTo-Json | Set-Content (Join-Path $report 'production-core-hashes.json')
-      - name: Build test harness without changing production code
+      - name: Build restart test harness
         run: dotnet build windows-v2/tests/SafeSync.RestartProbe -c Release
       - name: Reproduce scheduler startup in fresh processes
         run: |
@@ -69,6 +71,21 @@ jobs:
         run: |
           dotnet run --project windows-v2/tests/SafeSync.Tests -c Release -- $env:RUNNER_TEMP | Tee-Object -FilePath (Join-Path $env:SAFESYNC_PROBE_REPORT 'regression.txt')
           if ($LASTEXITCODE -ne 0) { throw 'Existing regression suite failed.' }
+      - name: Build and verify preview installer in isolated Windows environment
+        if: success() && matrix.os == 'windows-2022'
+        run: |
+          & ./windows-v2/scripts/Build.ps1 -DotnetPath (Get-Command dotnet).Source -BundleRuntime -RunTests
+          if ($LASTEXITCODE -ne 0) { throw 'Preview build or installer validation failed.' }
+      - name: Upload verified Windows installer and bundled application
+        if: success() && matrix.os == 'windows-2022'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-preview15-package
+          path: |
+            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.15.exe
+            windows-v2/artifacts/SafeSync-1.0.0-preview.15-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload synthetic test reports even on failure
         if: always()
         uses: actions/upload-artifact@v4

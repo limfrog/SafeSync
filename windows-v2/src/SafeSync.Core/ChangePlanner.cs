@@ -9,11 +9,15 @@ public static class ChangePlanner
         {
             boundary?.Invoke();token.ThrowIfCancellationRequested();var relative=PathPolicy.Relative(path);if(PathPolicy.Internal(relative))continue;
             pending.Add(relative);
-            // Existing snapshot entries are files: avoid a NAS directory query
-            // and an O(snapshot size) prefix scan for every changed file.
-            if(known.ContainsKey(relative))continue;
-            var source=PathPolicy.Combine(root,relative);directories.Add(relative);
-            if(Directory.Exists(source))foreach(var file in FileTree.Scan(source,token,_=>boundary?.Invoke())){boundary?.Invoke();pending.Add(PathPolicy.Relative(Path.GetRelativePath(root,file.FullName)));}
+            // A changed tracked file may now be a directory, and old versions
+            // could persist directory events as bogus file conflicts. Inspect
+            // the current kind instead of trusting that stale snapshot kind.
+            // Keep the directory itself for file/folder collision checks; its
+            // children, not the directory, are the file copy/deletion work.
+            var source=PathPolicy.Combine(root,relative);bool directory=Directory.Exists(source);
+            if(!directory && known.ContainsKey(relative))continue;
+            directories.Add(relative);
+            if(directory)foreach(var file in FileTree.Scan(source,token,_=>boundary?.Invoke())){boundary?.Invoke();pending.Add(PathPolicy.Relative(Path.GetRelativePath(root,file.FullName)));}
         }
         if(directories.Count==0)return;
         foreach(var relative in known.Keys)

@@ -166,6 +166,11 @@ internal static class Probe
                     Check(Healthy(restart) && restart.Copied == 0 && restart.Trashed == 0, name + ": no unchanged retransfer " + repetition);
                     Check(SameInventory(baseline, await InventoryAsync(backup), true), name + ": unchanged backup contents/IDs/timestamps preserved " + repetition);
                     Check(restart.PendingAfter == 0 && !restart.CheckpointActiveAfter, name + ": completed snapshot preserved " + repetition);
+                    if(!sourceSmb && !backupSmb)
+                    {
+                        Check(restart.SourceJournalSaved && restart.BackupJournalSaved, name + ": real NTFS checkpoints persisted " + repetition);
+                        if(repetition==2)Check(!restart.SourceFullScan && !restart.BackupFullScan && restart.ComparedPaths==0, name + ": clean second restart does not rescan/hash unchanged files");
+                    }
                 }
                 // All workers are gone. Changes are deliberately NOT passed to RunAsync as known paths.
                 Write(source, "offline/new.bin", [1, 2, 3, 4, 5]);

@@ -83,6 +83,21 @@ public sealed class BackupEngine(ConfigStore store)
                     {
                         roots.Check();
                         var action = resolutions != null && resolutions.TryGetValue(relative,out var choice) ? choice : (ConflictAction?)null;
+                        if(Directory.Exists(source))
+                        {
+                            // Watchers/USN report directories as well as files.
+                            // FileInfo.Exists is false for an existing directory;
+                            // it must never enter missing-file/deletion handling.
+                            // Clear only this obsolete file row, preserving child
+                            // baselines and every physical backup item.
+                            if(action==ConflictAction.Ignore){handled=true;result.Skipped++;continue;}
+                            await FileComparisons.VerifyAsync(job,relative,null,resolutions,token);
+                            var targetKind=FileComparisons.ReadLocal(job.Destination,relative);
+                            if(targetKind is {Folder:false})throw new Cloud.CloudConflictException(relative,"원본 폴더와 백업 파일의 경로가 충돌합니다. 기존 백업을 보존했습니다.");
+                            if(action is ConflictAction.Overwrite or ConflictAction.KeepBoth or ConflictAction.UseBackup)
+                                throw new Cloud.CloudConflictException(relative,"폴더 항목은 파일 덮어쓰기나 복원으로 처리할 수 없습니다. 현재 항목을 다시 확인하세요.");
+                            entries.Remove(relative);handled=true;continue;
+                        }
                         if(action==ConflictAction.Ignore){entries[relative]=FileEntry.From(info,relative,"Conflict","이번 동기화에서 제외");handled=true;result.Skipped++;continue;}
                         await FileComparisons.VerifyAsync(job,relative,null,resolutions,token);
                         if(action==ConflictAction.UseBackup)
