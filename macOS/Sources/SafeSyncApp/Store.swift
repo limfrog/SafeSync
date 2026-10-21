@@ -20,6 +20,21 @@ import CoreServices
         !session.active && sessions.first(where: { $0.job.id == session.job.id })?.id == session.id &&
         jobs.contains { FileComparisons.sameEndpoints($0, session.job) } && running[session.job.id] == nil && !busyTrash && !isImportingJobList
     }
+    func isRunning(_ id: UUID) -> Bool { running[id] != nil }
+    func canBeginReview(_ session: SyncSession) -> Bool {
+        jobs.contains { FileComparisons.sameEndpoints($0, session.job) } && running[session.job.id] == nil &&
+        sessions.first(where: { $0.job.id == session.job.id })?.active == false && !busyTrash && !isImportingJobList
+    }
+    func beginReview(_ session: SyncSession) -> ComparisonReview? {
+        guard canBeginReview(session), let current = sessions.first(where: { $0.job.id == session.job.id }),
+              let job = jobs.first(where: { FileComparisons.sameEndpoints($0, session.job) }) else { return nil }
+        return ComparisonReview(job: job, sessionID: current.id)
+    }
+    func canUseReview(_ review: ComparisonReview) -> Bool {
+        guard let job = jobs.first(where: { $0.id == review.job.id }), !busyTrash, !isImportingJobList else { return false }
+        let latest = sessions.first(where: { $0.job.id == job.id })
+        return review.allows(job: job, sessionID: latest?.id, running: running[job.id] != nil || latest?.active == true)
+    }
     func navigate(_ tab: WorkspaceTab) { workspace = tab; if tab == .trash { loadTrash() } }
     func showProblems(_ issue: BackupIssue? = nil) { workspace = .sync; detailTab = .problems; problemSelection = issue?.id }
     @Published var validatingCloud = false
@@ -76,7 +91,7 @@ import CoreServices
         retries = retries.filter { knownIDs.contains($0.key) }
         installWindowPolicy()
         rebuildWatchers()
-        log("SafeSync macOS 개발 버전 · 로컬 / 외장 / 마운트된 네트워크 폴더")
+        log("SafeSync \(AppInformation.version) 시작")
         timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in Task { @MainActor in self?.tick() } }
     }
     func log(_ text: String) { activity.insert("\(Date().formatted(date: .omitted, time: .standard))  \(text)", at: 0); activity = Array(activity.prefix(300)) }
@@ -351,8 +366,12 @@ import CoreServices
             catch { self.error = error.localizedDescription }
         }
     }
-    func applyDecisions(_ decisions: [ResolutionDecision], session: SyncSession) {
-        guard canRepair(session), let job = jobs.first(where: { $0.id == session.job.id }) else { error = "최신 완료 기록에서만 처리할 수 있습니다."; return }
+    func applyDecisions(_ decisions: [ResolutionDecision], session: SyncSession, review: ComparisonReview? = nil) {
+        let authorized = review.map { canUseReview($0) && FileComparisons.sameEndpoints($0.job, session.job) } ?? canRepair(session)
+        guard authorized, !decisions.isEmpty, let job = jobs.first(where: { FileComparisons.sameEndpoints($0, session.job) }),
+              decisions.allSatisfy({ FileComparisons.sameEndpoints($0.comparison.job, job) }) else {
+            error = "작업이 실행 중이거나 비교 후 상태가 바뀌었습니다. 대기 상태에서 현재 파일을 다시 비교하세요."; return
+        }
         var runnable = job; runnable.paused = false
         if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].paused = false }
         workspace = .sync; detailTab = .progress

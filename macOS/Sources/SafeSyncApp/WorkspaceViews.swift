@@ -23,7 +23,7 @@ struct ProgressViewScreen: View {
                     location("원본", path: run.job.source)
                     Image(systemName: run.job.mode == .twoWay ? "arrow.left.arrow.right" : "arrow.right").foregroundStyle(Color.accentColor)
                     location("백업", path: run.job.destination)
-                    if !run.active && !store.canRepair(run) { Text("이전 기록 · 읽기 전용").font(.caption).foregroundStyle(.secondary) }
+                    if !run.active && !store.canRepair(run) { Text("이전 기록 · 문제 해결에서 현재 파일 재비교 가능").font(.caption).foregroundStyle(.secondary) }
                 }
             }
             TabView(selection: $store.detailTab) {
@@ -94,9 +94,11 @@ struct ProblemWorkspace: View {
     @ViewState private var failure: String?
     @ViewState private var confirm = false
     @ViewState private var generation = UUID()
+    @ViewState private var review: ComparisonReview?
     var chosen: [BackupIssue] { issues.filter { selection.contains($0.id) } }
     var focused: FileComparison? { chosen.first.flatMap { comparisons[$0.id] } }
-    var editable: Bool { run.map { store.canRepair($0) } ?? false }
+    var editable: Bool { review.map { store.canUseReview($0) } ?? false }
+    var latestRunID: UUID? { run.flatMap { selected in store.sessions.first(where: { $0.job.id == selected.job.id })?.id } }
     var body: some View {
         HSplitView {
             List(issues, selection: $selection) { issue in
@@ -125,26 +127,33 @@ struct ProblemWorkspace: View {
                             if let run, editable { Button("작업 수정") { store.editing = store.jobs.first { $0.id == run.job.id } }; Button("연결 확인 후 다시 실행") { store.run(run.job, full: true) } }
                         }
                     }
-                    if !editable { Text("최신 실행이 완료된 뒤에만 처리를 적용할 수 있습니다. 이전 기록은 읽기 전용입니다.").font(.caption).foregroundStyle(.secondary) }
+                    if !editable { Text("이전 결과를 그대로 적용하지 않습니다. 작업이 실행 중이면 종료 후 대기한 뒤 ‘현재 파일 다시 비교’를 눌러 처리 방법을 선택하세요.").font(.caption).foregroundStyle(.secondary) }
                 }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider()
             HStack {
-                Button("정보 다시 확인") { refresh() }.disabled(loading || selection.isEmpty)
+                Button(editable ? "정보 다시 확인" : "현재 파일 다시 비교") { refresh(authorize: true) }.disabled(loading || selection.isEmpty || !(run.map { store.canBeginReview($0) } ?? false))
+                if let run, store.isRunning(run.job.id) {
+                    Button("작업 종료 · 대기") { store.selection = run.job.id; store.stopSelected() }
+                }
                 Spacer()
                 Button("선택한 처리 적용 (\(choices.count))") { confirm = true }.buttonStyle(.borderedProminent).disabled(!editable || choices.isEmpty || loading)
             }.padding(12)
             }.frame(minWidth: 500)
         }.onChange(of: selection) { _, _ in refresh(reset: false) }
-        .onChange(of: run?.id) { _, _ in selection = []; comparisons = [:]; choices = [:]; generation = UUID() }
+        .onChange(of: run?.id) { _, _ in selection = []; comparisons = [:]; choices = [:]; review = nil; loading = false; generation = UUID() }
+        .onChange(of: latestRunID) { _, _ in comparisons = [:]; choices = [:]; review = nil; loading = false; generation = UUID() }
         .onChange(of: store.problemSelection) { _, id in if let id { selection = [id] } }
-        .onAppear { if let id = store.problemSelection { selection = [id] } }
-        .onDisappear { generation = UUID() }
+        .onAppear {
+            if let id = store.problemSelection, selection != [id] { selection = [id] }
+            else { refresh(reset: false) }
+        }
+        .onDisappear { generation = UUID(); loading = false }
         .confirmationDialog("선택한 처리를 적용할까요?", isPresented: $confirm, titleVisibility: .visible) {
             Button("처리 적용") {
-                guard let run else { return }
+                guard let run, let review, editable else { return }
                 let decisions = choices.compactMap { id, action in comparisons[id].map { ResolutionDecision($0, action: action) } }
-                store.applyDecisions(decisions, session: run); choices = [:]
+                store.applyDecisions(decisions, session: run, review: review); choices = [:]
             }
             Button("취소", role: .cancel) {}
         } message: { Text(choices.values.map(\.title).sorted().joined(separator: "\n") + "\n적용 직전에 양쪽 정보를 다시 검증하며, 교체된 파일은 SafeSync 휴지통에 보존합니다.") }
@@ -161,17 +170,24 @@ struct ProblemWorkspace: View {
             } else { Text("파일 없음").foregroundStyle(.secondary) }
         }.padding(12).frame(maxWidth: .infinity, alignment: .topLeading).background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
     }
-    func refresh(reset: Bool = true) {
+    func refresh(reset: Bool = true, authorize: Bool = false) {
         let token = UUID(); generation = token; failure = nil
         if reset { choices = [:]; comparisons = [:] } else { for id in selection { choices.removeValue(forKey: id) } }
-        guard let job = run?.job, !chosen.isEmpty else { loading = false; return }
+        guard let run, !chosen.isEmpty else { loading = false; return }
+        if authorize || (review == nil && store.canRepair(run)) {
+            review = store.beginReview(run)
+        }
+        guard let checked = review, store.canUseReview(checked) else { loading = false; return }
+        let job = checked.job
         let items = chosen; loading = true
         Task {
             var fetched: [UUID: FileComparison] = [:]
             do {
                 let storage = job.cloudProvider == nil ? nil : try store.remote(job)
                 for issue in items where !issue.path.isEmpty { fetched[issue.id] = try await FileComparisons.read(job: job, path: issue.path, storage: storage) }
-                guard generation == token else { return }; comparisons.merge(fetched) { _, new in new }
+                guard generation == token else { return }
+                if store.canUseReview(checked) { comparisons.merge(fetched) { _, new in new } }
+                else { review = nil; comparisons = [:]; choices = [:] }
             } catch { if generation == token { failure = error.localizedDescription } }
             if generation == token { loading = false }
         }
