@@ -12,6 +12,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
     func applicationDidFinishLaunching(_ notification: Notification) {
         presentation = AppPresentation()
         statusBar = StatusBarController(store: Store.shared)
+        ApplicationUpdates.shared.start()
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { statusBar?.showMain(); return true }
@@ -53,6 +54,8 @@ typealias ViewState<Value> = SwiftUI.State<Value>
             MessagesView().environmentObject(store).preferredColorScheme(colorScheme)
         }.defaultSize(width: 980, height: 580).defaultPosition(.center)
         Settings { SettingsView().environmentObject(store).preferredColorScheme(colorScheme) }
+        Window("SafeSync 업데이트", id: "updates") { AppUpdateView().preferredColorScheme(colorScheme) }
+            .windowResizability(.contentSize).defaultPosition(.center)
 
     }
 }
@@ -88,7 +91,7 @@ struct MainView: View {
             }
             HStack { Text("macOS \(AppInformation.version) · 로컬 · Dropbox · Google Drive"); Spacer(); Text("작업 \(store.jobs.count)개") }.font(.caption).foregroundStyle(.secondary)
         }.padding(16).frame(minWidth: 1060, minHeight: 680)
-        .onAppear { store.openAppWindow = { id in AppPresentation.showInDock(); if id == "progress" { store.navigate(.sync) } else if id == "trash" { store.navigate(.trash) }; openWindow(id: id == "about" || id == "messages" ? id : "main") } }
+        .onAppear { store.openAppWindow = { id in AppPresentation.showInDock(); if id == "progress" { store.navigate(.sync) } else if id == "trash" { store.navigate(.trash) }; openWindow(id: id == "about" || id == "messages" || id == "updates" ? id : "main") } }
         .sheet(item: $store.editing) { JobEditor(job: $0).environmentObject(store) }
         .confirmationDialog("‘\(store.deleteRequest?.name ?? "")’ 작업을 삭제할까요?", isPresented: Binding(get: { store.deleteRequest != nil }, set: { if !$0 { store.deleteRequest = nil } }), titleVisibility: .visible) {
             Button("작업 삭제", role: .destructive) { store.confirmDelete() }; Button("취소", role: .cancel) { store.deleteRequest = nil }

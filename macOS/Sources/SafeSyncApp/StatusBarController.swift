@@ -7,6 +7,8 @@ import Combine
     private let item: NSStatusItem
     private let progressItem = NSMenuItem(title: "동기화 상태", action: nil, keyEquivalent: "")
     private var observation: AnyCancellable?
+    private var updateObservation: AnyCancellable?
+    private let updateItem = NSMenuItem(title: "업데이트 확인", action: nil, keyEquivalent: "")
     private var animation: Timer?
     private var animationStart: TimeInterval?
     private var appearanceObservation: NSKeyValueObservation?
@@ -26,11 +28,13 @@ import Combine
         menu.addItem(.separator())
         let run = NSMenuItem(title: "모든 작업 백업", action: #selector(runAll), keyEquivalent: "")
         run.target = self; menu.addItem(run)
+        updateItem.action = #selector(checkUpdates); updateItem.target = self; menu.addItem(updateItem)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "프로그램 종료", action: #selector(quit), keyEquivalent: "")
         quit.target = self; menu.addItem(quit)
         item.menu = menu
         observation = store.objectWillChange.sink { [weak self] _ in Task { @MainActor in self?.refresh() } }
+        updateObservation = ApplicationUpdates.shared.objectWillChange.sink { [weak self] _ in Task { @MainActor in self?.refresh() } }
         animation = Timer(timeInterval: 1.0 / 24, repeats: true) { [weak self] _ in
             Task { @MainActor in if let self, self.store.runningCount > 0 { self.refresh() } }
         }
@@ -57,6 +61,10 @@ import Combine
         item.button?.toolTip = running ? "SafeSync · 백업 중" : warning ? "SafeSync · 확인 필요" : "SafeSync"
         item.button?.setAccessibilityLabel(item.button?.toolTip)
         progressItem.title = "동기화 상태 · 확인 \(store.issues.count)건"
+        if let version = ApplicationUpdates.shared.availableVersion {
+            updateItem.title = "새 버전 \(version) · 다운로드 / 업데이트"
+            item.button?.toolTip = "SafeSync · 업데이트 \(version) 있음"
+        } else { updateItem.title = "업데이트 확인" }
     }
     @objc func showMain() { show("main", title: "SafeSync") }
     @objc private func showProgress() { show("progress", title: "백업 비교 및 충돌 처리") }
@@ -67,5 +75,6 @@ import Combine
         else { NSApp.windows.first { $0.title == title }?.makeKeyAndOrderFront(nil) }
     }
     @objc private func runAll() { store.runAll() }
+    @objc private func checkUpdates() { ApplicationUpdates.shared.check(manual: true) }
     @objc private func quit() { store.quit() }
 }

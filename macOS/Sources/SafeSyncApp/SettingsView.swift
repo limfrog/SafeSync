@@ -44,6 +44,9 @@ struct SettingsView: View {
     @ViewState private var loginEnabled = false
     @ViewState private var cloud = false
     @ViewState private var error: String?
+    @ViewState private var autoUpdates = true
+    @ViewState private var autoDownloads = true
+    @ObservedObject private var updates = ApplicationUpdates.shared
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
@@ -75,6 +78,18 @@ struct SettingsView: View {
                             Button("클라우드 계정 연결 관리") { cloud = true }.padding(.top, 4)
                         }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading).padding(12)
                     } label: { Text("보호 설정").font(.headline) }
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("현재 버전: \(AppInformation.version)")
+                            Toggle("앱 실행 시와 매시간 새 버전 자동 확인", isOn: $autoUpdates)
+                            Toggle("새 버전을 찾으면 설치 파일 자동 다운로드", isOn: $autoDownloads)
+                            Text(updates.status).font(.caption).foregroundStyle(.secondary)
+                            HStack {
+                                Button("업데이트 확인") { updates.check(manual: true) }
+                                Button("다운로드 / 업데이트") { updates.show() }
+                            }
+                        }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    } label: { Text("업데이트").font(.headline) }
                     GroupBox {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack(spacing: 16) {
@@ -116,6 +131,8 @@ struct SettingsView: View {
         windowSound = defaults.bool(forKey: "windowSound")
         completionSound = defaults.bool(forKey: "completionSound")
         loginEnabled = registered; error = nil
+        autoUpdates = defaults.object(forKey: "automaticallyCheckUpdates") as? Bool ?? true
+        autoDownloads = defaults.object(forKey: "automaticallyDownloadUpdates") as? Bool ?? true
     }
     private func close() { load(); NSApp.keyWindow?.close() }
     private func save() {
@@ -133,6 +150,9 @@ struct SettingsView: View {
             defaults.set(completionSound, forKey: "completionSound")
             defaults.set(errorSound, forKey: "errorSound")
             defaults.set(appearance, forKey: "appearance")
+            defaults.set(autoUpdates, forKey: "automaticallyCheckUpdates")
+            defaults.set(autoDownloads, forKey: "automaticallyDownloadUpdates")
+            updates.preferencesChanged()
             store.log("환경설정을 저장했습니다.")
             close()
         } catch { self.error = "환경설정 저장 오류: \(error.localizedDescription)" }

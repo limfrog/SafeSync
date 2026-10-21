@@ -31,12 +31,12 @@ jobs:
           codesign --force --deep --sign - macOS/build/SafeSync.app
           codesign --verify --deep --strict macOS/build/SafeSync.app
           plutil -lint macOS/build/SafeSync.app/Contents/Info.plist
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' macOS/build/SafeSync.app/Contents/Info.plist)" = '0.3.8'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' macOS/build/SafeSync.app/Contents/Info.plist)" = '0.3.9'
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSHumanReadableCopyright' macOS/build/SafeSync.app/Contents/Info.plist)" = 'SafeSync · Horizon Entertainment'
           lipo -info macOS/build/SafeSync.app/Contents/MacOS/SafeSync
-          ditto -c -k --sequesterRsrc --keepParent macOS/build/SafeSync.app "$RUNNER_TEMP/SafeSync-macOS-0.3.8-universal.zip"
+          ditto -c -k --sequesterRsrc --keepParent macOS/build/SafeSync.app "$RUNNER_TEMP/SafeSync-macOS-0.3.9-universal.zip"
       - uses: actions/upload-artifact@v4
         with:
-          name: SafeSync-macOS-0.3.8-universal
-          path: ${{ runner.temp }}/SafeSync-macOS-0.3.8-universal.zip
+          name: SafeSync-macOS-0.3.9-universal
+          path: ${{ runner.temp }}/SafeSync-macOS-0.3.9-universal.zip
           retention-days: 7
