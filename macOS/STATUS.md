@@ -1,12 +1,14 @@
 # macOS 이식 검증 현황 — 2026-10-22
 
-UI·동기화 기능 기준: Windows **1.0.0-preview.10 (`54452ef`)**. 비교·삭제 보호는 preview.11, 업데이트 확인은 preview.13, 이전 이력 재비교는 preview.14를 반영. macOS 빌드 대상: **0.3.12 (21)**.
+UI·동기화 기능 기준: Windows **1.0.0-preview.10 (`54452ef`)**. 비교·삭제 보호는 preview.11, 업데이트 확인은 preview.13, 이전 이력 재비교는 preview.14를 반영. macOS 공개 테스트: **0.3.12 (21)**.
 
 ## 0.3.12 최신 소스 Universal 재빌드
 
-- Windows preview.15 게시 이후 최신 저장소에서 macOS 0.3.12(21)를 빌드한다. macOS 제품 엔진과 UI 코드는 0.3.11에서 변경하지 않는다. NTFS/USN 접근 및 Windows 폴더 이벤트 수정이 macOS에도 적용됐다고 안내하지 않는다.
+- Windows preview.15 게시 이후 최신 저장소에서 macOS 0.3.12(21)를 빌드했다. macOS 제품 엔진과 UI 코드는 0.3.11에서 변경하지 않았다. NTFS/USN 접근 및 Windows 폴더 이벤트 수정이 macOS에도 적용됐다고 안내하지 않는다.
 - 앱 ID, 설정 경로, Keychain 서비스, Google Desktop 등록 리소스와 Dropbox 공개 앱키는 유지한다. FSEvents·변경 대기열 및 네트워크/감시 장애 시 전체 비교도 기존대로다. 양방향 전체 비교를 이번 빌드에서 증분화하지 않는다.
-- GitHub macOS 15에서 통합 시나리오·XCTest·Universal 양쪽 아키텍처·버전·실행 권한·ad-hoc 엄격 서명·ZIP 무결성을 재검증한다. 완료 전 결과를 통과로 표시하지 않으며 실행 링크·해시는 검증 후 기록한다.
+- [GitHub macOS 15 실행 39640708397](https://github.com/limfrog/SafeSync/actions/runs/39640708397), 검사·빌드 소스 `60e1cc210062a5da570065ac73c20d534cf2c8f4`: 통합 시나리오 **100개**, XCTest **10개** 전부 통과. Universal 양쪽 아키텍처·버전·실행 권한·ad-hoc 엄격 서명·ZIP 무결성 검사도 통과했다. FSEvents 검사에서는 실제 이벤트 전달 경로가 통과했다.
+- 배포 ZIP **4,127,624 bytes**, SHA-256 `0bb8a888479c93f072eafdb70ce4232ed6a2624611b84e0561ed0198aeca4735`. 다운로드한 산출물의 SHA-256을 대조하고, Info.plist의 0.3.12(21)·기존 앱 ID, 실행 권한 755, Mach-O의 x86_64/arm64 두 아키텍처와 이전 0.3.11의 Google 등록 리소스 바이트 일치를 별도로 확인했다.
+- 최초 실행 `39640139871`은 기능·앱 빌드가 통과했으나 새 `lipo -verify_arch` 검사 인자의 순서 오류로 포장이 중단됐다. 명령을 수정하고 위 실행에서 전체 절차를 재검증했다. 실패한 실행의 결과물은 배포하지 않았다.
 - 실제 Mac 화면 조작, 실제 Google Drive/Dropbox·NAS 전송, Intel 실기기 실행과 Developer ID 서명·Apple 공증은 별도다.
 
 ## 0.3.11 이전 이력 재비교와 로딩 상태

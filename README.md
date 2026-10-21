@@ -1,8 +1,8 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.15 공개 프리뷰**, macOS는 **0.3.11 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.15 공개 프리뷰**, macOS는 **0.3.12 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.11 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.11-universal.zip)
+- [macOS 0.3.12 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.12-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
@@ -21,6 +21,10 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## macOS 0.3.12 재빌드
+
+최신 저장소에서 Apple Silicon·Intel Universal 배포본 0.3.12(21)를 다시 빌드했습니다. 통합 시나리오 100개와 XCTest 10개, Universal·서명·ZIP 검사를 통과했습니다. 맥 백업 엔진과 UI는 0.3.11을 유지하며 Windows 전용 NTFS/USN 수정 코드를 맥에 적용한 것은 아닙니다. FSEvents·저장된 변경 대기열과 감시 장애/네트워크의 안전한 전체 비교 조건을 유지합니다. 양방향 비교를 증분화한 빌드가 아닙니다. 빌드·검사 결과와 서명 제한은 [macOS 검증 현황](macOS/STATUS.md)을 확인하세요.
 
 ## Windows 프리뷰 15 변경사항
 

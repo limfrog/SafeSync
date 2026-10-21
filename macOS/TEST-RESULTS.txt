@@ -1,3 +1,19 @@
+SafeSync macOS 0.3.12 (21) — 2026-10-22
+Source: 60e1cc210062a5da570065ac73c20d534cf2c8f4
+CI: https://github.com/limfrog/SafeSync/actions/runs/39640708397
+Integration: 100 scenarios PASS; XCTest: 10 tests, 0 failures.
+Universal: x86_64 arm64; strict ad-hoc codesign and ZIP integrity PASS.
+Bundle: io.limfrog.SafeSync.macOS; version 0.3.12; build 21; executable mode 755.
+Published Google Desktop registration matches previous 0.3.11 byte-for-byte.
+ZIP bytes: 4127624
+ZIP SHA256: 0bb8a888479c93f072eafdb70ce4232ed6a2624611b84e0561ed0198aeca4735
+Engine/UI unchanged from 0.3.11; Windows-specific USN fixes are not macOS changes.
+Scope: isolated filesystem, in-memory cloud, mock HTTP and real FSEvents.
+Not tested: actual Mac UI interactions, live cloud/NAS transfers, Intel execution.
+Signing: ad-hoc; not Developer ID signed or Apple notarized.
+Initial CI 39640139871: packaging stopped on lipo argument order; corrected and fully rerun above.
+
+--- Previous 0.3.11 validation record preserved below ---
 SafeSync macOS 0.3.11 (20) — 2026-10-21
 Source: b68e2ebca4cd72f34a2f59f2a35ad289406c8055
 CI: https://github.com/limfrog/SafeSync/actions/runs/39616726940
