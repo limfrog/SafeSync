@@ -1,13 +1,15 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.15 공개 프리뷰**, macOS는 **0.3.12 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.16 공개 프리뷰**, macOS는 **0.3.12 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
 - [macOS 0.3.12 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.12-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 15 설치 파일](dist/SafeSync-Setup-1.0.0-preview.15.exe)
-- [Windows 1.0.0 Preview 15 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.15.zip)
+- [Windows 1.0.0 Preview 16 설치 파일](dist/SafeSync-Setup-1.0.0-preview.16.exe)
+- [Windows 1.0.0 Preview 16 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.16.zip)
+- [프리뷰 16 실행 중 처리 예약](windows-v2/PREVIEW16-VALIDATION.md)
+- [프리뷰 16 최종 설치본 검증](windows-v2/PREVIEW16-PACKAGE-RESULT.md)
 - [프리뷰 15 재시작 색인·폴더 충돌 수정 검사](windows-v2/PREVIEW15-VALIDATION.md)
 - [프리뷰 15 설치본 검증과 SHA-256](windows-v2/PREVIEW15-PACKAGE-RESULT.md)
 - [프리뷰 14 문제 해결 수정 검사](windows-v2/PREVIEW14-VALIDATION.md)
@@ -21,6 +23,14 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## Windows 프리뷰 16 변경사항
+
+같은 작업이 동기화 중이어도 문제 해결에서 덮어쓰기·역방향·둘 다 보관·이번 제외 버튼을 누르면 **바로 예약**합니다. 별도 예약 버튼 없이 해당 동기화 전체가 끝난 뒤 재검증하여 실행하며, 실행 전에 다른 버튼을 누르면 마지막 선택으로 바뀝니다. 파일별 예약 상태·실행 대기 수·선택 예약 취소를 제공합니다. 이미 시작한 처리 묶음은 중간 변경·중복 예약을 막습니다. 대기 상태의 즉시 적용은 기존 적용·확인을 유지합니다.
+
+대기 중 확인 정보나 연결이 바뀌면 덮어쓰지 않고 재확인을 요청합니다. 작업 종료·작업 자체 실패·업데이트·앱 종료 시 미실행 예약은 취소하며 재시작 후 오래된 명령을 자동 실행하지 않습니다. 탭 전환·일시정지는 예약을 지우지 않습니다. macOS 0.3.12는 이번 Windows 기능 변경에 포함하지 않습니다. [상세 동작과 검사 범위](windows-v2/PREVIEW16-VALIDATION.md)를 확인하세요.
+
+일시적인 네트워크 오류는 오류 목록에만 **자동 재시도**로 남깁니다. 현재 동기화 끝에 한 번 재시도하고 지속 실패 시 최대 5분까지 간격을 늘립니다. 인증·권한·공간·체크섬 오류나 실제 충돌을 자동 덮어쓰기로 해결하지 않으며 작업 종료 시 재시도도 중단합니다.
 
 ## macOS 0.3.12 재빌드
 
