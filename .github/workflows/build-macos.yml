@@ -45,7 +45,7 @@ jobs:
           cmp "$registration" macOS/build/SafeSync.app/Contents/Resources/GoogleDesktopOAuth.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSHumanReadableCopyright' macOS/build/SafeSync.app/Contents/Info.plist)" = 'SafeSync · Horizon Entertainment'
           lipo -info macOS/build/SafeSync.app/Contents/MacOS/SafeSync
-          lipo -verify_arch arm64 x86_64 macOS/build/SafeSync.app/Contents/MacOS/SafeSync
+          lipo macOS/build/SafeSync.app/Contents/MacOS/SafeSync -verify_arch arm64 x86_64
           ditto -c -k --sequesterRsrc --keepParent macOS/build/SafeSync.app "$RUNNER_TEMP/SafeSync-macOS-0.3.12-universal.zip"
           unzip -t "$RUNNER_TEMP/SafeSync-macOS-0.3.12-universal.zip"
           shasum -a 256 "$RUNNER_TEMP/SafeSync-macOS-0.3.12-universal.zip"
