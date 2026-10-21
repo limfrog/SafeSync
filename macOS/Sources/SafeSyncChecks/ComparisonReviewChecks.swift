@@ -24,7 +24,7 @@ struct ComparisonReviewChecks {
             case 3: changed.cloudProvider = .dropbox
             case 4: changed.cloudAccountID = UUID()
             case 5: changed.cloudFolderID = "folder-2"
-            case 6: changed.mode = .twoWay
+            case 6: changed.syncMode = .twoWay
             default: changed.cloudProvider = nil; changed.cloudAccountID = nil; changed.cloudFolderID = nil
             }
             checkFalse(review.allows(job: changed, sessionID: current, running: false))
