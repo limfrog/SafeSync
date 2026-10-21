@@ -7,12 +7,19 @@ on:
       - 'macOS/**'
       - '.github/workflows/build-macos.yml'
   workflow_dispatch:
+    inputs:
+      restart_probe:
+        description: 'Run only the isolated Windows restart diagnostics (no macOS build or release)'
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
 
 jobs:
   build:
+    if: ${{ inputs.restart_probe != true }}
     runs-on: macos-15
     timeout-minutes: 25
     steps:
@@ -53,3 +60,6 @@ jobs:
             ${{ runner.temp }}/SafeSync-macOS-checks.txt
             ${{ runner.temp }}/SafeSync-macOS-xctests.txt
           retention-days: 7
+  windows-restart-probe:
+    if: ${{ inputs.restart_probe == true }}
+    uses: ./.github/workflows/windows-restart-reproduction.yml

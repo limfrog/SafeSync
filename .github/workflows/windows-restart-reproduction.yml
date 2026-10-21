@@ -8,6 +8,7 @@ on:
       - 'windows-v2/tests/SafeSync.RestartProbe/**'
       - 'windows-v2/src/SafeSync.Core/**'
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
