@@ -46,6 +46,10 @@ internal static class Probe
         public string[] Compared { get; set; } = [];
         public string[] ProblemPaths { get; set; } = [];
         public string[] ErrorMessages { get; set; } = [];
+        public string[] IssueDetails { get; set; } = [];
+        public bool ContentsMatchAfter { get; set; }
+        public int SourceFilesAfter { get; set; }
+        public int BackupFilesAfter { get; set; }
     }
 
     private static BackupJob Job(Fixture f) => new()
@@ -97,6 +101,7 @@ internal static class Probe
             report.Errors = result.Errors.Count; report.Conflicts = result.Conflicts.Count; report.Locked = result.Locked.Count;
             report.ProblemPaths = result.Errors.Concat(result.Conflicts).Concat(result.Locked).Select(i => i.File).ToArray();
             report.ErrorMessages = result.Errors.Select(i => i.Reason).ToArray();
+            report.IssueDetails = result.Errors.Concat(result.Conflicts).Concat(result.Locked).Select(i => i.File + ": " + i.Reason).ToArray();
             if (result.Canceled) throw new IOException("Unexpected cancellation in test worker.");
         }
         report.Milliseconds = clock.Elapsed.TotalMilliseconds;
@@ -170,6 +175,7 @@ internal static class Probe
                 File.Delete(Path.Combine(source, "folder-02/한글-0002.bin"));
                 var offline = await ChildAsync(home, "offline-source-edits"); runs.Add(offline);
                 Check(Healthy(offline) && await EqualAsync(source, backup), name + ": offline add/edit/rename/delete detected without supplied paths", string.Join(";", offline.ErrorMessages));
+                Check(offline.ContentsMatchAfter, name + ": offline source changes independently verified by complete SHA-256 inventories");
                 Check(new TrashService().List(backup, default).Any(i => i.RelativePath == "folder-02/한글-0002.bin"), name + ": offline deletion preserved in trash");
                 if (mode == "TwoWay")
                 {
@@ -177,6 +183,7 @@ internal static class Probe
                     File.Delete(Path.Combine(backup, "folder-03/한글-0003.bin"));
                     var reverse = await ChildAsync(home, "offline-backup-edits"); runs.Add(reverse);
                     Check(Healthy(reverse) && await EqualAsync(source, backup), name + ": offline backup changes propagated to source");
+                    Check(reverse.ContentsMatchAfter, name + ": offline backup changes independently verified by complete SHA-256 inventories");
                     Check(new TrashService().List(source, default).Any(i => i.RelativePath == "folder-03/한글-0003.bin"), name + ": reverse deletion preserved in source trash");
                 }
                 var quiet = await ChildAsync(home, "unchanged-after-offline-edits"); runs.Add(quiet);
@@ -260,7 +267,14 @@ internal static class Probe
         try { await child.WaitForExitAsync(timeout.Token); }
         catch { if (!child.HasExited) child.Kill(true); await child.WaitForExitAsync(); throw; }
         if (child.ExitCode != 0) throw new Exception($"Child {Path.GetFileName(home)}/{stage} failed with {child.ExitCode}.");
-        return JsonFile.Read<RunReport>(Path.Combine(home, stage + ".json"));
+        var report = JsonFile.Read<RunReport>(Path.Combine(home, stage + ".json"));
+        var fixture = JsonFile.Read<Fixture>(Path.Combine(home, "fixture.json"));
+        var source = await InventoryAsync(fixture.Source); var backup = await InventoryAsync(fixture.Backup);
+        report.SourceFilesAfter = source.Count; report.BackupFilesAfter = backup.Count;
+        report.ContentsMatchAfter = SameInventory(source, backup, false);
+        JsonFile.Save(Path.Combine(home, stage + ".inventory.json"), new { Source = source, Backup = backup, report.ContentsMatchAfter });
+        JsonFile.Save(Path.Combine(home, stage + ".json"), report);
+        return report;
     }
 
     private static bool Healthy(RunReport r) => r.Errors == 0 && r.Conflicts == 0 && r.Locked == 0;
