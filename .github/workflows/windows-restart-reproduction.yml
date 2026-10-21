@@ -1,0 +1,87 @@
+name: Windows restart reproduction
+
+on:
+  push:
+    branches: ['codex/windows-restart-reproduction-*']
+    paths:
+      - '.github/workflows/windows-restart-reproduction.yml'
+      - 'windows-v2/tests/SafeSync.RestartProbe/**'
+      - 'windows-v2/src/SafeSync.Core/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Prepare isolated NTFS disk and loopback SMB share
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $report = Join-Path $env:RUNNER_TEMP 'safesync-restart-reports'
+          [void][IO.Directory]::CreateDirectory($report)
+          $letter = @('R','S','T','U','V') | Where-Object { -not (Test-Path ($_ + ':\')) } | Select-Object -First 1
+          if (-not $letter) { throw 'No free probe drive letter.' }
+          $vhd = Join-Path $env:RUNNER_TEMP 'safesync-restart-probe.vhd'
+          if (Test-Path -LiteralPath $vhd) { throw 'Refusing to reuse an existing disk image.' }
+          $diskScript = Join-Path $env:RUNNER_TEMP 'safesync-create-disk.txt'
+          @("create vdisk file=`"$vhd`" maximum=768 type=expandable", "select vdisk file=`"$vhd`"", 'attach vdisk', 'create partition primary', 'format fs=ntfs label=SafeSyncProbe quick', "assign letter=$letter", 'exit') | Set-Content -LiteralPath $diskScript
+          diskpart /s $diskScript | Tee-Object -FilePath (Join-Path $report 'disk-setup.txt')
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path ($letter + ':\'))) { throw 'Isolated NTFS disk setup failed.' }
+          $volume = Get-Volume -DriveLetter $letter
+          if ($volume.FileSystemLabel -ne 'SafeSyncProbe' -or $volume.FileSystem -ne 'NTFS') { throw 'Unexpected probe volume.' }
+          fsutil usn createjournal m=33554432 a=8388608 ($letter + ':')
+          if ($LASTEXITCODE -ne 0) { throw 'USN journal setup failed.' }
+          fsutil usn queryjournal ($letter + ':') | Set-Content (Join-Path $report 'usn-setup.txt')
+          $sharePath = $letter + ':\smb'
+          [void][IO.Directory]::CreateDirectory($sharePath)
+          $share = 'SafeSyncProbe_' + $env:GITHUB_RUN_ID + '_' + $env:GITHUB_RUN_ATTEMPT
+          $account = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+          Start-Service LanmanServer
+          New-SmbShare -Name $share -Path $sharePath -FullAccess $account | Out-Null
+          @("SAFESYNC_PROBE_LOCAL=$letter`:\fixtures", "SAFESYNC_PROBE_UNC=\\localhost\$share", "SAFESYNC_PROBE_REPORT=$report", "SAFESYNC_PROBE_SHARE=$share", "SAFESYNC_PROBE_VHD=$vhd") | Add-Content $env:GITHUB_ENV
+          git rev-parse HEAD | Set-Content (Join-Path $report 'tested-commit.txt')
+          Get-ChildItem windows-v2/src/SafeSync.Core -File -Recurse | Get-FileHash -Algorithm SHA256 | Select-Object Path,Hash | ConvertTo-Json | Set-Content (Join-Path $report 'production-core-hashes.json')
+      - name: Build test harness without changing production code
+        run: dotnet build windows-v2/tests/SafeSync.RestartProbe -c Release
+      - name: Reproduce scheduler startup in fresh processes
+        run: |
+          dotnet windows-v2/tests/SafeSync.RestartProbe/bin/Release/net10.0-windows/SafeSync.RestartProbe.dll $env:SAFESYNC_PROBE_LOCAL $env:SAFESYNC_PROBE_UNC $env:SAFESYNC_PROBE_REPORT
+          $probeExit = $LASTEXITCODE
+          if (Test-Path (Join-Path $env:SAFESYNC_PROBE_REPORT 'summary.md')) { Get-Content (Join-Path $env:SAFESYNC_PROBE_REPORT 'summary.md') | Add-Content $env:GITHUB_STEP_SUMMARY }
+          if ($probeExit -ne 0) { throw 'Correctness reproduction failed; inspect uploaded report.' }
+      - name: Existing isolated regression suite
+        if: always() && env.SAFESYNC_PROBE_REPORT != ''
+        run: |
+          dotnet run --project windows-v2/tests/SafeSync.Tests -c Release -- $env:RUNNER_TEMP | Tee-Object -FilePath (Join-Path $env:SAFESYNC_PROBE_REPORT 'regression.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Existing regression suite failed.' }
+      - name: Upload synthetic test reports even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-restart-${{ matrix.os }}
+          path: ${{ runner.temp }}/safesync-restart-reports/
+          retention-days: 7
+      - name: Remove this job's temporary share and detach its disk
+        if: always() && env.SAFESYNC_PROBE_SHARE != ''
+        run: |
+          if ($env:SAFESYNC_PROBE_SHARE -notlike 'SafeSyncProbe_*') { throw 'Unexpected share name.' }
+          Get-SmbShare -Name $env:SAFESYNC_PROBE_SHARE -ErrorAction SilentlyContinue | Remove-SmbShare -Force
+          $expected = Join-Path $env:RUNNER_TEMP 'safesync-restart-probe.vhd'
+          if ($env:SAFESYNC_PROBE_VHD -ne $expected) { throw 'Unexpected virtual disk path.' }
+          $detach = Join-Path $env:RUNNER_TEMP 'safesync-detach-disk.txt'
+          @("select vdisk file=`"$expected`"", 'detach vdisk', 'exit') | Set-Content -LiteralPath $detach
+          diskpart /s $detach
