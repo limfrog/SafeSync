@@ -1,13 +1,15 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.12 공개 프리뷰**, macOS는 **0.3.8 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.13 공개 프리뷰**, macOS는 **0.3.9 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.8 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.8-universal.zip)
+- [macOS 0.3.9 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.9-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 12 설치 파일](dist/SafeSync-Setup-1.0.0-preview.12.exe)
-- [Windows 1.0.0 Preview 12 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.12.zip)
+- [Windows 1.0.0 Preview 13 설치 파일](dist/SafeSync-Setup-1.0.0-preview.13.exe)
+- [Windows 1.0.0 Preview 13 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.13.zip)
+- [앱 업데이트 사용·배포 안내](windows-v2/UPDATES.md)
+- [프리뷰 13 업데이트 기능 검증](windows-v2/PREVIEW13-VALIDATION.md)
 - [Windows 사용 및 기능 안내](windows-v2/README-ko.md)
 - [프리뷰 12 개발자·문의 정보 변경](windows-v2/PREVIEW12-VALIDATION.md)
 - [프리뷰 11 검사 결과](windows-v2/PREVIEW11-VALIDATION.md)
@@ -15,6 +17,10 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## Windows 프리뷰 13 변경사항
+
+GitHub 배포 정보로 새 버전 자동 확인·자동 다운로드를 제공합니다. 환경설정에서 각각 켜고 끌 수 있고 수동 확인도 가능합니다. 다운로드 크기와 SHA-256 검증 후 사용자가 설치를 선택하면 현재 파일을 마치고 앱을 종료합니다. 기존 버전은 이번 설치 파일을 한 번 직접 설치해야 합니다. 전체 격리 검사 997개와 화면 검사 563개가 통과했습니다. 실제 사용자 앱을 자동 설치하지 않았습니다.
 
 ## Windows 프리뷰 12 변경사항
 
@@ -52,7 +58,9 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - `dist/`: Windows 설치/무설치 배포본과 macOS Universal 앱 ZIP
 - `index.html`, `privacy.html`: GitHub Pages용 안내 및 개인정보처리방침
 
-## macOS 0.3.8
+## macOS 0.3.9
+
+0.3.9는 자동 업데이트 확인·검증 ZIP 다운로드·Finder 열기를 제공합니다. 백업이 끝나면 앱을 종료한 뒤 새 앱으로 직접 교체합니다. 설정에서 자동 확인과 다운로드를 끌 수 있습니다. GitHub macOS Universal 빌드와 서명·번들 검증을 완료했으며 실제 Mac UI 조작 검증은 별도입니다.
 
 0.3.8은 개발자와 문의 이메일을 Horizon Entertainment 및 apps@horizonent.co.kr로 통일하고 빌드 저작권을 갱신했습니다. GitHub macOS 환경에서 Universal 빌드와 서명·번들 검증을 완료했으며 기존 배포본의 Desktop Google 등록 정보를 그대로 보존했습니다. 동기화 기능은 0.3.7과 같습니다.
 

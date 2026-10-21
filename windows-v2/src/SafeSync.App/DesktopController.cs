@@ -73,6 +73,7 @@ internal sealed partial class DesktopController
         var menu=new Forms.ContextMenuStrip();
         menu.Items.Add("SafeSync 열기",null,(_,_) => app.Dispatcher.Invoke(ShowMain));
         menu.Items.Add("모든 작업 백업",null,(_,_) => app.Dispatcher.Invoke(() => RunAll()));
+        menu.Items.Add("업데이트 확인 / 설치",null,(_,_)=>app.Dispatcher.Invoke(()=>BeginUpdateCheck(true)));
         menu.Items.Add("프로그램 종료",null,async (_,_) => await app.Dispatcher.InvokeAsync(ExitAsync).Task.Unwrap());
         tray.ContextMenuStrip=menu;tray.DoubleClick += (_,_) => app.Dispatcher.Invoke(ShowMain);
         foreach (var file in Directory.EnumerateFiles(Path.Combine(AppContext.BaseDirectory,"Assets"),"SafeSync-Progress-*.ico").Order())
@@ -94,14 +95,15 @@ internal sealed partial class DesktopController
             var historyNow=DateTimeOffset.UtcNow;if(historyNow-lastHistoryTick>=TimeSpan.FromSeconds(1)){lastHistoryTick=historyNow;sessionHistory.Tick(historyNow);}
             bool active=scheduler.RunningCount>0;
             tray.Icon=active && frames.Count>0 ? frames[animationFrame++ % frames.Count] : notices.Count>0 ? System.Drawing.SystemIcons.Warning : trayIcon;
-            tray.Text=active ? "SafeSync - 백업 진행 중" : notices.Count>0 ? "SafeSync - 확인할 메시지 있음" : "SafeSync 1.0.0 Preview";
-            Main.Find<TextBlock>("ServiceBadge").Text=active ? $"● 작업 {scheduler.RunningCount}개 진행 중" : "● 전환 검증본 · 로컬/클라우드";
+            if(!active && notices.Count==0 && updateRelease!=null)tray.Icon=System.Drawing.SystemIcons.Information;
+            tray.Text=updateRelease!=null ? "SafeSync - 업데이트 "+updateRelease.Version+" 있음" : active ? "SafeSync - 백업 진행 중" : notices.Count>0 ? "SafeSync - 확인할 메시지 있음" : "SafeSync 1.0.0 Preview";
+            Main.Find<TextBlock>("ServiceBadge").Text=(active ? $"● 작업 {scheduler.RunningCount}개 진행 중" : "● 전환 검증본 · 로컬/클라우드")+(updateRelease!=null ? " · 새 버전 "+updateRelease.Version : "");
         };
         WireMain();RestoreKnownProblems();RefreshJobs();
         Log("SafeSync "+AppVersion+" 시작 — 이전 PowerShell 버전과 설정 공간을 분리했습니다.");
         Log("클라우드 API·승계 기능 검증본 — 실제 계정은 테스트용 백업 폴더부터 확인하세요. 변경 기록을 사용할 수 없는 위치는 안전한 메타데이터 확인으로 대체합니다.");
         if(!smoke && config.AutoStart){try{AutoStart.Set(true,Environment.ProcessPath!);}catch(Exception ex){Log("자동 시작 갱신 실패: "+ex.Message);}}
-        if (!smoke) { scheduler.SetJobs(jobs);scheduler.Start();trayTimer.Start();TrackAuxiliary(LoadWaitingAsync()); }
+        if (!smoke) { scheduler.SetJobs(jobs);scheduler.Start();trayTimer.Start();TrackAuxiliary(LoadWaitingAsync());StartUpdates(); }
     }
     private static double Clamp(double value,double min,double max,double fallback) => double.IsFinite(value) ? Math.Clamp(value,min,max) : fallback;
     private void WireMain()
@@ -131,6 +133,7 @@ internal sealed partial class DesktopController
             Log(job.Name + (job.Paused ? ": 일시정지" : ": 다시 시작"));
         });
         Click(Main,"SettingsButton",ShowSettings);Click(Main,"SettingsShortcutButton",ShowSettings);
+        Click(Main,"MenuCheckUpdatesItem",()=>BeginUpdateCheck(true));
         Click(Main,"MenuProgressItem",ToggleProgress);
         Click(Main,"TrashButton",ShowTrash);
         Click(Main,"MenuMessagesItem",ShowNotices);Click(Main,"NotificationsButton",ShowNotices);
@@ -317,9 +320,11 @@ internal sealed partial class DesktopController
     public async Task ExitAsync()
     {
         if(exiting)return;exiting=true;Main.IsEnabled=false;
+        await StopUpdatesAsync();
         ClearProblemWorkspace();
         foreach(var token in auxiliaryTokens)token.Cancel();
         await scheduler.DisposeAsync();
+        updateBackupHold?.Dispose();
         try{await Task.WhenAll(auxiliaryTasks.ToArray());}catch(Exception ex){Log("종료 중 보조 작업 확인: "+ex.Message);}
         CaptureLayout();
         trayTimer.Stop();tray.Visible=false;tray.Dispose();

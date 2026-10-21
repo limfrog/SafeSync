@@ -27,6 +27,12 @@ string Write(string root,string relative,string text,int age=0)
 }
 try
 {
+    if(args.Contains("--updates"))
+    {
+        await AppUpdateTests.RunAsync(testRoot,Check);
+        JsonFile.Save(Path.Combine(testRoot,"result.json"),new {Status="OK",Assertions=passed,TestRoot=testRoot});
+        Console.WriteLine($"PASS: {passed} update assertions. {testRoot}");return;
+    }
     var identityIndex=Array.IndexOf(args,"--root-identity");
     if(identityIndex>=0)
     {
@@ -197,6 +203,7 @@ try
     await DropboxScopeTests.RunAsync(testRoot,Check);
     await ComparisonRegressionTests.RunAsync(testRoot,Check);
     await OneWaySafetyTests.RunAsync(testRoot,Check);
+    await AppUpdateTests.RunAsync(testRoot,Check);
     await GracefulStopTests.RunAsync(testRoot,Check);
     await RecoveryRegressionTests.RunAsync(testRoot,Check);
     await FileComparisonTests.RunAsync(testRoot,Check);

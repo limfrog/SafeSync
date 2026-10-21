@@ -1,0 +1,45 @@
+name: Publish update catalog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dist/SHA256SUMS.txt'
+      - 'scripts/publish-updates.mjs'
+      - '.github/workflows/update-catalog.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: safesync-update-catalog
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /dist/SHA256SUMS.txt
+            /scripts/publish-updates.mjs
+            /updates/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate and publish verified release metadata
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          node scripts/publish-updates.mjs
+          git add updates/latest.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Refresh SafeSync update catalog'
+          git push origin HEAD:main

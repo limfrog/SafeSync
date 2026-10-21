@@ -46,6 +46,7 @@ internal sealed partial class DesktopController
     private void ShowSettings()
     {
         var window=NewDialog("Settings");
+        BindUpdateSettings(window);
         window.Find<CheckBox>("AutoStartCheck").IsChecked=config.AutoStart;
         window.Find<CheckBox>("AutoStartCheck").IsEnabled=!smoke;
         window.Find<CheckBox>("AutoStartCheck").ToolTip="저장하면 현재 사용자 로그인 시 이 실행 파일을 시작합니다. 표준 1.x 자동 시작 항목은 전환하며, 수동 등록 항목은 별도로 확인하세요.";
@@ -63,6 +64,9 @@ internal sealed partial class DesktopController
             config.SoundOnMinimize=window.Find<CheckBox>("SoundOnMinimizeCheck").IsChecked==true;
             config.SoundOnBackupComplete=window.Find<CheckBox>("SoundOnBackupCompleteCheck").IsChecked==true;
             config.SoundOnBackupError=window.Find<CheckBox>("SoundOnBackupErrorCheck").IsChecked==true;
+            config.AutomaticallyCheckUpdates=window.Find<CheckBox>("AutoUpdateCheck").IsChecked==true;
+            config.AutomaticallyDownloadUpdates=window.Find<CheckBox>("AutoDownloadCheck").IsChecked==true;
+            ApplyUpdatePreferences();
             config.ThemeMode=window.Find<RadioButton>("ThemeDarkRadio").IsChecked==true ? "Dark" : "Light";
             try {if(!smoke)AutoStart.Set(window.Find<CheckBox>("AutoStartCheck").IsChecked==true,Environment.ProcessPath!);config.AutoStart=window.Find<CheckBox>("AutoStartCheck").IsChecked==true;store.Save(config);foreach(var open in auxiliary.Append(Main))Theme.Apply(open,config.ThemeMode);window.Close();Log("환경설정을 저장했습니다.");}
             catch(Exception ex){Tell(ex.Message,"설정 저장 실패");}
@@ -399,9 +403,11 @@ internal sealed partial class DesktopController
             config.ThemeMode=mode;Theme.Apply(Main,mode);Main.UpdateLayout();
             Check(Jobs.Columns.Count==6,"메인 작업 표 구조가 달라졌습니다.");
             Check(!Main.Find<Button>("RunButton").IsEnabled,"빈 작업 목록에서 백업이 활성화되었습니다.");
-            foreach(var name in new[]{"Main","Settings","JobEditor","Progress","Trash","CloudAccounts"})
+            foreach(var name in new[]{"Main","Settings","JobEditor","Progress","Trash","CloudAccounts","Updates"})
             {
-                var window=name=="Main" ? Main : NewDialog(name,false);
+                Window window;
+                if(name=="Updates"){ShowUpdates();window=updateWindow!;}
+                else window=name=="Main" ? Main : NewDialog(name,false);
                 Theme.Apply(window,mode);window.Show();window.UpdateLayout();
                 await window.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 Check(window.ActualWidth>0 && window.ActualHeight>0,name+" 화면이 표시되지 않습니다.");
@@ -446,7 +452,25 @@ internal sealed partial class DesktopController
             Check(w.Find<Button>("CloudAccountsButton").IsEnabled,"클라우드 연결 화면이 비활성화되었습니다.");
             Check(!w.Find<CheckBox>("AutoStartCheck").IsEnabled,"검증본이 기존 자동 시작 등록을 변경할 수 있습니다.");
             Check(w.Find<TextBox>("RetentionBox").Text==config.TrashRetentionDays.ToString(),"보관 기간이 설정과 다릅니다.");
+            Check(w.Find<CheckBox>("AutoUpdateCheck").IsChecked==config.AutomaticallyCheckUpdates && w.Find<CheckBox>("AutoDownloadCheck").IsChecked==config.AutomaticallyDownloadUpdates,"업데이트 환경설정 초기값이 일치하지 않습니다.");
+            w.Height=w.MinHeight;w.UpdateLayout();
+            var save=w.Find<Button>("SaveButton");
+            Check(save.TransformToAncestor(w).Transform(new Point()).Y+save.ActualHeight<w.ActualHeight,"작은 환경설정 창에서 저장 버튼이 가려집니다.");
         });
+        ShowUpdates();var update=updateWindow!;
+        Check(update.IsVisible && Main.IsEnabled,"업데이트 창이 메인 창 사용을 막습니다.");
+        Check(!update.Find<Button>("UpdateInstallButton").IsEnabled && !update.Find<Button>("UpdateDownloadButton").IsEnabled,"검증된 배포 정보 없이 다운로드/설치 버튼이 활성화되었습니다.");
+        update.Find<Button>("UpdateCheckButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if(updateTask!=null)await updateTask;
+        Check(update.Find<TextBlock>("UpdateStatusText").Text.Contains("화면 검사"),"업데이트 확인 버튼이 동작하지 않거나 UI 검사가 외부 통신을 했습니다.");
+        update.Width=update.MinWidth;update.Height=update.MinHeight;update.UpdateLayout();
+        foreach(var name in new[]{"UpdateCheckButton","UpdateDownloadButton","UpdateInstallButton","UpdateCancelButton","UpdateCloseButton"})
+        {
+            var button=update.Find<Button>(name);var position=button.TransformToAncestor(update).Transform(new Point());
+            Check(position.X>=0 && position.X+button.ActualWidth<=update.ActualWidth && position.Y+button.ActualHeight<update.ActualHeight,"작은 업데이트 창에서 버튼이 가려집니다: "+name);
+        }
+        update.Find<Button>("UpdateCloseButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Check(updateWindow==null && !update.IsVisible,"업데이트 창을 닫을 수 없습니다.");
         CheckModal(()=>EditJob(null),w=>
         {
             Check(w.Find<TextBox>("NameBox").Text=="새 백업 작업","작업 초기값을 설정하지 못했습니다.");

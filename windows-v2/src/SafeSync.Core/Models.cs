@@ -36,6 +36,8 @@ public sealed class AppConfig
     public bool SoundOnMinimize { get; set; }
     public bool SoundOnBackupError { get; set; } = true;
     public bool SoundOnBackupComplete { get; set; }
+    public bool AutomaticallyCheckUpdates {get;set;}=true;
+    public bool AutomaticallyDownloadUpdates {get;set;}=true;
     public WindowLayout WindowLayout { get; set; } = new();
     public List<BackupJob> Jobs { get; set; } = [];
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }

@@ -1,8 +1,8 @@
-# SafeSync macOS 0.3.8 — 공개 테스트 버전
+# SafeSync macOS 0.3.9 — 공개 테스트 버전
 
 개발자 및 운영자: **Horizon Entertainment** · 문의: **apps@horizonent.co.kr**.
 
-0.3.8은 앱 정보창의 개발자·문의처와 빌드 저작권을 갱신한 버전입니다. GitHub macOS 환경에서 arm64/x86_64 Universal 앱을 빌드하고 서명·번들 정보를 검증했습니다. 기존 배포본의 Google Desktop 등록 리소스를 변경 없이 보존했습니다. 백업·동기화 엔진은 0.3.7과 같습니다.
+0.3.9는 GitHub 새 버전 자동 확인·검증 ZIP 다운로드·Finder 열기를 추가했습니다. 환경설정에서 자동 확인과 자동 다운로드를 각각 끌 수 있고 수동 확인도 가능합니다. ZIP을 받은 뒤 백업을 마치고 앱을 종료해 직접 교체합니다. [업데이트 안내](../windows-v2/UPDATES.md)를 참고하세요. GitHub macOS 환경에서 arm64/x86_64 Universal 앱을 빌드하고 서명·번들 정보를 검증했습니다. 기존 배포본의 Google Desktop 등록 리소스를 변경 없이 보존했습니다. 백업·동기화 엔진은 0.3.7과 같습니다.
 
 Windows SafeSync 1.0.0-preview.10을 기준으로 SwiftUI/AppKit과 Swift 백업 엔진으로 이식했습니다. Windows 소스는 수정하지 않았습니다. 기존 Windows 아이콘을 Dock·Finder·메인 화면에서 유지하며, 메뉴 막대에는 방패 고정·화살표 회전 및 다크 모드 아웃라인을 적용합니다.
 

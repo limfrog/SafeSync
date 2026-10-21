@@ -35,6 +35,25 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     public TimeSpan LockedRetryDelay {get;set;}=TimeSpan.FromSeconds(20);
     public bool IsRunning(string id) => running.ContainsKey(id);
     public int RunningCount => running.Count;
+    private int updateHolds;
+    public async Task<IDisposable> HoldForUpdateAsync(CancellationToken token)
+    {
+        Task[] active;
+        lock(launchLock)
+        {
+            if(stop.IsCancellationRequested)throw new OperationCanceledException();
+            updateHolds++;active=running.Values.Select(r=>r.Task).ToArray();
+            foreach(var current in running.Values)current.Pause.RequestStop();
+        }
+        var lease=new UpdateHold(this);
+        try{await Task.WhenAll(active).WaitAsync(token).ConfigureAwait(false);return lease;}
+        catch{lease.Dispose();throw;}
+    }
+    private sealed class UpdateHold(BackupScheduler scheduler):IDisposable
+    {
+        private BackupScheduler? owner=scheduler;
+        public void Dispose(){var value=Interlocked.Exchange(ref owner,null);if(value!=null)lock(value.launchLock)value.updateHolds--;}
+    }
     public bool IsStopping => stop.IsCancellationRequested;
     private string QueuePath => Path.Combine(store.Root,"pending-changes-v2.json");
 
@@ -122,7 +141,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     {
         lock(launchLock)
         {
-        if (stop.IsCancellationRequested || job.Paused || job.Stopped || (job.DestinationType != "Local" && CloudFactory==null)) return Task.CompletedTask;
+        if (stop.IsCancellationRequested || updateHolds>0 || job.Paused || job.Stopped || (job.DestinationType != "Local" && CloudFactory==null)) return Task.CompletedTask;
         var current = new Running();
         if (!running.TryAdd(job.Id,current)) return running.TryGetValue(job.Id,out var active) ? active.Task : Task.CompletedTask;
         var captured = changed.TryGetValue(job.Id,out var changes) ? changes.ToArray() : [];
@@ -177,7 +196,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                 RepairWatchers();PersistQueue();
                 foreach (var job in jobs)
                 {
-                    if (job.Paused || job.Stopped || IsRunning(job.Id) || (job.DestinationType != "Local" && CloudFactory==null)) continue;
+                    if (Volatile.Read(ref updateHolds)>0 || job.Paused || job.Stopped || IsRunning(job.Id) || (job.DestinationType != "Local" && CloudFactory==null)) continue;
                     if (retries.TryGetValue(job.Id,out var due) && due > DateTime.UtcNow) continue;
                     bool retry = retries.TryGetValue(job.Id,out due) && due <= DateTime.UtcNow;
                     bool dirty = changed.TryGetValue(job.Id,out var changes) && !changes.IsEmpty &&
@@ -187,8 +206,12 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
                     else if (job.TriggerType == "Scheduled" && TimeOnly.TryParseExact(job.ScheduleTime,"HH:mm",out var time) &&
                         TimeOnly.FromDateTime(DateTime.Now) >= time && job.LastScheduledRun != DateTime.Now.ToString("yyyy-MM-dd"))
                     {
-                        job.LastScheduledRun=DateTime.Now.ToString("yyyy-MM-dd");
-                        _ = RunAsync(job);
+                        lock(launchLock)
+                        {
+                            if(updateHolds>0)continue;
+                            job.LastScheduledRun=DateTime.Now.ToString("yyyy-MM-dd");
+                            _ = RunAsync(job);
+                        }
                     }
                 }
             }
