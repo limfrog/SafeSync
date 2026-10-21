@@ -32,7 +32,7 @@ internal sealed partial class DesktopController
             OnStarted(job);OnCompleted(job,new BackupResult {Skipped=12});var latest=sessionHistory.Runs[0];
             Check(latest!=first && sessionHistory.Runs.Contains(first),"Repeated run replaced previous result");
             window.Find<DataGrid>("HistoryGrid").SelectedItem=first;RefreshProgress();
-            Check(!window.Find<Button>("ApplyConflictActionsButton").IsEnabled && conflictRows.All(r=>!r.CanResolve),"Historical conflict allows stale overwrite");
+            Check(window.Find<Button>("ApplyConflictActionsButton").IsEnabled && conflictRows.All(r=>!r.CanResolve),"Historical issues cannot open current-file review or permit unchecked stale overwrite");
             Check(window.Find<TextBlock>("ResultDetailText").Text.Contains("복사 6"),"Historical result was replaced by latest result");
             OnStarted(job);OnProgress(new(job.Id,job.Name,"파일 비교","Project/새 파일.cpr",2,10));
             Check(ReferenceEquals(SelectedRun,first),"New progress changed manually selected history");

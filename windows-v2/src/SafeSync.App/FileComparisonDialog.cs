@@ -31,9 +31,10 @@ internal sealed partial class DesktopController
     private BackupJob? problemRequestedJob;
     private string problemContextKey="";
     private Action? releaseProblemPanel;
+    private Action? refreshProblemPanel;
     private void ClearProblemWorkspace()
     {
-        releaseProblemPanel?.Invoke();releaseProblemPanel=null;problemPanel=null;problemContextKey="";
+        releaseProblemPanel?.Invoke();releaseProblemPanel=null;refreshProblemPanel=null;problemPanel=null;problemContextKey="";
         if(progressWindow!=null)progressWindow.Find<ContentControl>("ProblemWorkspaceHost").Content=null;
     }
     private FrameworkElement EnsureProblemWorkspace(BackupJob job,SyncRun? run,string? selectedFile=null)
@@ -48,6 +49,7 @@ internal sealed partial class DesktopController
         var list=problemPanel.Find<ListBox>("ComparisonFiles");
         if(selectedFile!=null)list.SelectedItem=list.Items.OfType<ComparisonRow>().FirstOrDefault(r=>r.Issue.File==selectedFile) ?? list.Items.OfType<ComparisonRow>().FirstOrDefault();
         else if(list.SelectedItem==null)list.SelectedItem=list.Items.OfType<ComparisonRow>().FirstOrDefault();
+        refreshProblemPanel?.Invoke();
         return problemPanel;
     }
     private FrameworkElement ShowFileComparison(BackupJob job,SyncRun? run=null,string? selectedFile=null)
@@ -68,10 +70,14 @@ internal sealed partial class DesktopController
         var list=window.Find<ListBox>("ComparisonFiles");list.ItemsSource=rows;
         var lifetime=new CancellationTokenSource();auxiliaryTokens.Add(lifetime);CancellationTokenSource? selectionToken=null;
         bool busy=false,applying=false,closed=false;
-        bool IsLatest()=>run!=null && sessionHistory.IsLatest(run) && !run.IsActive && jobs.Any(j=>ReferenceEquals(j,job)) &&
-            run.Source==job.Source && run.Destination==job.Destination && run.DestinationType==job.DestinationType && run.SyncMode==job.SyncMode;
-        bool Writable()=>IsLatest() && !scheduler.IsRunning(job.Id) && !closed;
-        bool CanRepair()=>!closed && jobs.Any(j=>ReferenceEquals(j,job)) && (run==null || (sessionHistory.IsLatest(run) && run.Source==job.Source && run.Destination==job.Destination && run.DestinationType==job.DestinationType && run.SyncMode==job.SyncMode));
+        bool SameJob()=>jobs.Any(j=>ReferenceEquals(j,job)) && (run==null || run.Matches(job));
+        bool IsLatest()=>run!=null && sessionHistory.IsLatest(run) && !run.IsActive && SameJob();
+        bool reviewed=IsLatest();SyncRun? reviewBasis=reviewed ? run : null;
+        // Older results are not write authority. An explicit refresh can create
+        // fresh authority for these paths, bound to the current run generation.
+        bool CurrentReview()=>reviewed && SameJob() && ReferenceEquals(sessionHistory.Latest(job.Id),reviewBasis) && reviewBasis?.IsActive!=true;
+        bool Writable()=>CurrentReview() && !scheduler.IsRunning(job.Id) && !closed;
+        bool CanRepair()=>!closed && SameJob();
         var recoveryPanel=CreateRecoveryPanel(job,run,CanRepair);
         window.Find<ContentControl>("RecoveryDetailsHost").Content=recoveryPanel;
         ComparisonRow[] SelectedRows()=>list.SelectedItems.OfType<ComparisonRow>().ToArray();
@@ -85,8 +91,11 @@ internal sealed partial class DesktopController
             window.Find<Button>("CompareIgnoreButton").IsEnabled=Writable() && !applying && selected.Length>0 && selected.All(r=>r.IsFile);
             window.Find<Button>("CompareDuplicatesButton").IsEnabled=ready && selected.All(r=>r.Snapshot!.Readable && r.Snapshot.Duplicates is {Groups.Length:>0});
             window.Find<Button>("CompareApplyButton").IsEnabled=Writable() && !busy && rows.Any(r=>r.Action!=null);
-            window.Find<Button>("CompareRefreshButton").IsEnabled=!busy && selected.Length>0;
-            Text("ComparisonSummary",$"{job.Name} · 충돌 {rows.Count(r=>r.Kind=="충돌")} · 오류 {rows.Count(r=>r.Kind=="오류")+(run?.FailureReason.Length>0 ? 1 : 0)} · 선택한 처리 {rows.Count(r=>r.Action!=null)}개"+(run==null ? " · 작업 연결 안내" : run.IsActive ? " · 실행 중 / 파일 처리는 완료 후 선택" : IsLatest() ? "" : " · 이전 실행 기록 / 읽기 전용"));
+            window.Find<Button>("CompareRefreshButton").Content=CurrentReview() ? "정보 다시 확인" : "현재 파일 다시 비교";
+            window.Find<Button>("CompareRefreshButton").IsEnabled=!busy && SameJob() && !scheduler.IsRunning(job.Id) && sessionHistory.Latest(job.Id)?.IsActive!=true && selected.Length>0;
+            window.Find<Button>("CompareStopButton").Visibility=scheduler.IsRunning(job.Id) || sessionHistory.Latest(job.Id)?.IsActive==true ? Visibility.Visible : Visibility.Collapsed;
+            window.Find<Button>("CompareStopButton").IsEnabled=SameJob() && !applying && !job.Stopped;
+            Text("ComparisonSummary",$"{job.Name} · 충돌 {rows.Count(r=>r.Kind=="충돌")} · 오류 {rows.Count(r=>r.Kind=="오류")+(run?.FailureReason.Length>0 ? 1 : 0)} · 선택한 처리 {rows.Count(r=>r.Action!=null)}개"+(CurrentReview() && !IsLatest() ? " · 현재 파일 재확인" : run==null ? " · 작업 연결 안내" : run.IsActive ? " · 실행 중 / 파일 처리는 완료 후 선택" : IsLatest() ? "" : " · 이전 실행 기록 / 읽기 전용"));
         }
         static string Date(string? value)=>DateTime.TryParse(value,out var date) && date.Year>1601 ? date.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") : "제공되지 않음";
         void Side(string prefix,ComparedFile? file,string error,bool historical,FileIssue issue)
@@ -109,12 +118,12 @@ internal sealed partial class DesktopController
             // the UI thread. Actual reads/mutations use the strict PathPolicy.
             Text("CompareSourcePath",row.IsFile ? Path.Combine(sourceRoot,row.Issue.File.Replace('/',Path.DirectorySeparatorChar)) : sourceRoot);
             Text("CompareBackupPath",row.IsFile ? job.DestinationType=="Local" ? Path.Combine(backupRoot,row.Issue.File.Replace('/',Path.DirectorySeparatorChar)) : backupRoot.TrimEnd('/','\\')+" / "+row.Issue.File : backupRoot);
-            bool historical=!IsLatest();
+            bool historical=!CurrentReview();
             Side("Source",row.Snapshot?.Source,row.Snapshot?.SourceError ?? "",historical,row.Issue);
             Side("Backup",row.Snapshot?.Backup,row.Snapshot?.BackupError ?? "",historical,row.Issue);
             if(!historical && row.Snapshot==null)foreach(var side in new[]{"Source","Backup"})foreach(var field in new[]{"Size","Created","Modified","State"})Text("Compare"+side+field,row.IsFile ? "확인 중…" : "파일별 정보 없음");
             if(!historical && row.Snapshot==null && row.Action==ConflictAction.Ignore)foreach(var side in new[]{"Source","Backup"})foreach(var field in new[]{"Size","Created","Modified","State"})Text("Compare"+side+field,"이번 실행 제외 · 정보 확인 생략");
-            Text("ComparisonStatus",historical ? "과거 결과는 현재 파일에 적용할 수 없습니다. 최신 작업 결과를 선택하세요." : !row.IsFile ? "계정·연결·권한 오류는 아래 ‘연결 · 권한 문제 해결’에서 처리하세요." : row.Snapshot==null ? "파일 정보를 확인하는 중입니다…" : "표시된 생성·수정일시는 이 컴퓨터의 현지 시각입니다. 적용 직전에 파일 정보를 다시 검사합니다.");
+            Text("ComparisonStatus",!SameJob() ? "작업 위치 또는 계정이 변경된 기록입니다. 현재 작업의 문제 해결을 열어 주세요." : scheduler.IsRunning(job.Id) || sessionHistory.Latest(job.Id)?.IsActive==true ? "이 작업이 실행 중입니다. ‘현재 파일 마치고 종료’를 누르고 대기 상태가 되면 ‘현재 파일 다시 비교’를 선택하세요." : historical ? "이전 결과를 그대로 적용하지 않습니다. ‘현재 파일 다시 비교’를 누르면 이 목록의 현재 파일을 확인한 뒤 처리 방법을 선택할 수 있습니다." : !row.IsFile ? "계정·연결·권한 오류는 아래 ‘연결 · 권한 문제 해결’에서 처리하세요." : row.Snapshot==null ? "파일 정보를 확인하는 중입니다…" : "현재 파일 정보입니다. 처리 적용 직전에 위치·계정·파일 정보를 다시 검사합니다.");
             Text("ComparisonChoiceHint",SelectedRows().Length>1 ? $"선택한 {SelectedRows().Length}개 파일에 같은 방법을 지정합니다." : row.ActionText+" · 처리 방법을 고른 뒤 적용하세요.");
             var plan=row.Snapshot?.Duplicates;
             Text("ComparisonDuplicatesText",plan==null ? "" : "중복 경로가 있습니다. 아래 ID 순서의 첫 사본을 현재 백업으로 표시합니다. 처리 적용 시 나머지 사본(폴더는 내부 파일 전체)은 같은 위치의 .SafeSync-conflict- 이름으로 보존합니다. 삭제하지 않습니다.\n"+string.Join("\n",plan.Groups.Select(g=>g.Relative+"\n"+string.Join("\n",g.Items.Select((i,index)=>$"  {(index==0 ? "사용" : "이름 보존")} · ID {i.Id} · {(i.Folder ? "폴더" : i.Length.ToString("N0")+" B")} · 생성 {Date(i.CreatedUtc.ToString("O"))} · 수정 {Date(i.ModifiedUtc.ToString("O"))}")))));
@@ -129,10 +138,12 @@ internal sealed partial class DesktopController
             {
                 foreach(var row in selected)
                 {
-                    if(!IsLatest() || !row.IsFile || (!refresh && row.Snapshot!=null))continue;
+                    if(!CurrentReview() || !row.IsFile || (!refresh && row.Snapshot!=null))continue;
+                    var basis=reviewBasis;
                     // Network and filesystem metadata must never block the UI thread.
                     var snapshot=await Task.Run(async()=>await FileComparisons.ReadAsync(job,row.Issue.File,job.DestinationType=="Local" ? null : cloud.ForJob(job),token),token);
                     token.ThrowIfCancellationRequested();
+                    if(!CurrentReview() || !ReferenceEquals(reviewBasis,basis))break;
                     row.Snapshot=snapshot;if(refresh)row.Action=null;
                 }
                 if(!closed && SelectedRows().FirstOrDefault() is {} current)Display(current);
@@ -140,6 +151,13 @@ internal sealed partial class DesktopController
             catch(OperationCanceledException){}
             catch(Exception ex){if(!closed && !token.IsCancellationRequested)Text("ComparisonStatus","파일 정보를 불러오지 못했습니다: "+ex.Message+" · 연결·권한 문제 해결을 확인하세요.");}
             finally{if(!token.IsCancellationRequested && !closed){busy=false;Buttons();}}
+        }
+        async Task RefreshCurrentAsync()
+        {
+            if(closed || busy || !SameJob() || scheduler.IsRunning(job.Id) || sessionHistory.Latest(job.Id)?.IsActive==true)return;
+            reviewed=true;reviewBasis=sessionHistory.Latest(job.Id);
+            foreach(var row in rows){row.Snapshot=null;row.Action=null;}
+            await LoadSelectedAsync(true);
         }
         void Choose(ConflictAction action)
         {
@@ -150,7 +168,7 @@ internal sealed partial class DesktopController
         }
         async Task ApplyAsync()
         {
-            if(!Writable() || busy){Text("ComparisonStatus","현재 작업이 실행 중이거나 최신 결과가 아닙니다. 최신 결과에서 다시 선택하세요.");Buttons();return;}
+            if(!Writable() || busy){Text("ComparisonStatus","작업이 실행 중이거나 재확인 후 상태가 바뀌었습니다. 대기 상태에서 ‘현재 파일 다시 비교’를 선택하세요.");Buttons();return;}
             var selected=rows.Where(r=>r.Action!=null).ToArray();if(selected.Length==0)return;
             string summary=string.Join("\n",selected.GroupBy(r=>r.Action).Select(g=>$"{g.First().ActionText}: {g.Count()}개"));
             var duplicateGroups=selected.Where(r=>r.Action!=ConflictAction.Ignore).SelectMany(r=>r.Snapshot?.Duplicates?.Groups ?? []).DistinctBy(g=>g.Relative).ToArray();
@@ -175,17 +193,26 @@ internal sealed partial class DesktopController
         list.SelectionChanged+=(_,_)=>TrackAuxiliary(LoadSelectedAsync());
         foreach(var (name,action) in new[]{("CompareForwardButton",ConflictAction.Overwrite),("CompareReverseButton",ConflictAction.UseBackup),("CompareKeepBothButton",ConflictAction.KeepBoth),("CompareIgnoreButton",ConflictAction.Ignore)})Click(window,name,()=>Choose(action));
         Click(window,"CompareDuplicatesButton",()=>Choose(ConflictAction.NormalizeDuplicates));
-        Click(window,"CompareRefreshButton",()=>TrackAuxiliary(LoadSelectedAsync(true)));
+        Click(window,"CompareRefreshButton",()=>TrackAuxiliary(RefreshCurrentAsync()));
+        Click(window,"CompareStopButton",()=>
+        {
+            if(!SameJob() || applying || job.Stopped)return;
+            scheduler.StopJob(job);sessionHistory.SetStopping(job.Id);
+            job.Status=scheduler.IsRunning(job.Id) ? "종료 중…" : "대기 중";
+            Save();RefreshActions();Jobs.Items.Refresh();RefreshProgress();RefreshRecoveryWindows();
+            Log(job.Name+": 문제 해결을 위해 현재 파일을 안전하게 마친 뒤 대기합니다. 종료 후 현재 파일을 다시 비교하세요.");
+        });
         Click(window,"CompareApplyButton",()=>TrackAuxiliary(ApplyAsync()));
         Click(window,"CompareRecoveryButton",()=>{list.SelectedItem=rows.First(r=>r.Issue.File=="[작업]");RefreshRecoveryWindows();});
         Click(window,"CompareSourceTrashButton",()=>ShowLocalTrash(job,job.Source));
         System.Collections.Specialized.NotifyCollectionChangedEventHandler historyChanged=(_,_)=>
         {
             if(closed)return;Buttons();
-            if(!IsLatest() && SelectedRows().FirstOrDefault() is {} row)Display(row);
+            if(!CurrentReview() && SelectedRows().FirstOrDefault() is {} row)Display(row);
         };
         sessionHistory.Runs.CollectionChanged+=historyChanged;
         window.IsVisibleChanged+=(_,_)=>{if(window.IsVisible && !closed)TrackAuxiliary(LoadSelectedAsync());};
+        refreshProblemPanel=()=>{if(closed)return;Buttons();if(!busy && !CurrentReview() && SelectedRows().FirstOrDefault() is {} row)Display(row);};
         releaseProblemPanel=()=>{closed=true;window.IsEnabled=false;lifetime.Cancel();selectionToken?.Cancel();sessionHistory.Runs.CollectionChanged-=historyChanged;recoveryPanels.Remove(recoveryPanel);auxiliaryTokens.Remove(lifetime);selectionToken?.Dispose();lifetime.Dispose();};
         Buttons();
         return window;

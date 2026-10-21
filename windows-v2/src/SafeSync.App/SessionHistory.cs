@@ -19,6 +19,7 @@ internal sealed partial class DesktopController
     }
     private void OnStarted(BackupJob job){RecordRun(()=>sessionHistory.Begin(job));RefreshProgress();RefreshActions();RefreshRecoveryWindows();}
     private BackupJob? RecoveryRunJob()=>SelectedRun is {IsActive:false} run && sessionHistory.IsLatest(run) ? jobs.FirstOrDefault(j=>j.Id==run.JobId) : null;
+    private BackupJob? ComparisonRunJob()=>SelectedRun is {} run ? jobs.FirstOrDefault(run.Matches) : null;
     private void FollowRun(SyncRun run)
     {
         if(progressWindow!=null && followLatest && ReferenceEquals(run,sessionHistory.Runs.FirstOrDefault()))SelectRun(run);

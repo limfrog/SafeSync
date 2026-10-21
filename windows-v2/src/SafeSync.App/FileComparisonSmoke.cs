@@ -96,7 +96,42 @@ internal sealed partial class DesktopController
             }
             finally{scheduler.AcquireRunLease=lease;ClearProblemWorkspace();}
             window=ShowFileComparison(job,run);
-            Check(!window.Find<Button>("CompareForwardButton").IsEnabled && window.Find<TextBlock>("ComparisonSummary").Text.Contains("읽기 전용"),"Historical comparison allows destructive choice");ClearProblemWorkspace();
+            Check(!window.Find<Button>("CompareForwardButton").IsEnabled && window.Find<TextBlock>("ComparisonSummary").Text.Contains("읽기 전용"),"Historical comparison allows destructive choice");
+            window.Find<Button>("CompareRefreshButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Ready(window);
+            Check(window.Find<Button>("CompareForwardButton").IsEnabled && window.Find<Button>("CompareReverseButton").IsEnabled && window.Find<Button>("CompareKeepBothButton").IsEnabled && window.Find<Button>("CompareIgnoreButton").IsEnabled,"Historical issues cannot be safely rechecked against current files and resolved");
+            Check(window.Find<TextBlock>("CompareSourceSize").Text=="22 B" && window.Find<TextBlock>("ComparisonSummary").Text.Contains("현재 파일 재확인"),"Historical recheck still shows obsolete file metadata");
+            if(previewDirectory!=null)
+            {
+                Main.Width=1180;Main.Height=900;Main.UpdateLayout();var host=WorkspaceVisual(progressWindow!);
+                var bitmap=new RenderTargetBitmap((int)Math.Ceiling(host.ActualWidth),(int)Math.Ceiling(host.ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(host);
+                var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bitmap));using var stream=File.Create(Path.Combine(previewDirectory,"HistoricalReview-"+mode+".png"));png.Save(stream);
+            }
+            window.Find<Button>("CompareIgnoreButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(window.Find<Button>("CompareApplyButton").IsEnabled,"Rechecked historical decision cannot be applied");
+            OnStarted(job);RefreshProgress();
+            Check(!window.Find<Button>("CompareApplyButton").IsEnabled && !window.Find<Button>("CompareIgnoreButton").IsEnabled,"New execution did not revoke rechecked historical decisions");
+            Check(window.Find<Button>("CompareStopButton").Visibility==Visibility.Visible && window.Find<Button>("CompareStopButton").IsEnabled && !window.Find<Button>("CompareRefreshButton").IsEnabled,"Active comparison offers no safe path to stop before rechecking");
+            window.Find<Button>("CompareStopButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(job.Stopped && !job.Paused && sessionHistory.Latest(job.Id)?.Outcome==SyncRunOutcome.Stopping,"Comparison stop did not request finishing instead of pausing");
+            OnCompleted(job,new BackupResult());RefreshProgress();
+            Check(!window.Find<Button>("CompareApplyButton").IsEnabled,"Completed newer execution resurrected stale decision authority");
+            window=problemPanel!; // Result changes may replace the read-only host.
+            window.Find<Button>("CompareRefreshButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Ready(window);
+            Check(window.Find<Button>("CompareReverseButton").IsEnabled && window.Find<ListBox>("ComparisonFiles").Items.Cast<ComparisonRow>().All(r=>r.Action==null),"Rechecking after another run failed to clear stale choices");
+            var reviewedList=window.Find<ListBox>("ComparisonFiles");
+            reviewedList.SelectedItem=reviewedList.Items.OfType<ComparisonRow>().Single(r=>r.Issue.File=="오류.txt");await Ready(window);
+            window.Find<Button>("CompareForwardButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var recheckedLease=scheduler.AcquireRunLease;scheduler.AcquireRunLease=null;
+            try
+            {
+                var acceptRechecked=app.Dispatcher.BeginInvoke(()=>app.Windows.OfType<Window>().Single(w=>w.Title=="SafeSync 확인").DialogResult=true);
+                window.Find<Button>("CompareApplyButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await acceptRechecked;
+                for(int i=0;i<200 && (scheduler.IsRunning(job.Id) || File.ReadAllText(Path.Combine(backup,"오류.txt"))!="source original");i++)await Task.Delay(20);
+                Check(File.ReadAllText(Path.Combine(backup,"오류.txt"))=="source original","Rechecked historical action did not reach the safe scheduler apply path");
+                Check(new TrashService().List(backup,default).Any(t=>t.RelativePath=="오류.txt"),"Rechecked historical overwrite did not preserve the prior backup");
+            }
+            finally{scheduler.AcquireRunLease=recheckedLease;}
+            ClearProblemWorkspace();
             // Dropbox's stored CreatedUtc is server_modified, not a birth time.
             // Do not present that timestamp as an actual creation date.
             var dropboxJob=new BackupJob{Name="Dropbox 생성일시 검사",Source=source,Destination="Dropbox / Backup",DestinationType="Dropbox"};config.Jobs=[dropboxJob];RefreshJobs();

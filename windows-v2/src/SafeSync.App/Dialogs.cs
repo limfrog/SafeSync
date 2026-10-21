@@ -295,10 +295,10 @@ internal sealed partial class DesktopController
                     progressWindow.Find<DataGrid>("ProgressConflictGrid").Items.Refresh();e.Handled=true;
                 }
             }));
-            Click(progressWindow,"ApplyConflictActionsButton",()=>{if(RecoveryRunJob() is {} job)ShowFileComparison(job,SelectedRun,(progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem as ConflictRow)?.Issue.File);});
-            progressWindow.Find<DataGrid>("ProgressConflictGrid").MouseDoubleClick+=(_,_)=>{if(RecoveryRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem is ConflictRow row)ShowFileComparison(job,SelectedRun,row.Issue.File);};
-            progressWindow.Find<DataGrid>("ProgressErrorGrid").MouseDoubleClick+=(_,_)=>{if(RecoveryRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressErrorGrid").SelectedItem is FileIssue issue)ShowFileComparison(job,SelectedRun,issue.File);};
-            Click(progressWindow,"CompareErrorsButton",()=>{if(RecoveryRunJob() is {} job)ShowFileComparison(job,SelectedRun);});
+            Click(progressWindow,"ApplyConflictActionsButton",()=>{if(ComparisonRunJob() is {} job)ShowFileComparison(job,SelectedRun,(progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem as ConflictRow)?.Issue.File);});
+            progressWindow.Find<DataGrid>("ProgressConflictGrid").MouseDoubleClick+=(_,_)=>{if(ComparisonRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressConflictGrid").SelectedItem is ConflictRow row)ShowFileComparison(job,SelectedRun,row.Issue.File);};
+            progressWindow.Find<DataGrid>("ProgressErrorGrid").MouseDoubleClick+=(_,_)=>{if(ComparisonRunJob() is {} job && progressWindow.Find<DataGrid>("ProgressErrorGrid").SelectedItem is FileIssue issue)ShowFileComparison(job,SelectedRun,issue.File);};
+            Click(progressWindow,"CompareErrorsButton",()=>{if(ComparisonRunJob() is {} job)ShowFileComparison(job,SelectedRun);});
         }
         Theme.Apply(progressWindow,config.ThemeMode);
         if(progressWindow.Find<DataGrid>("HistoryGrid").SelectedItem==null && problemRequestedJob==null)SelectRun(sessionHistory.Runs.FirstOrDefault());
@@ -357,7 +357,7 @@ internal sealed partial class DesktopController
         window.Find<DataGrid>("ProgressErrorGrid").ItemsSource=errors;
         window.Find<TextBlock>("ErrorsTabHeader").Text=$"오류 {errors.Count:N0}";
         window.Find<TextBlock>("ErrorSummaryText").Text=errors.Count==0 ? "이 실행에서 기록된 오류가 없습니다." : $"오류 {errors.Count:N0}개 · 원인을 확인한 뒤 해당 작업을 다시 실행하세요.";
-        window.Find<Button>("CompareErrorsButton").IsEnabled=currentJob!=null && errors.Count>0;
+        window.Find<Button>("CompareErrorsButton").IsEnabled=ComparisonRunJob()!=null && errors.Count>0;
         var choices=conflictRunId==run?.RunId ? conflictRows.ToDictionary(r=>r.Issue.JobId+"|"+r.Issue.File,r=>r.Action) : new Dictionary<string,ConflictAction?>();
         conflictRunId=run?.RunId ?? "";
         bool canResolve=run!=null && !run.IsActive && sessionHistory.IsLatest(run) && currentJob!=null;
@@ -367,7 +367,7 @@ internal sealed partial class DesktopController
         window.Find<TextBlock>("ConflictSummaryText").Text=$"확인이 필요한 파일 {conflictRows.Count}개";
         window.Find<TextBlock>("ConflictTabHeader").Text=$"충돌 {conflictRows.Count:N0}";
         foreach(var name in new[]{"ConflictAllOverwriteButton","ConflictAllRenameButton","ConflictAllIgnoreButton","ApplyConflictActionsButton"})window.Find<Button>(name).IsEnabled=canResolve && conflictRows.Any(r=>r.CanResolve);
-        window.Find<Button>("ApplyConflictActionsButton").IsEnabled=canResolve && conflictRows.Count>0;
+        window.Find<Button>("ApplyConflictActionsButton").IsEnabled=ComparisonRunJob()!=null && conflictRows.Count>0;
         window.Find<TextBlock>("ProblemTabHeader").Text=$"문제 해결 {conflictRows.Count+errors.Count:N0}";
         if(window.Find<TabItem>("ProblemTab").IsSelected)
         {
@@ -398,6 +398,8 @@ internal sealed partial class DesktopController
         int assertions=0;
         void Check(bool condition,string message){if(!condition)throw new InvalidOperationException(message);assertions++;}
         ShowMain();
+        Check(Main.Find<TextBlock>("FooterText").Text=="Windows "+AppVersion,"Version footer still contains migration terminology");
+        Check(!Main.Find<TextBox>("ActivityBox").Text.Contains("이전 PowerShell 버전과 설정 공간을 분리했습니다"),"Startup log still exposes obsolete migration terminology");
         foreach(var mode in new[]{"Light","Dark"})
         {
             config.ThemeMode=mode;Theme.Apply(Main,mode);Main.UpdateLayout();

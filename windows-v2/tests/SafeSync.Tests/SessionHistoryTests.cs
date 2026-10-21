@@ -46,5 +46,14 @@ internal static class SessionHistoryTests
         check(ending.Summary.Contains("직접 작업을 시작할 때까지 자동 실행하지 않습니다."),"Waiting result omitted the restart policy.");
         stoppedJob.Stopped=false;var restarted=session.Begin(stoppedJob);
         check(restarted.RunId!=ending.RunId && restarted.Outcome==SyncRunOutcome.Running && ending.Outcome==SyncRunOutcome.Waiting,"Explicit start resumed old run instead of creating new history.");
+        var boundJob=new BackupJob {Source="source",Destination="Drive / selected",DestinationType="GoogleDrive",CloudAccountId="account-1",CloudFolderId="folder-1"};
+        var bound=session.Begin(boundJob);
+        check(bound.Matches(boundJob) && ReferenceEquals(session.Latest(boundJob.Id),bound),"Current comparison generation cannot be captured");
+        boundJob.CloudAccountId="account-2";check(!bound.Matches(boundJob) && bound.CloudAccountId=="account-1","Changed account inherited historical comparison authority");
+        boundJob.CloudAccountId="account-1";boundJob.CloudFolderId="folder-2";check(!bound.Matches(boundJob) && bound.CloudFolderId=="folder-1","Changed folder inherited historical comparison authority");
+        boundJob.CloudFolderId="folder-1";boundJob.SyncMode="TwoWay";check(!bound.Matches(boundJob),"Changed synchronization direction inherited historical comparison authority");
+        boundJob.SyncMode="OneWay";boundJob.Source="another";check(!bound.Matches(boundJob),"Changed source inherited historical comparison authority");
+        boundJob.Source="source";boundJob.Destination="another";check(!bound.Matches(boundJob),"Changed destination inherited historical comparison authority");
+        check(session.Latest("unknown")==null,"Unknown job has a comparison generation");
     }
 }

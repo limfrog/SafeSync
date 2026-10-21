@@ -15,6 +15,9 @@ public sealed class SyncRun : INotifyPropertyChanged
     public string Destination {get;}
     public string DestinationType {get;}
     public string SyncMode {get;}
+    public string CloudAccountId {get;}
+    public string CloudFolderId {get;}
+    public bool Matches(BackupJob job)=>JobId==job.Id && Source==job.Source && Destination==job.Destination && DestinationType==job.DestinationType && SyncMode==job.SyncMode && CloudAccountId==job.CloudAccountId && CloudFolderId==job.CloudFolderId;
     public string ModeText=>SyncMode=="TwoWay" ? "양방향 동기화 ↔" : "단방향 백업 →";
     public DateTimeOffset StartedUtc {get;}
     public DateTimeOffset? EndedUtc {get;private set;}
@@ -54,7 +57,7 @@ public sealed class SyncRun : INotifyPropertyChanged
     public string Tone=>Outcome switch {SyncRunOutcome.Failed=>"Danger",SyncRunOutcome.Attention=>Errors.Count>0 ? "Danger" : "Warning",SyncRunOutcome.Completed=>"Success",SyncRunOutcome.Running=>"Active",_=>"Muted"};
     public string Summary=>FailureReason.Length>0 ? FailureReason : IsActive ? StageText : (Outcome==SyncRunOutcome.Waiting ? "작업을 종료하고 대기 중입니다. 남은 작업은 저장되었으며, 직접 작업을 시작할 때까지 자동 실행하지 않습니다.\n" : "")+$"복사 {Copied:N0} · 동일 {Skipped:N0} · 휴지통 {Trashed:N0} · 사용 중 {Locked.Count:N0} · 충돌 {Conflicts.Count:N0} · 오류 {Errors.Count:N0}";
     private static string Count(int? value)=>value?.ToString("N0") ?? "—";
-    internal SyncRun(BackupJob job,DateTimeOffset now){JobId=job.Id;JobName=job.Name;Source=job.Source;Destination=job.Destination;DestinationType=job.DestinationType;SyncMode=job.SyncMode;StartedUtc=updatedUtc=now;}
+    internal SyncRun(BackupJob job,DateTimeOffset now){JobId=job.Id;JobName=job.Name;Source=job.Source;Destination=job.Destination;DestinationType=job.DestinationType;SyncMode=job.SyncMode;CloudAccountId=job.CloudAccountId;CloudFolderId=job.CloudFolderId;StartedUtc=updatedUtc=now;}
     internal void Update(BackupProgress progress,bool paused,bool stopping,DateTimeOffset now)
     {Stage=progress.Stage;CurrentFile=progress.CurrentFile;CompletedFiles=progress.Completed;TotalFiles=progress.Total;updatedUtc=now;Outcome=stopping || Outcome==SyncRunOutcome.Stopping ? SyncRunOutcome.Stopping : paused ? SyncRunOutcome.Paused : SyncRunOutcome.Running;Changed();}
     internal void SetPaused(bool value){if(IsActive && Outcome!=SyncRunOutcome.Stopping){Outcome=value ? SyncRunOutcome.Paused : SyncRunOutcome.Running;Changed();}}
@@ -90,4 +93,5 @@ public sealed class SyncSessionHistory
     public void SetStopping(string jobId){if(active.TryGetValue(jobId,out var run))run.SetStopping();}
     public void Tick(DateTimeOffset? now=null){foreach(var run in active.Values)run.Tick(now ?? DateTimeOffset.UtcNow);}
     public bool IsLatest(SyncRun run)=>latest.TryGetValue(run.JobId,out var current) && ReferenceEquals(run,current);
+    public SyncRun? Latest(string jobId)=>latest.GetValueOrDefault(jobId);
 }

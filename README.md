@@ -1,13 +1,15 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.13 공개 프리뷰**, macOS는 **0.3.10 공개 테스트 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.14 공개 프리뷰**, macOS는 **0.3.10 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
 - [macOS 0.3.10 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.10-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 13 설치 파일](dist/SafeSync-Setup-1.0.0-preview.13.exe)
-- [Windows 1.0.0 Preview 13 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.13.zip)
+- [Windows 1.0.0 Preview 14 설치 파일](dist/SafeSync-Setup-1.0.0-preview.14.exe)
+- [Windows 1.0.0 Preview 14 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.14.zip)
+- [프리뷰 14 문제 해결 수정 검사](windows-v2/PREVIEW14-VALIDATION.md)
+- [프리뷰 14 설치본 검증과 SHA-256](windows-v2/PREVIEW14-PACKAGE-RESULT.md)
 - [앱 업데이트 사용·배포 안내](windows-v2/UPDATES.md)
 - [프리뷰 13 업데이트 기능 검증](windows-v2/PREVIEW13-VALIDATION.md)
 - [Windows 사용 및 기능 안내](windows-v2/README-ko.md)
@@ -17,6 +19,10 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## Windows 프리뷰 14 변경사항
+
+이전 오류·충돌 이력에서도 현재 파일을 다시 비교한 뒤 처리 방법을 선택할 수 있습니다. 같은 작업이 실행 중이면 현재 파일을 마치고 대기한 뒤 재비교할 수 있습니다. 재확인 후 새 실행이나 위치·계정 변경이 생기면 기존 선택을 무효화하며 적용 전 재검증·휴지통 보존은 유지합니다. 버전 하단과 시작 기록의 과거 전환 안내도 정리했습니다. 핵심 검사 1,004개, 라이트/다크 화면 585개, 설치 도구 34개와 최종 설치 파일 504개 해시 검증을 통과했습니다.
 
 ## Windows 프리뷰 13 변경사항
 
