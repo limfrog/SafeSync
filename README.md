@@ -1,8 +1,8 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.14 공개 프리뷰**, macOS는 **0.3.10 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.14 공개 프리뷰**, macOS는 **0.3.11 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.10 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.10-universal.zip)
+- [macOS 0.3.11 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.11-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
@@ -64,7 +64,9 @@ GitHub 배포 정보로 새 버전 자동 확인·자동 다운로드를 제공�
 - `dist/`: Windows 설치/무설치 배포본과 macOS Universal 앱 ZIP
 - `index.html`, `privacy.html`: GitHub Pages용 안내 및 개인정보처리방침
 
-## macOS 0.3.10
+## macOS 0.3.11
+
+0.3.11은 이전 이력에서도 ‘현재 파일 다시 비교’ 후 처리 방법을 선택하도록 개선했습니다. 새 실행·위치·계정 변경 시 다시 차단하며 실제 적용 전 파일 재검증은 유지합니다. 탭을 나갔다 돌아올 때 로딩 상태도 정리하고 시작 문구를 간소화했습니다. 통합 시나리오 100개와 XCTest 10개, Universal 빌드·서명·등록 리소스 보존 검사를 통과했습니다. 이번에 실제 Mac 화면 클릭이나 실계정 클라우드 전송을 재검증한 것은 아닙니다.
 
 0.3.10은 최신 Windows의 내용 비교·삭제 보호를 반영합니다. 같은 메타데이터의 다른 내용을 놓치지 않으며, 원본/백업 루트 교체·연결 중단·불명확한 삭제를 차단합니다. 클라우드 삭제 직전에도 원본과 선택 폴더를 재확인합니다. 기존 기록을 보존하면서 최초 한 번 재검증하며, 접속하지 않은 기간만으로 전체 검사를 반복하지 않습니다. FSEvents 시작이 확인되지 않은 경우에는 보수적으로 전체 검사합니다.
 

@@ -1,19 +1,18 @@
-SafeSync macOS 0.3.10 (19) — 2026-10-21
-Build source: 3173cd0f0bf4216af847152ccc9964a14dad6189
-CI: https://github.com/limfrog/SafeSync/actions/runs/39594764865
-Environment: GitHub macos-15 / Apple Silicon; Swift 6 toolchain
-./scripts/check.sh: 86 integration scenarios PASS (67 existing + 19 safety regressions)
-swift test --disable-sandbox: Executed 10 tests, with 0 failures (0 unexpected)
-Build: x86_64 arm64 Universal; codesign --verify --deep --strict PASS
-Bundle: 0.3.10 (19), io.limfrog.SafeSync.macOS; executable mode 755
-Published Google Desktop registration resource unchanged (byte-for-byte)
-ZIP SHA256: aa09346d6523f6f933436934741d49bc6a534f1b9567aae325949c8e0aed9f06
-ZIP bytes: 4103743
-Scope: isolated temporary files, in-memory cloud, mock HTTP and real FSEvents.
-Not tested this release: live cloud/NAS transfers, Mac UI, sleep, Intel execution.
-Signing: ad-hoc only; no Developer ID signing or Apple notarization.
+SafeSync macOS 0.3.11 (20) — 2026-10-21
+Source: b68e2ebca4cd72f34a2f59f2a35ad289406c8055
+CI: https://github.com/limfrog/SafeSync/actions/runs/39616726940
+Integration: 100 scenarios PASS (86 previous + 14 comparison review regressions)
+XCTest: Executed 10 tests, with 0 failures (0 unexpected)
+Universal: x86_64 arm64; codesign --verify --deep --strict PASS
+Bundle: io.limfrog.SafeSync.macOS; version 0.3.11; build 20; executable mode 755
+Published Google Desktop registration resource preserved byte-for-byte
+ZIP bytes: 4127623
+ZIP SHA256: 44753d73519986b54bd8d763d86b2043c432772fbb8b29e0b8d8ee84d3f13049
+Scope: isolated filesystem, in-memory cloud, mock HTTP and real FSEvents.
+Not tested: actual Mac UI interactions, live cloud/NAS transfers, Intel execution.
+Signing: ad-hoc; not Developer ID signed or Apple notarized.
 
---- Verbatim integration test output ---
+--- Verbatim integration check output ---
 PASS copy, skip, verified overwrite, deletion and restore
 PASS conflict isolation and keep both
 PASS unavailable source preserves backup
@@ -105,3 +104,18 @@ PASS safety port Google Drive API: cloud folder identity change is rejected
 PASS safety port Google Drive API: source reappearance during network await cancels deletion
 PASS safety port Google Drive API: source root swap during network await preserves remote backup
 19 safety port integration scenarios passed (isolated filesystem and in-memory cloud)
+PASS review: freshly read current generation permits an older issue list
+PASS review: different execution generation revokes authority
+PASS review: active execution blocks application
+PASS review: missing execution generation cannot authorize writes
+PASS review: changed endpoint field 0 cannot inherit authority
+PASS review: changed endpoint field 1 cannot inherit authority
+PASS review: changed endpoint field 2 cannot inherit authority
+PASS review: changed endpoint field 3 cannot inherit authority
+PASS review: changed endpoint field 4 cannot inherit authority
+PASS review: changed endpoint field 5 cannot inherit authority
+PASS review: changed endpoint field 6 cannot inherit authority
+PASS review: changed endpoint field 7 cannot inherit authority
+PASS review: rechecked explicit overwrite applies and preserves previous backup in trash
+PASS review: file changed after comparison remains intact
+14 comparison review integration scenarios passed
