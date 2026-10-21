@@ -1,8 +1,8 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.13 공개 프리뷰**, macOS는 **0.3.9 검증 중 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.13 공개 프리뷰**, macOS는 **0.3.10 공개 테스트 버전**입니다. Windows 네이티브 전환 개발판의 번호를 1.0.0 프리뷰로 재정리했습니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.9 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.9-universal.zip)
+- [macOS 0.3.10 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.10-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
@@ -58,15 +58,17 @@ GitHub 배포 정보로 새 버전 자동 확인·자동 다운로드를 제공�
 - `dist/`: Windows 설치/무설치 배포본과 macOS Universal 앱 ZIP
 - `index.html`, `privacy.html`: GitHub Pages용 안내 및 개인정보처리방침
 
-## macOS 0.3.9
+## macOS 0.3.10
+
+0.3.10은 최신 Windows의 내용 비교·삭제 보호를 반영합니다. 같은 메타데이터의 다른 내용을 놓치지 않으며, 원본/백업 루트 교체·연결 중단·불명확한 삭제를 차단합니다. 클라우드 삭제 직전에도 원본과 선택 폴더를 재확인합니다. 기존 기록을 보존하면서 최초 한 번 재검증하며, 접속하지 않은 기간만으로 전체 검사를 반복하지 않습니다. FSEvents 시작이 확인되지 않은 경우에는 보수적으로 전체 검사합니다.
 
 0.3.9는 자동 업데이트 확인·검증 ZIP 다운로드·Finder 열기를 제공합니다. 백업이 끝나면 앱을 종료한 뒤 새 앱으로 직접 교체합니다. 설정에서 자동 확인과 다운로드를 끌 수 있습니다. GitHub macOS Universal 빌드와 서명·번들 검증을 완료했으며 실제 Mac UI 조작 검증은 별도입니다.
 
 0.3.8은 개발자와 문의 이메일을 Horizon Entertainment 및 apps@horizonent.co.kr로 통일하고 빌드 저작권을 갱신했습니다. GitHub macOS 환경에서 Universal 빌드와 서명·번들 검증을 완료했으며 기존 배포본의 Desktop Google 등록 정보를 그대로 보존했습니다. 동기화 기능은 0.3.7과 같습니다.
 
-macOS 14 이상에서 ZIP을 풀고 `SafeSync.app`을 사용합니다. 기존 Windows 아이콘을 사용하며 로컬·외장·마운트된 네트워크 폴더, Dropbox·Google Drive 백업을 지원합니다. 작업 목록 내보내기·가져오기, 사용 중 파일 대기와 즉시 재시도, 수동 증분 백업, 완료 알림음, 클라우드 폴더 선택 창의 **새 폴더** 버튼을 포함합니다. 최신 Windows 1.0.0-preview.10에 맞춰 **백업 작업 / 동기화 상태 / 휴지통** 탭과 공통 환경설정, 실행 이력, 파일 비교·충돌 선택, 원본 휴지통을 제공합니다. **양방향 자동 동기화**도 작업별로 선택할 수 있습니다. 원본 아이콘과 별도 **About SafeSync** 정보 창을 유지합니다. 0.3.7은 일반 사용자용 클라우드 로그인, 창 닫기 시 Dock 숨김, 메뉴 막대 화살표·다크 모드 아웃라인, 전용 메시지 창을 포함하며 Dropbox의 `.DS_Store` 반복 실패를 수정했습니다.
+macOS 14 이상에서 ZIP을 풀고 `SafeSync.app`을 사용합니다. 기존 Windows 아이콘을 사용하며 로컬·외장·마운트된 네트워크 폴더, Dropbox·Google Drive 백업을 지원합니다. 작업 목록 내보내기·가져오기, 사용 중 파일 대기와 즉시 재시도, 수동 증분 백업, 완료 알림음, 클라우드 폴더 선택 창의 **새 폴더** 버튼을 포함합니다. Windows 1.0.0-preview.10의 **백업 작업 / 동기화 상태 / 휴지통** 탭과 공통 환경설정, 실행 이력, 파일 비교·충돌 선택, 원본 휴지통을 유지합니다. **양방향 자동 동기화**도 작업별로 선택할 수 있습니다. 원본 아이콘과 별도 **About SafeSync** 정보 창을 유지합니다. 0.3.7은 일반 사용자용 클라우드 로그인, 창 닫기 시 Dock 숨김, 메뉴 막대 화살표·다크 모드 아웃라인, 전용 메시지 창을 포함하며 Dropbox의 `.DS_Store` 반복 실패를 수정했습니다.
 
-이 배포본은 **ad-hoc 서명**이며 Developer ID 서명·Apple 공증 전입니다. 자동 검사 67개와 Universal 빌드가 통과했지만 실제 클라우드 전송·NAS·잠자기·Intel 실행 검증 등은 남아 있습니다. 확인한 범위는 [검증 현황](macOS/STATUS.md)과 [검사 결과](macOS/TEST-RESULTS.txt)를 참고하세요.
+이 배포본은 **ad-hoc 서명**이며 Developer ID 서명·Apple 공증 전입니다. 자동 검사와 Universal 빌드 결과는 [검증 현황](macOS/STATUS.md)과 [검사 결과](macOS/TEST-RESULTS.txt)를 참고하세요. 실제 클라우드 양방향 전송·NAS·잠자기·Intel 실행 검증 등은 남아 있습니다.
 
 Swift 6 도구체인과 Command Line Tools에서 실행합니다.
 

@@ -44,7 +44,7 @@ public final class FolderWatcher: @unchecked Sendable {
         }
         // A flush cannot retroactively certify an inventory made before initial
         // subscription. Also, flushing only drains daemon-queued events; manual
-        // runs explicitly scan and later events remain in the owner's journal.
+        // full scans are available explicitly and later events remain in the journal.
         return isOperational && wasReady && historyReady
     }
     private func flushStream() { if let stream { FSEventStreamFlushSync(stream) } }

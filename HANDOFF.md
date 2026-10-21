@@ -1,3 +1,12 @@
+# macOS 0.3.10 (19) 보호 처리 이식 — 2026-10-21
+
+- Windows preview.13은 변경하지 않고 macOS에 내용 비교·루트 연결 식별·확실한 부재 확인·클라우드 삭제 직전 재확인·구버전 기록 최초 재검증을 반영했다. 경과 시간만으로 전체 검사하지 않는다.
+- 기존 앱 ID `io.limfrog.SafeSync.macOS`, Application Support/SafeSync 데이터 위치, Keychain 식별자 및 Google Desktop 등록 리소스를 유지한다. 구버전에서 원본이 없는 기록은 자동 삭제하지 않고 검토 대상으로 보존한다. 루트 교체가 의도된 경우 작업 위치를 다시 선택해 새 비교 기록으로 시작한다.
+- 빌드 소스 `3173cd0f0bf4216af847152ccc9964a14dad6189`, GitHub 실행 `39594764865`. 통합 시나리오 86개와 XCTest 10개 통과. FSEvents 시작 직후 준비 상태를 과신하던 문제를 실제 macOS 검사에서 발견해 보수적 초기 전체 검사로 보완했다.
+- Universal ZIP 4,103,743 bytes / SHA-256 `aa09346d6523f6f933436934741d49bc6a534f1b9567aae325949c8e0aed9f06`. x86_64/arm64·서명·번들·리소스 일치를 확인했다. ad-hoc 서명이며 Developer ID/Apple 공증은 아직 없다.
+- 실제 사용자 앱·작업·계정·백업은 수정하지 않았다. 실제 클라우드/NAS/Intel 기기·Mac UI 재검증은 남는다. 홈페이지 개별 SafeSync 페이지와 방침만 갱신하며 `/apps/` 비노출을 유지한다.
+- 상세: [macOS 사용 안내](macOS/README-ko.md), [검증 현황](macOS/STATUS.md), [실제 검사 출력](macOS/TEST-RESULTS.txt).
+
 # 앱 업데이트 확인·검증 다운로드 — 2026-10-21
 
 - Windows **1.0.0-preview.13**, macOS **0.3.9 (18)**: 자동 확인/다운로드와 환경설정의 수동 확인. 설치는 사용자 승인 이후에만 한다. 이전 버전은 이번 배포본을 직접 설치해야 한다.

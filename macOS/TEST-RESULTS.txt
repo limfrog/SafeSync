@@ -1,6 +1,19 @@
-macOS 0.3.7 — 2026-10-20
-67 integration scenarios passed. Filesystem and simulated-cloud checks; not full production-cloud validation.
+SafeSync macOS 0.3.10 (19) — 2026-10-21
+Build source: 3173cd0f0bf4216af847152ccc9964a14dad6189
+CI: https://github.com/limfrog/SafeSync/actions/runs/39594764865
+Environment: GitHub macos-15 / Apple Silicon; Swift 6 toolchain
+./scripts/check.sh: 86 integration scenarios PASS (67 existing + 19 safety regressions)
+swift test --disable-sandbox: Executed 10 tests, with 0 failures (0 unexpected)
+Build: x86_64 arm64 Universal; codesign --verify --deep --strict PASS
+Bundle: 0.3.10 (19), io.limfrog.SafeSync.macOS; executable mode 755
+Published Google Desktop registration resource unchanged (byte-for-byte)
+ZIP SHA256: aa09346d6523f6f933436934741d49bc6a534f1b9567aae325949c8e0aed9f06
+ZIP bytes: 4103743
+Scope: isolated temporary files, in-memory cloud, mock HTTP and real FSEvents.
+Not tested this release: live cloud/NAS transfers, Mac UI, sleep, Intel execution.
+Signing: ad-hoc only; no Developer ID signing or Apple notarization.
 
+--- Verbatim integration test output ---
 PASS copy, skip, verified overwrite, deletion and restore
 PASS conflict isolation and keep both
 PASS unavailable source preserves backup
@@ -22,11 +35,12 @@ PASS Dropbox API: conflict keep-both, deletion and retention cleanup
 PASS Google Drive API: conflict keep-both, deletion and retention cleanup
 PASS Dropbox API: remote change during upload is preserved
 PASS Google Drive API: remote change during upload is preserved
+10 cloud integration scenarios passed (in-memory providers; live APIs still require account validation)
 PASS Dropbox reserved metadata and legacy failed publish do not block ordinary backups; source, staged copy and journal preserved
 PASS Dropbox two-way repeated runs exclude reserved OS metadata without conflicts or local deletion
 PASS reserved-name policy is Dropbox-specific and does not exclude arbitrary hidden files
 PASS Dropbox 409 reserved names, missing paths and write permissions have distinct sanitized messages
-PASS durable change queue retains events received during a running backup and falls back after seven days
+PASS durable change queue retains in-flight events without age-only full rescans
 PASS incremental nested change, directory deletion and no-change run without unrelated file comparisons
 PASS local retention removes only expired trash after recovery
 PASS OAuth PKCE and anti-forgery parameters
@@ -49,7 +63,7 @@ PASS Google Drive bounded parallel uploads preserve identical-content files with
 PASS parallel upload failure isolates one file and preserves its previous version
 PASS parallel cancellation waits for children, releases lease and permits safe retry
 PASS incremental directory deletion clears stale issues without discarding untracked backups or unrelated conflicts
-PASS unavailable FSEvents service requests full scan (live event delivery unavailable in this shell)
+PASS real FSEvents startup requests a safe inventory, completes replay and delivers live changes without blocking main callbacks
 12 improvement checks passed
 PASS cloud folder creation uses current parent, trims Korean names and rejects duplicate folders
 PASS unsafe/reserved folder names and collisions with existing files are rejected
@@ -71,3 +85,23 @@ PASS duplicate parent folders preserve all children and never grant automatic de
 PASS remote empty folder deletion and ID-preserving directory trash restore
 PASS two-way cancellation at a file boundary prevents mutation and releases the persistent lease for retry
 PASS Windows job-list round-trip preserves TwoWay mode
+PASS safety port: same metadata with different bytes remains a conflict
+PASS safety port: genuinely identical bytes skip without a false conflict
+PASS safety port: replaced source root cannot inherit deletion authority
+PASS safety port: replaced backup root cannot inherit deletion authority
+PASS safety port: non-directory ancestor is not an inferred deletion
+PASS safety port: symlink ancestor is not an inferred deletion
+PASS safety port: legacy missing-source record and backup are retained for review
+PASS safety port: legacy present source is verified once before later deletion
+PASS safety port: replacement backup directory is never archived as a deleted file
+PASS safety port Dropbox API: same metadata cannot hide different bytes
+PASS safety port Dropbox API: legacy absent source never authorizes cloud deletion
+PASS safety port Dropbox API: cloud folder identity change is rejected
+PASS safety port Dropbox API: source reappearance during network await cancels deletion
+PASS safety port Dropbox API: source root swap during network await preserves remote backup
+PASS safety port Google Drive API: same metadata cannot hide different bytes
+PASS safety port Google Drive API: legacy absent source never authorizes cloud deletion
+PASS safety port Google Drive API: cloud folder identity change is rejected
+PASS safety port Google Drive API: source reappearance during network await cancels deletion
+PASS safety port Google Drive API: source root swap during network await preserves remote backup
+19 safety port integration scenarios passed (isolated filesystem and in-memory cloud)
