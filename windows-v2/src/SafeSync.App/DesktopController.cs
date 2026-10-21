@@ -210,7 +210,7 @@ internal sealed partial class DesktopController
         string? id=Selected?.Id;jobs.Clear();
         foreach(var job in config.Jobs)
         {
-            job.Status=job.CloudBindingReviewRequired ? "클라우드 연결 확인 필요" : job.Stopped ? scheduler.IsRunning(job.Id) ? "종료 중…" : "대기 중" : job.Paused ? "일시정지" : problemStore.Get(job.Id)!=null ? "확인 필요" : "대기 중";
+            job.Status=job.CloudBindingReviewRequired ? "클라우드 연결 확인 필요" : job.Stopped ? scheduler.IsRunning(job.Id) ? "종료 중…" : "대기 중" : job.Paused ? "일시정지" : problemStore.Get(job.Id)?.Kind=="Network" ? "네트워크 재시도 대기" : problemStore.Get(job.Id)!=null ? "확인 필요" : "대기 중";
             jobs.Add(job);
         }
         Jobs.SelectedItem=jobs.FirstOrDefault(j=>j.Id==id) ?? jobs.FirstOrDefault();

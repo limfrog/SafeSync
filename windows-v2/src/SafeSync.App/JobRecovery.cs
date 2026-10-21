@@ -37,8 +37,8 @@ internal sealed partial class DesktopController
     {
         foreach(var (window,context) in recoveryPanels.ToArray())
         {
-            var job=context.Job;var run=context.Run;var issue=run?.Errors.FirstOrDefault() ?? run?.Conflicts.FirstOrDefault();
-            var problem=run==null || sessionHistory.IsLatest(run) ? problemStore.Get(job.Id) : run.FailureReason.Length>0 ? JobProblem.Classify(run.FailureReason,job.DestinationType!="Local") : issue!=null ? JobProblem.Classify(issue.Reason,job.DestinationType!="Local",run.Errors.Count>0 ? "" : "Conflict",issue.File) : null;
+            var job=context.Job;var run=context.Run;var issue=run?.Errors.FirstOrDefault(i=>!NetworkFailures.Automatic(i)) ?? run?.Conflicts.FirstOrDefault() ?? run?.Errors.FirstOrDefault();
+            var problem=run==null || sessionHistory.IsLatest(run) ? problemStore.Get(job.Id) : run.FailureReason.Length>0 ? JobProblem.Classify(run.FailureReason,job.DestinationType!="Local",run.AutomaticNetworkRetry ? "Network" : "") : issue!=null ? JobProblem.Classify(issue.Reason,job.DestinationType!="Local",NetworkFailures.Automatic(issue) ? "Network" : run.Conflicts.Contains(issue) ? "Conflict" : "",issue.File) : null;
             bool running=scheduler.IsRunning(job.Id),present=context.CanRepair();
             window.Find<TextBlock>("RecoveryJobName").Text=job.Name;
             window.Find<TextBlock>("RecoveryTitle").Text=problem?.Title ?? (job.Stopped ? "작업을 시작할 준비가 되었습니다" : "최근 실행에서 문제가 해소되었습니다");
