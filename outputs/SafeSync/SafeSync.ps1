@@ -4428,7 +4428,7 @@ $script:ProgressButton.Add_Click({ Toggle-SafeSyncProgressWindow })
 Initialize-SafeSyncMainShortcuts
 (Find-Control 'MenuExitItem').Add_Click({ Stop-SafeSyncApplication })
 (Find-Control 'MenuAboutItem').Add_Click({
-    [System.Windows.MessageBox]::Show($script:Window, "SafeSync $script:AppVersion`r`n`r`n개인용 자동 백업 관리자`r`n제작자: 임호`r`nlimfrog75@gmail.com", 'SafeSync 정보', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
+    [System.Windows.MessageBox]::Show($script:Window, "SafeSync $script:AppVersion`r`n`r`n개인용 자동 백업 관리자`r`n개발자: Horizon Entertainment`r`n문의: apps@horizonent.co.kr", 'SafeSync 정보', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information) | Out-Null
 })
 $script:JobsGrid.Add_SelectionChanged({ Update-JobActionButtons })
 $script:JobsGrid.Add_MouseDoubleClick({

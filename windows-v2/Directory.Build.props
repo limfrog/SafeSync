@@ -6,9 +6,10 @@
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>1.0.0-preview.11</Version>
+    <Version>1.0.0-preview.12</Version>
     <SafeSyncDropboxAppKey Condition="'$(SafeSyncDropboxAppKey)'==''">08al8ot9uye36k9</SafeSyncDropboxAppKey>
-    <Authors>임호</Authors>
-    <Copyright>SafeSync · 임호</Copyright>
+    <Authors>Horizon Entertainment</Authors>
+    <Company>Horizon Entertainment</Company>
+    <Copyright>SafeSync · Horizon Entertainment</Copyright>
   </PropertyGroup>
 </Project>

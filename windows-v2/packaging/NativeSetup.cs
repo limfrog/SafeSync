@@ -128,7 +128,9 @@ internal static class NativeSetup
         using(var old=Registry.CurrentUser.OpenSubKey(UninstallKey))if(old!=null&&!NativeSetupCore.Same(Convert.ToString(old.GetValue("InstallLocation")),root))throw new IOException("다른 위치의 프로그램 등록을 덮어쓰지 않았습니다.");
         using(var key=Registry.CurrentUser.CreateSubKey(UninstallKey))
         {
-            key.SetValue("DisplayName",NativeSetupCore.DisplayName+" (1.0.0 Preview)");key.SetValue("DisplayVersion",Version);key.SetValue("Publisher","임호");
+            key.SetValue("DisplayName",NativeSetupCore.DisplayName+" (1.0.0 Preview)");key.SetValue("DisplayVersion",Version);key.SetValue("Publisher","Horizon Entertainment");
+            key.SetValue("Contact","apps@horizonent.co.kr");key.SetValue("HelpLink","mailto:apps@horizonent.co.kr");
+            key.SetValue("URLInfoAbout","https://www.horizonent.co.kr/apps/safesync/");
             key.SetValue("InstallLocation",root);key.SetValue("DisplayIcon",Path.Combine(root,"SafeSync.exe"));
             key.SetValue("UninstallString","\""+Path.Combine(root,"Uninstall.exe")+"\" /uninstall");key.SetValue("NoModify",1);key.SetValue("NoRepair",1);
         }

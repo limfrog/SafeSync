@@ -24,7 +24,7 @@ if($RunTests){
 }
 $assembly=Join-Path $stage 'AssemblyInfo.cs'
 # This is generated build metadata, not editable project source.
-$assemblyText='[assembly: System.Reflection.AssemblyVersion("'+$assemblyVersion+'")][assembly: System.Reflection.AssemblyFileVersion("'+$fileVersion+'")][assembly: System.Reflection.AssemblyInformationalVersion("'+$version+'")]'
+$assemblyText='[assembly: System.Reflection.AssemblyVersion("'+$assemblyVersion+'")][assembly: System.Reflection.AssemblyFileVersion("'+$fileVersion+'")][assembly: System.Reflection.AssemblyInformationalVersion("'+$version+'")][assembly: System.Reflection.AssemblyCompany("Horizon Entertainment")][assembly: System.Reflection.AssemblyCopyright("SafeSync · Horizon Entertainment")]'
 [IO.File]::WriteAllText($assembly,$assemblyText)
 $gui=@('/target:winexe','/r:System.Windows.Forms.dll','/r:System.Drawing.dll',('/win32icon:'+(Join-Path (Split-Path $root -Parent) 'outputs/SafeSync/SafeSync.ico')))
 & $compiler @common @gui /define:UNINSTALL ("/out:"+(Join-Path $publish 'Uninstall.exe')) $core $frontend $assembly

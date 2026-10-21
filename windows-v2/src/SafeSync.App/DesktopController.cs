@@ -135,7 +135,7 @@ internal sealed partial class DesktopController
         Click(Main,"TrashButton",ShowTrash);
         Click(Main,"MenuMessagesItem",ShowNotices);Click(Main,"NotificationsButton",ShowNotices);
         Click(Main,"MenuExportJobsItem",ExportJobs);Click(Main,"MenuImportJobsItem",ImportJobs);
-        Click(Main,"MenuAboutItem",() => Tell($"SafeSync {AppVersion}\n제작자: 임호\nlimfrog75@gmail.com\n\nC#/.NET 기반 전환 검증본입니다. 아직 1.9.15 대체용이 아닙니다.","SafeSync 정보"));
+        Click(Main,"MenuAboutItem",() => Tell($"SafeSync {AppVersion}\n개발자: Horizon Entertainment\n문의: apps@horizonent.co.kr\n\nWindows용 자동 백업 및 양방향 동기화 앱입니다.","SafeSync 정보"));
         Click(Main,"MenuExitItem",() => _=ExitAsync());
         Click(Main,"MenuCloudAccountsItem",ShowCloudAccounts);
         var jobMenu=Main.Find<Button>("JobActionsButton");

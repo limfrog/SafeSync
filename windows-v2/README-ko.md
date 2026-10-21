@@ -1,6 +1,10 @@
 # SafeSync Windows 1.0.0 Preview
 
-현재 로컬 수정본은 **1.0.0-preview.11**입니다. 이번 작업에서는 GitHub·홈페이지 배포나 실행 중인 앱을 변경하지 않고 설치파일을 준비합니다. PowerShell 실행 없이 동작하는 C#/.NET Windows 데스크톱 앱의 프리뷰이며, 정식 안정판·코드 서명·클라우드 공개 심사 완료를 뜻하지 않습니다. 중요한 자료는 별도 사본을 보관하고 테스트 폴더에서 먼저 확인하세요. macOS는 이번 Windows 수정 대상이 아닙니다.
+현재 Windows 버전은 **1.0.0-preview.12**입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. PowerShell 실행 없이 동작하는 C#/.NET Windows 데스크톱 앱의 프리뷰이며, 정식 안정판·코드 서명·클라우드 공개 심사 완료를 뜻하지 않습니다. 중요한 자료는 별도 사본을 보관하고 테스트 폴더에서 먼저 확인하세요.
+
+## 1.0.0-preview.12 개발자·문의 정보 통일
+
+앱 정보, 파일 속성의 회사·저작권, 설치 프로그램의 게시자·연락처·지원 링크를 Horizon Entertainment 및 apps@horizonent.co.kr로 통일했다. 백업 엔진은 프리뷰 11과 같다. [변경 기록](PREVIEW12-VALIDATION.md)을 참고한다.
 
 ## 1.0.0-preview.11 단방향 백업 안전성 수정
 
