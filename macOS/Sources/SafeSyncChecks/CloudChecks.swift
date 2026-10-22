@@ -39,7 +39,7 @@ actor MemoryCloud: RemoteStorage {
         defer { activeUploads -= 1 }
         if name == "metadata.json", let hook = trashUploadHook { trashUploadHook = nil; hook() }
         if uploadDelay > 0 { try await Task.sleep(nanoseconds: uploadDelay) }
-        if transientFailures > 0, resumeKey.contains("|a.txt|") { transientFailures -= 1; throw APIError(status: 503, summary: "Isolated network reproduction") }
+        if transientFailures > 0, resumeKey.contains("|a.txt|") { transientFailures -= 1; throw HTTP.responseError(status: 503, url: URL(string: "https://api.dropboxapi.com/2/files/upload")!, data: Data()) }
         if let failName, resumeKey.contains("|" + failName + "|") { throw BackupError.unsafe("Injected file upload failure") }
         if mutateOnUpload, let old = items.values.first(where: { $0.name == "a.txt" }) {
             mutateOnUpload = false; counter += 1
