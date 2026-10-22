@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import SafeSyncCore
 
-func check(_ value: Bool) { precondition(value, "Application network/queue assertion failed") }
-func checkEqual<T: Equatable>(_ a: T, _ b: T) { precondition(a == b, "Expected \(b), got \(a)") }
+func check(_ value: Bool, file: StaticString = #filePath, line: UInt = #line) { precondition(value, "Application network/queue assertion failed", file: file, line: line) }
+func checkEqual<T: Equatable>(_ a: T, _ b: T, file: StaticString = #filePath, line: UInt = #line) { precondition(a == b, "Expected \(b), got \(a)", file: file, line: line) }
 func fail(_ message: String) { fatalError(message) }
 
 actor UploadBoundary {
@@ -40,6 +40,7 @@ actor UploadBoundary {
                     await cloud.failNextUploads(persistent ? 100 : 1)
                     check(store.run(job, full: true))
                     try await wait { !store.isRunning(job.id) }
+                    print("STATE \(provider.rawValue)/\(mode.rawValue)/persistent=\(persistent): runs=\(store.sessions.filter { $0.job.id == job.id }.count), issues=\(store.issues.map { ($0.path, $0.automaticNetworkRetry, $0.reason) }), messages=\(store.messageRows.count), appError=\(store.error ?? "none")")
                     check(store.sessions.filter { $0.job.id == job.id }.count == 2)
                     check(store.messageRows.isEmpty && store.error == nil)
                     checkEqual(await cloud.bytes(name: "z.txt", parent: job.cloudFolderID!), Data("unrelated".utf8))
