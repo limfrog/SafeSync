@@ -1,13 +1,15 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.16 공개 프리뷰**, macOS는 **0.3.12 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.17 공개 프리뷰**, macOS는 **0.3.13 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.12 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.12-universal.zip)
+- [macOS 0.3.13 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.13-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 16 설치 파일](dist/SafeSync-Setup-1.0.0-preview.16.exe)
-- [Windows 1.0.0 Preview 16 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.16.zip)
+- [Windows 1.0.0 Preview 17 설치 파일](dist/SafeSync-Setup-1.0.0-preview.17.exe)
+- [Windows 1.0.0 Preview 17 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.17.zip)
+- [프리뷰 17·Mac 0.3.13 검사 범위](windows-v2/PREVIEW17-VALIDATION.md)
+- [프리뷰 17·Mac 0.3.13 배포 검사 결과](windows-v2/PREVIEW17-PACKAGE-RESULT.md)
 - [프리뷰 16 실행 중 처리 예약](windows-v2/PREVIEW16-VALIDATION.md)
 - [프리뷰 16 최종 설치본 검증](windows-v2/PREVIEW16-PACKAGE-RESULT.md)
 - [프리뷰 15 재시작 색인·폴더 충돌 수정 검사](windows-v2/PREVIEW15-VALIDATION.md)
@@ -23,6 +25,12 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - [남은 정식 출시 조건](windows-v2/RELEASE-VALIDATION.md)
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
+
+## Windows 프리뷰 17 · macOS 0.3.13 변경사항
+
+두 버전 모두 환경설정에 **업데이트 확인** 버튼 하나만 남깁니다. 확인 화면에서 검증 다운로드·설치 안내로 이어지며 자동 확인/다운로드 선택은 유지합니다. Windows 백업 엔진은 preview.16과 동일합니다.
+
+맥에도 네트워크 오류의 진단 목록 전용 표시·동기화 끝 한 번 재시도·지속 실패 지연과 실행 중 처리 버튼의 즉시 예약·실행 전 마지막 선택 우선·선택 취소를 반영합니다. 파일 감시 이벤트가 네트워크 실패 횟수와 대기를 초기화하던 조건도 보완합니다. 실제 파일·위치 재검증과 사본 보존은 유지하며 예약은 앱 실행 동안만 유효합니다. [검사 범위](windows-v2/PREVIEW17-VALIDATION.md)와 [최종 결과](windows-v2/PREVIEW17-PACKAGE-RESULT.md)를 확인하세요.
 
 ## Windows 프리뷰 16 변경사항
 
