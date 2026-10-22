@@ -89,6 +89,10 @@ actor UploadBoundary {
                     if scenario != "stop" { checkEqual(await cloud.bytes(name: "z.txt", parent: job.cloudFolderID!), Data("normal last file".utf8)) }
                     if scenario == "apply" { check(await cloud.children(job.cloudFolderID!).contains { $0.name.contains("SafeSync-conflict") }) }
                     check(store.queuedResolutionCount(job.id) == 0)
+                    if scenario == "stop" {
+                        let completed = store.sessions.first { $0.job.id == job.id }!
+                        check(store.canBeginReview(completed) && store.canUseReview(store.beginReview(completed)!))
+                    }
                     scenarios += 1; print("PASS app queue \(provider.rawValue)/\(mode.rawValue)/\(scenario): live reservation, last choice, cancel/stale/stop guards, preserved copies")
                     store.jobs = []; store.rebuildWatchers(); try? FileManager.default.removeItem(at: root)
                 }

@@ -28,7 +28,7 @@ import CoreServices
     }
     func isRunning(_ id: UUID) -> Bool { running[id] != nil }
     func canBeginReview(_ session: SyncSession) -> Bool {
-        jobs.contains { FileComparisons.sameEndpoints($0, session.job) && $0.stopped != true } &&
+        jobs.contains { FileComparisons.sameEndpoints($0, session.job) && ($0.stopped != true || running[$0.id] == nil) } &&
         sessions.contains(where: { $0.job.id == session.job.id }) && !busyTrash && !isImportingJobList
     }
     func beginReview(_ session: SyncSession) -> ComparisonReview? {
