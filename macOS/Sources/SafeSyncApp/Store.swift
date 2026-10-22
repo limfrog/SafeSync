@@ -194,7 +194,9 @@ import CoreServices
                 var pending = self.deferredResolutions.removeValue(forKey: job.id)
                 if !outcome.completed, pending != nil { self.log("\(job.name): 작업 자체 실패로 미실행 예약을 취소했습니다."); pending = nil }
                 guard !Task.isCancelled, let current = self.jobs.first(where: { $0.id == job.id }), current.stopped != true,
-                      FileComparisons.sameEndpoints(job, current), job.mirrorDeletes == current.mirrorDeletes else { break }
+                      FileComparisons.sameEndpoints(job, current), job.mirrorDeletes == current.mirrorDeletes else {
+                    if pending != nil { self.log("\(job.name): 중단 또는 위치 변경으로 미실행 예약을 취소했습니다.") }; break
+                }
                 if let queue = pending, !queue.matches(current) { self.log("\(job.name): 위치 변경으로 예약을 취소했습니다."); pending = nil }
                 let retryNetwork = outcome.network && !networkRetried
                 var next: [String: ResolutionDecision] = [:]

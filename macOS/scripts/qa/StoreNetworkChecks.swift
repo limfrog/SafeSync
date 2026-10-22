@@ -58,7 +58,7 @@ actor UploadBoundary {
                     scenarios += 1; print("PASS app network \(provider.rawValue)/\(mode.rawValue)/persistent=\(persistent): exactly one tail retry, diagnostics-only, backoff/snapshot safety")
                     store.jobs = []; store.rebuildWatchers(); try? FileManager.default.removeItem(at: root)
                 }
-                for cancel in [false, true] {
+                for scenario in ["apply", "cancel", "stale", "stop"] {
                     let (root, original, _, cloud) = try CloudChecks.fixture(provider)
                     var job = original; job.syncMode = mode; job.scheduled = true; job.scheduleTime = "23:59"; job.lastScheduledDay = day.string(from: Date())
                     let source = URL(fileURLWithPath: job.source)
@@ -80,14 +80,16 @@ actor UploadBoundary {
                         check(store.queuedResolutionCount(job.id) == 1 && store.resolutionState(job.id, path: "a.txt").action == action)
                     }
                     checkEqual(await cloud.bytes(name: "a.txt", parent: job.cloudFolderID!), Data("right preserved".utf8))
-                    if cancel { store.cancelQueuedResolutions(job.id, paths: ["a.txt"]) }
+                    if scenario == "cancel" { store.cancelQueuedResolutions(job.id, paths: ["a.txt"]) }
+                    if scenario == "stale" { try CloudChecks.write("changed while waiting", job: job, time: 500) }
+                    if scenario == "stop" { store.selection = job.id; store.stopSelected() }
                     await boundary.release(); try await wait { !store.isRunning(job.id) }
-                    check(store.sessions.filter { $0.job.id == job.id }.count == (cancel ? 1 : 2))
-                    checkEqual(await cloud.bytes(name: "a.txt", parent: job.cloudFolderID!), Data((cancel ? "right preserved" : "left original").utf8))
-                    checkEqual(await cloud.bytes(name: "z.txt", parent: job.cloudFolderID!), Data("normal last file".utf8))
-                    if !cancel { check(await cloud.children(job.cloudFolderID!).contains { $0.name.contains("SafeSync-conflict") }) }
+                    check(store.sessions.filter { $0.job.id == job.id }.count == (["cancel", "stop"].contains(scenario) ? 1 : 2))
+                    checkEqual(await cloud.bytes(name: "a.txt", parent: job.cloudFolderID!), Data((scenario == "apply" ? "left original" : "right preserved").utf8))
+                    if scenario != "stop" { checkEqual(await cloud.bytes(name: "z.txt", parent: job.cloudFolderID!), Data("normal last file".utf8)) }
+                    if scenario == "apply" { check(await cloud.children(job.cloudFolderID!).contains { $0.name.contains("SafeSync-conflict") }) }
                     check(store.queuedResolutionCount(job.id) == 0)
-                    scenarios += 1; print("PASS app queue \(provider.rawValue)/\(mode.rawValue)/cancel=\(cancel): live reservation, last choice, no early mutation, preserved copies")
+                    scenarios += 1; print("PASS app queue \(provider.rawValue)/\(mode.rawValue)/\(scenario): live reservation, last choice, cancel/stale/stop guards, preserved copies")
                     store.jobs = []; store.rebuildWatchers(); try? FileManager.default.removeItem(at: root)
                 }
             }
