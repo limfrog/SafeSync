@@ -14,6 +14,8 @@ actor MemoryCloud: RemoteStorage {
     var activeUploads = 0
     var maximumUploads = 0
     var failName: String?
+    private var transientFailures = 0
+    func failNextUploads(_ count: Int) { transientFailures = count }
     func setDelay(_ delay: UInt64) { uploadDelay = delay }
     func setFailName(_ name: String?) { failName = name }
     func peakUploads() -> Int { maximumUploads }
@@ -37,6 +39,7 @@ actor MemoryCloud: RemoteStorage {
         defer { activeUploads -= 1 }
         if name == "metadata.json", let hook = trashUploadHook { trashUploadHook = nil; hook() }
         if uploadDelay > 0 { try await Task.sleep(nanoseconds: uploadDelay) }
+        if transientFailures > 0, resumeKey.contains("|a.txt|") { transientFailures -= 1; throw APIError(status: 503, summary: "Isolated network reproduction") }
         if let failName, resumeKey.contains("|" + failName + "|") { throw BackupError.unsafe("Injected file upload failure") }
         if mutateOnUpload, let old = items.values.first(where: { $0.name == "a.txt" }) {
             mutateOnUpload = false; counter += 1

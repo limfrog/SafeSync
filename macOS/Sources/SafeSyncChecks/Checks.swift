@@ -129,6 +129,7 @@ func fail(_ value: String) { fatalError(value) }
 @main struct Checks {
     static func main() async throws {
         setbuf(stdout, nil)
+        if CommandLine.arguments.contains("--network-diagnostic") { try await NetworkDiagnosticChecks.run(); return }
         let tests = BackupTests()
         try await tests.testCopyOverwriteDeleteAndRestore(); print("PASS copy, skip, verified overwrite, deletion and restore")
         try await tests.testConflictDoesNotBlockOtherFileAndKeepBoth(); print("PASS conflict isolation and keep both")

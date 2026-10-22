@@ -23,6 +23,9 @@ jobs:
           set -euo pipefail
           ./scripts/check.sh | tee "$RUNNER_TEMP/SafeSync-macOS-checks.txt"
           swift test --disable-sandbox | tee "$RUNNER_TEMP/SafeSync-macOS-xctests.txt"
+      - name: Reproduce transient network handling without changing the application
+        working-directory: macOS
+        run: swift run --disable-sandbox SafeSyncChecks --network-diagnostic
       - name: Build Universal application
         working-directory: macOS
         run: ARCHITECTURE=universal ./scripts/build-app.sh
