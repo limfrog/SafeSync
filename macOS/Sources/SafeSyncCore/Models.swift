@@ -62,6 +62,9 @@ public struct BackupIssue: Identifiable, Codable, Sendable {
     public var waiting: FileWaitState?
     public var remoteRevision: String?
     public var remoteID: String?
+    public var networkRetry: Bool?
+    public var automaticNetworkRetry: Bool { networkRetry == true || NetworkFailurePolicy.legacyMessage(reason) }
+    public var handling: String { automaticNetworkRetry ? "자동 재시도" : "확인 필요" }
     public init(jobID: UUID, path: String, reason: String, conflict: Bool, source: FileStamp? = nil, backup: FileStamp? = nil, remoteRevision: String? = nil, remoteID: String? = nil, waiting: FileWaitState? = nil) {
         self.jobID = jobID; self.path = path; self.reason = reason; self.conflict = conflict; self.source = source; self.backup = backup; self.remoteRevision = remoteRevision; self.remoteID = remoteID; self.waiting = waiting
     }

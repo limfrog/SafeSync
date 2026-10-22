@@ -47,7 +47,7 @@ import Combine
     }
     private func refresh() {
         let running = store.runningCount > 0
-        let warning = !store.issues.isEmpty || store.error != nil
+        let warning = store.issues.contains { !$0.automaticNetworkRetry } || store.error != nil
         if running && animationStart == nil { animationStart = ProcessInfo.processInfo.systemUptime }
         if !running { animationStart = nil }
         // AppKit's unflipped coordinates use negative angles for clockwise rotation.
@@ -60,7 +60,7 @@ import Combine
         item.button?.image = image
         item.button?.toolTip = running ? "SafeSync · 백업 중" : warning ? "SafeSync · 확인 필요" : "SafeSync"
         item.button?.setAccessibilityLabel(item.button?.toolTip)
-        progressItem.title = "동기화 상태 · 확인 \(store.issues.count)건"
+        progressItem.title = "동기화 상태 · 확인 \(store.issues.filter { !$0.automaticNetworkRetry }.count)건"
         if let version = ApplicationUpdates.shared.availableVersion {
             updateItem.title = "새 버전 \(version) · 다운로드 / 업데이트"
             item.button?.toolTip = "SafeSync · 업데이트 \(version) 있음"

@@ -27,8 +27,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>SafeSync</string>
 <key>CFBundleIconFile</key><string>SafeSync</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.12</string>
-<key>CFBundleVersion</key><string>21</string>
+<key>CFBundleShortVersionString</key><string>0.3.13</string>
+<key>CFBundleVersion</key><string>22</string>
 <key>NSHumanReadableCopyright</key><string>SafeSync · Horizon Entertainment</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSHighResolutionCapable</key><true/>

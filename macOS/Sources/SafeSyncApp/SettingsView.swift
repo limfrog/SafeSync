@@ -84,10 +84,7 @@ struct SettingsView: View {
                             Toggle("앱 실행 시와 매시간 새 버전 자동 확인", isOn: $autoUpdates)
                             Toggle("새 버전을 찾으면 설치 파일 자동 다운로드", isOn: $autoDownloads)
                             Text(updates.status).font(.caption).foregroundStyle(.secondary)
-                            HStack {
-                                Button("업데이트 확인") { updates.check(manual: true) }
-                                Button("다운로드 / 업데이트") { updates.show() }
-                            }
+                            Button("업데이트 확인") { updates.check(manual: true) }
                         }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading).padding(12)
                     } label: { Text("업데이트").font(.headline) }
                     GroupBox {

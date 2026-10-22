@@ -41,7 +41,6 @@ internal sealed partial class DesktopController
         void Render()=>window.Find<TextBlock>("UpdateSummaryText").Text=updateStatus;
         UpdateDisplayChanged+=Render;window.Closed+=(_,_)=>UpdateDisplayChanged-=Render;Render();
         Click(window,"CheckUpdatesButton",()=>BeginUpdateCheck(true));
-        Click(window,"OpenUpdatesButton",ShowUpdates);
     }
     private void ShowUpdates()
     {

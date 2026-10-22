@@ -48,6 +48,7 @@ try {
         }
         foreach($notice in @('LICENSE.txt','ThirdPartyNotices.txt')){Copy-Item -LiteralPath (Join-Path $dotnetRoot $notice) -Destination $runtimeRoot -Force}
         foreach($document in @('README-ko.md','MIGRATION.md','TEST-RESULTS.md','PARITY-AND-PERFORMANCE.md','RELEASE-VALIDATION.md','GOOGLE-LIVE-RESULTS.md','TWOWAY-AND-DROPBOX.md','DROPBOX-PRODUCTION.md','PREVIEW11-VALIDATION.md','PREVIEW12-VALIDATION.md','PREVIEW13-VALIDATION.md','PREVIEW14-VALIDATION.md','PREVIEW15-VALIDATION.md','PREVIEW16-VALIDATION.md','UPDATES.md')){Copy-Item -LiteralPath (Join-Path $root $document) -Destination (Join-Path $publish $document) -Force}
+        Copy-Item -LiteralPath (Join-Path $root 'PREVIEW17-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW17-VALIDATION.md') -Force
         if($RunTests){& (Join-Path $PSScriptRoot 'Test-Desktop.ps1') -AppPath (Join-Path $publish 'SafeSync.exe') -Bundled}
         & (Join-Path $PSScriptRoot 'Build-Installer.ps1') -PublishPath $publish -RunTests:$RunTests
         $zip=$publish+'.zip'

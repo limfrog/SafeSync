@@ -12,7 +12,7 @@ struct MessageRow: Identifiable {
 
 @MainActor extension Store {
     var messageRows: [MessageRow] {
-        var rows = issues.map { issue in
+        var rows = issues.filter { !$0.automaticNetworkRetry }.map { issue in
             MessageRow(id: issue.id.uuidString,
                        jobName: jobs.first(where: { $0.id == issue.jobID })?.name ?? "이전 작업",
                        path: issue.path.isEmpty ? "작업 전체" : issue.path,

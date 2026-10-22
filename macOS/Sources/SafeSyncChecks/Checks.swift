@@ -151,5 +151,6 @@ func fail(_ value: String) { fatalError(value) }
         try await TwoWayChecks.run()
         try await SafetyPortChecks.run()
         try await ComparisonReviewChecks.run()
+        try await NetworkPolicyChecks.run()
     }
 }

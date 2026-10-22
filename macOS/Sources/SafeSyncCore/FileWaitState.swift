@@ -39,7 +39,8 @@ public enum FileAccess {
         return false
     }
     public static func issue(_ error: Error, jobID: UUID, path: String) -> BackupIssue {
-        BackupIssue(jobID: jobID, path: path, reason: error.localizedDescription, conflict: false,
-                    waiting: isBusy(error) ? FileWaitState() : nil)
+        var issue = BackupIssue(jobID: jobID, path: path, reason: error.localizedDescription, conflict: false,
+                                waiting: isBusy(error) ? FileWaitState() : nil)
+        issue.networkRetry = NetworkFailurePolicy.isTransient(error); return issue
     }
 }

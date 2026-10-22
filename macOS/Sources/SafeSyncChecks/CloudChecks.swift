@@ -15,6 +15,8 @@ actor MemoryCloud: RemoteStorage {
     var maximumUploads = 0
     var failName: String?
     private var transientFailures = 0
+    private var uploadHook: (@Sendable (String) async throws -> Void)?
+    func setUploadHook(_ hook: (@Sendable (String) async throws -> Void)?) { uploadHook = hook }
     func failNextUploads(_ count: Int) { transientFailures = count }
     func setDelay(_ delay: UInt64) { uploadDelay = delay }
     func setFailName(_ name: String?) { failName = name }
@@ -39,6 +41,7 @@ actor MemoryCloud: RemoteStorage {
         defer { activeUploads -= 1 }
         if name == "metadata.json", let hook = trashUploadHook { trashUploadHook = nil; hook() }
         if uploadDelay > 0 { try await Task.sleep(nanoseconds: uploadDelay) }
+        if let uploadHook { try await uploadHook(resumeKey) }
         if transientFailures > 0, resumeKey.contains("|a.txt|") { transientFailures -= 1; throw HTTP.responseError(status: 503, url: URL(string: "https://api.dropboxapi.com/2/files/upload")!, data: Data()) }
         if let failName, resumeKey.contains("|" + failName + "|") { throw BackupError.unsafe("Injected file upload failure") }
         if mutateOnUpload, let old = items.values.first(where: { $0.name == "a.txt" }) {

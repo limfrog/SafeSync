@@ -47,7 +47,7 @@
         <CheckBox x:Name="AutoUpdateCheck" Content="앱 실행 시와 매시간 새 버전 자동 확인" Margin="0,0,0,8"/>
         <CheckBox x:Name="AutoDownloadCheck" Content="새 버전을 찾으면 설치 파일 자동 다운로드" Margin="0,0,0,8"/>
         <TextBlock x:Name="UpdateSummaryText" TextWrapping="Wrap" Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,0,0,8"/>
-        <WrapPanel><Button x:Name="CheckUpdatesButton" Content="업데이트 확인" Margin="0,0,8,0"/><Button x:Name="OpenUpdatesButton" Content="다운로드 / 설치" Margin="0"/></WrapPanel>
+        <Button x:Name="CheckUpdatesButton" Content="업데이트 확인" HorizontalAlignment="Left" Margin="0"/>
       </StackPanel>
     </GroupBox>
     <GroupBox Header="화면 모드" Padding="16" Margin="0,0,0,14">

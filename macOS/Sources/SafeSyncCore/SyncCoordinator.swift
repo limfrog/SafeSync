@@ -120,6 +120,7 @@ public actor SyncCoordinator {
                 // Parent timestamps can legitimately change as verified child operations complete.
                 let c = try await FileComparisons.read(job: job, path: path, storage: storage)
                 if c.waiting { throw BackupError.fileBusy(c.sourceError + " " + c.backupError) }
+                if c.networkFailure { throw TransientNetworkFailure(c.sourceError + " " + c.backupError) }
                 guard c.readable, c.sourceRoot == sourceRoot, c.backupRoot == backupRoot else { throw BackupError.unsafe("양쪽 위치에 접근할 수 없습니다. 변경을 보류합니다.") }
                 if !c.duplicates.isEmpty || c.candidates.count > 1 {
                     var identical = c.source != nil && !c.candidates.isEmpty

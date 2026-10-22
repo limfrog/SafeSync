@@ -453,6 +453,7 @@ internal sealed partial class DesktopController
         CheckModal(ShowSettings,w=>
         {
             Check(w.Find<Button>("CloudAccountsButton").IsEnabled,"클라우드 연결 화면이 비활성화되었습니다.");
+            Check(w.FindName("OpenUpdatesButton")==null && w.Find<Button>("CheckUpdatesButton").Content.ToString()=="업데이트 확인","환경설정에 중복 업데이트 진입 버튼이 있습니다.");
             Check(!w.Find<CheckBox>("AutoStartCheck").IsEnabled,"검증본이 기존 자동 시작 등록을 변경할 수 있습니다.");
             Check(w.Find<TextBox>("RetentionBox").Text==config.TrashRetentionDays.ToString(),"보관 기간이 설정과 다릅니다.");
             Check(w.Find<CheckBox>("AutoUpdateCheck").IsChecked==config.AutomaticallyCheckUpdates && w.Find<CheckBox>("AutoDownloadCheck").IsChecked==config.AutomaticallyDownloadUpdates,"업데이트 환경설정 초기값이 일치하지 않습니다.");

@@ -13,6 +13,7 @@ on:
       - 'windows-v2/README-ko.md'
       - 'windows-v2/PREVIEW15-VALIDATION.md'
       - 'windows-v2/PREVIEW16-VALIDATION.md'
+      - 'windows-v2/PREVIEW17-VALIDATION.md'
       - 'windows-v2/scripts/Build.ps1'
   workflow_dispatch:
   workflow_call:
@@ -85,10 +86,10 @@ jobs:
         if: success() && matrix.os == 'windows-2022'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-preview16-package
+          name: windows-preview17-package
           path: |
-            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.16.exe
-            windows-v2/artifacts/SafeSync-1.0.0-preview.16-Windows-x64.zip
+            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.17.exe
+            windows-v2/artifacts/SafeSync-1.0.0-preview.17-Windows-x64.zip
           if-no-files-found: error
           retention-days: 7
       - name: Upload synthetic test reports even on failure

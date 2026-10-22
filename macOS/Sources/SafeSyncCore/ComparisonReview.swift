@@ -9,4 +9,7 @@ public struct ComparisonReview: Sendable {
     public func allows(job current: BackupJob, sessionID currentID: UUID?, running: Bool) -> Bool {
         !running && currentID == sessionID && FileComparisons.sameEndpoints(job, current)
     }
+    public func allowsReservation(job current: BackupJob, sessionID currentID: UUID?, running: Bool) -> Bool {
+        running && current.stopped != true && currentID == sessionID && FileComparisons.sameEndpoints(job, current)
+    }
 }

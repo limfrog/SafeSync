@@ -24,6 +24,7 @@ public struct FileComparison: Sendable {
     public var sourceError = ""
     public var backupError = ""
     public var waiting = false
+    public var networkFailure = false
     public var readable: Bool { sourceError.isEmpty && backupError.isEmpty }
     public var canForward: Bool { readable && source != nil && source?.folder == false && backup?.folder != true && (job.cloudProvider == nil || backup == nil || remote?.hash != nil) }
     public var canReverse: Bool { readable && backup != nil && backup?.folder == false && source?.folder != true && (job.cloudProvider == nil || remote?.hash != nil) }
@@ -93,9 +94,9 @@ public enum FileComparisons {
             return await Task.detached {
                 var snapshot = FileComparison(job: job, path: path, sourceRoot: "", backupRoot: "")
                 do { snapshot.sourceRoot = try identity(BackupEngine.canonical(job.source)); snapshot.source = try local(root: job.source, path: path) }
-                catch { snapshot.sourceError = error.localizedDescription; snapshot.waiting = FileAccess.isBusy(error) }
+                catch { snapshot.sourceError = error.localizedDescription; snapshot.waiting = FileAccess.isBusy(error); snapshot.networkFailure = NetworkFailurePolicy.isTransient(error) }
                 do { snapshot.backupRoot = try identity(BackupEngine.canonical(job.destination)); snapshot.backup = try local(root: job.destination, path: path) }
-                catch { snapshot.backupError = error.localizedDescription; snapshot.waiting = snapshot.waiting || FileAccess.isBusy(error) }
+                catch { snapshot.backupError = error.localizedDescription; snapshot.waiting = snapshot.waiting || FileAccess.isBusy(error); snapshot.networkFailure = snapshot.networkFailure || NetworkFailurePolicy.isTransient(error) }
                 return snapshot
             }.value
         }
@@ -103,19 +104,20 @@ public enum FileComparisons {
         do {
             let side = try await Task.detached { (try identity(BackupEngine.canonical(job.source)), try local(root: job.source, path: path)) }.value
             snapshot.sourceRoot = side.0; snapshot.source = side.1
-        } catch { snapshot.sourceError = error.localizedDescription; snapshot.waiting = FileAccess.isBusy(error) }
+        } catch { snapshot.sourceError = error.localizedDescription; snapshot.waiting = FileAccess.isBusy(error); snapshot.networkFailure = NetworkFailurePolicy.isTransient(error) }
         do {
             let storage = storage!
             let plan = try await RemoteDuplicates.inspect(path: path, root: job.cloudFolderID!, storage: storage)
             snapshot.remote = plan.selected; snapshot.duplicates = plan.groups; snapshot.candidates = plan.candidates
             if let item = plan.selected { snapshot.backup = ComparedFile(stamp: item.stamp, identity: item.id, hash: item.hash, folder: item.folder) }
             snapshot.backupRoot = plan.root.id
-        } catch { snapshot.backupError = error.localizedDescription; snapshot.waiting = snapshot.waiting || FileAccess.isBusy(error) }
+        } catch { snapshot.backupError = error.localizedDescription; snapshot.waiting = snapshot.waiting || FileAccess.isBusy(error); snapshot.networkFailure = snapshot.networkFailure || NetworkFailurePolicy.isTransient(error) }
         return snapshot
     }
     public static func verify(_ expected: FileComparison, job: BackupJob, storage: (any RemoteStorage)? = nil) async throws {
         guard sameEndpoints(expected.job, job) else { throw BackupError.unsafe("비교 후 작업의 위치·계정·모드가 바뀌었습니다. 다시 확인하세요.") }
         let current = try await read(job: job, path: expected.path, storage: storage)
+        if current.networkFailure { throw TransientNetworkFailure(current.sourceError + " " + current.backupError) }
         try verify(expected, current: current)
     }
     public static func verify(_ expected: FileComparison, current: FileComparison) throws {

@@ -31,7 +31,7 @@ struct ProgressViewScreen: View {
                 issueList(runIssues.filter(\.conflict)).tag(SyncDetailTab.conflicts).tabItem { Text("충돌 \(runIssues.filter(\.conflict).count)") }
                 waiting.tag(SyncDetailTab.waiting).tabItem { Text("사용 중 \(runIssues.filter { $0.waiting != nil }.count)") }
                 issueList(runIssues.filter { !$0.conflict && $0.waiting == nil }).tag(SyncDetailTab.errors).tabItem { Text("오류 \(runIssues.filter { !$0.conflict && $0.waiting == nil }.count)") }
-                ProblemWorkspace(run: run, issues: runIssues).tag(SyncDetailTab.problems).tabItem { Text("문제 해결") }
+                ProblemWorkspace(run: run, issues: store.problemIssues(runIssues, jobID: run?.job.id)).tag(SyncDetailTab.problems).tabItem { Text("문제 해결") }
             }
         }
     }
@@ -59,13 +59,16 @@ struct ProgressViewScreen: View {
     func issueList(_ issues: [BackupIssue]) -> some View {
         VStack(alignment: .leading) {
             Table(issues) {
-                TableColumn("파일") { issue in Text(issue.path).onTapGesture(count: 2) { store.showProblems(issue) } }
+                TableColumn("파일") { issue in Text(issue.path).onTapGesture(count: 2) { if !issue.automaticNetworkRetry { store.showProblems(issue) } } }
                 TableColumn("원본 정보") { Text(info($0.source)).font(.caption) }
                 TableColumn("백업 정보") { Text(info($0.backup)).font(.caption) }
                 TableColumn("확인 사유", value: \.reason)
-                TableColumn("처리") { issue in Button("파일 비교") { store.showProblems(issue) }.disabled(issue.path.isEmpty) }.width(85)
+                TableColumn("처리") { issue in
+                    if issue.automaticNetworkRetry { Text("자동 재시도").font(.caption) }
+                    else { Button("파일 비교") { store.showProblems(issue) }.disabled(issue.path.isEmpty) }
+                }.width(95)
             }
-            Text("파일 비교에서 양쪽 정보를 다시 확인한 뒤 처리 방법을 선택하세요.").font(.caption).foregroundStyle(.secondary)
+            Text("일시적 네트워크 오류는 동기화 끝에 자동 재시도합니다. 과거 이력은 당시 기록입니다. 그 외 문제는 양쪽 정보를 확인한 뒤 처리하세요.").font(.caption).foregroundStyle(.secondary)
         }.padding(10)
     }
     func info(_ stamp: FileStamp?) -> String { guard let stamp else { return "없음 / 확인 필요" }; return "\(stamp.size) B · \(stamp.modified.formatted(date: .numeric, time: .shortened))" }
@@ -104,7 +107,7 @@ struct ProblemWorkspace: View {
             List(issues, selection: $selection) { issue in
                 VStack(alignment: .leading, spacing: 5) {
                     Text(issue.path.isEmpty ? "작업 문제" : issue.path).lineLimit(2)
-                    Text(choices[issue.id]?.title ?? issue.reason).font(.caption).foregroundStyle(choices[issue.id] == nil ? Color.secondary : .accentColor).lineLimit(2)
+                    Text(choiceText(issue)).font(.caption).foregroundStyle(choices[issue.id] == nil ? Color.secondary : .accentColor).lineLimit(2)
                 }.padding(.vertical, 4).tag(issue.id)
             }.frame(minWidth: 210, idealWidth: 260, maxWidth: 360)
             VStack(spacing: 0) {
@@ -117,8 +120,8 @@ struct ProblemWorkspace: View {
                         HStack(alignment: .top) { fileCard("원본", file: c.source, root: c.job.source, error: c.sourceError); fileCard("백업", file: c.backup, root: c.job.destination, error: c.backupError) }
                         if !c.duplicates.isEmpty { Text("중복 사본 \(c.candidates.count)개 · 이름만 정리하면 모든 사본이 보존됩니다.").foregroundStyle(.orange); ForEach(c.candidates) { Text("\($0.name) · ID \($0.id)").font(.caption).textSelection(.enabled) } }
                         ForEach(ConflictAction.allCases, id: \.self) { action in
-                            Button(action.title) { for issue in chosen { choices[issue.id] = action } }
-                                .disabled(!editable || loading || chosen.isEmpty || !chosen.allSatisfy { comparisons[$0.id]?.allows(action) == true })
+                            Button(action.title) { choose(action) }
+                                .disabled(!editable || loading || chosen.isEmpty || !chosen.allSatisfy { comparisons[$0.id]?.allows(action) == true && !store.resolutionState($0.jobID, path: $0.path).executing })
                         }
                     } else if !loading {
                         Text(chosen.first?.reason ?? "왼쪽에서 확인할 파일을 선택하세요.").textSelection(.enabled)
@@ -127,22 +130,26 @@ struct ProblemWorkspace: View {
                             if let run, editable { Button("작업 수정") { store.editing = store.jobs.first { $0.id == run.job.id } }; Button("연결 확인 후 다시 실행") { store.run(run.job, full: true) } }
                         }
                     }
-                    if !editable { Text("이전 결과를 그대로 적용하지 않습니다. 작업이 실행 중이면 종료 후 대기한 뒤 ‘현재 파일 다시 비교’를 눌러 처리 방법을 선택하세요.").font(.caption).foregroundStyle(.secondary) }
+                    Text("실행 중에는 버튼 한 번으로 예약하고 현재 동기화 전체가 끝난 뒤 처리합니다. 실행 전에 다른 버튼을 누르면 마지막 선택으로 바뀝니다. 파일·연결이 바뀌면 덮어쓰지 않고 재확인합니다.").font(.caption).foregroundStyle(.secondary)
                 }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
             }
             Divider()
             HStack {
                 Button(editable ? "정보 다시 확인" : "현재 파일 다시 비교") { refresh(authorize: true) }.disabled(loading || selection.isEmpty || !(run.map { store.canBeginReview($0) } ?? false))
                 if let run, store.isRunning(run.job.id) {
-                    Button("작업 종료 · 대기") { store.selection = run.job.id; store.stopSelected() }
+                    Text("실행 대기 \(store.queuedResolutionCount(run.job.id))개").font(.caption)
+                    Button("선택 예약 취소") { store.cancelQueuedResolutions(run.job.id, paths: Set(chosen.map(\.path))) }
+                        .disabled(!chosen.contains { store.resolutionState($0.jobID, path: $0.path).action != nil && !store.resolutionState($0.jobID, path: $0.path).executing })
                 }
                 Spacer()
-                Button("선택한 처리 적용 (\(choices.count))") { confirm = true }.buttonStyle(.borderedProminent).disabled(!editable || choices.isEmpty || loading)
+                if run.map({ !store.isRunning($0.job.id) }) ?? true {
+                    Button("선택한 처리 적용 (\(choices.count))") { confirm = true }.buttonStyle(.borderedProminent).disabled(!editable || choices.isEmpty || loading)
+                }
             }.padding(12)
             }.frame(minWidth: 500)
         }.onChange(of: selection) { _, _ in refresh(reset: false) }
         .onChange(of: run?.id) { _, _ in selection = []; comparisons = [:]; choices = [:]; review = nil; loading = false; generation = UUID() }
-        .onChange(of: latestRunID) { _, _ in comparisons = [:]; choices = [:]; review = nil; loading = false; generation = UUID() }
+        .onChange(of: latestRunID) { _, _ in comparisons = [:]; choices = [:]; review = nil; loading = false; generation = UUID(); refresh(authorize: true) }
         .onChange(of: store.problemSelection) { _, id in if let id { selection = [id] } }
         .onAppear {
             if let id = store.problemSelection, selection != [id] { selection = [id] }
@@ -157,6 +164,19 @@ struct ProblemWorkspace: View {
             }
             Button("취소", role: .cancel) {}
         } message: { Text(choices.values.map(\.title).sorted().joined(separator: "\n") + "\n적용 직전에 양쪽 정보를 다시 검증하며, 교체된 파일은 SafeSync 휴지통에 보존합니다.") }
+    }
+    func choiceText(_ issue: BackupIssue) -> String {
+        let state = store.resolutionState(issue.jobID, path: issue.path)
+        if let action = state.action { return (state.executing ? "처리 중 · " : "예약 · ") + action.title }
+        return choices[issue.id]?.title ?? issue.reason
+    }
+    func choose(_ action: ConflictAction) {
+        guard let run else { return }
+        if store.isRunning(run.job.id) {
+            guard let review else { return }
+            let decisions = chosen.compactMap { comparisons[$0.id].map { ResolutionDecision($0, action: action) } }
+            if decisions.count == chosen.count, store.applyDecisions(decisions, session: run, review: review) { choices = [:] }
+        } else { for issue in chosen { choices[issue.id] = action } }
     }
     func fileCard(_ title: String, file: ComparedFile?, root: String, error: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -174,7 +194,7 @@ struct ProblemWorkspace: View {
         let token = UUID(); generation = token; failure = nil
         if reset { choices = [:]; comparisons = [:] } else { for id in selection { choices.removeValue(forKey: id) } }
         guard let run, !chosen.isEmpty else { loading = false; return }
-        if authorize || (review == nil && store.canRepair(run)) {
+        if authorize || (review == nil && store.canBeginReview(run)) {
             review = store.beginReview(run)
         }
         guard let checked = review, store.canUseReview(checked) else { loading = false; return }
