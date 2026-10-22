@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+test "$(grep -Fc 'Button("업데이트 확인")' Sources/SafeSyncApp/SettingsView.swift)" = 1
+if grep -Fq 'Button("다운로드 / 업데이트")' Sources/SafeSyncApp/SettingsView.swift; then echo 'Duplicate update entry'; exit 1; fi
 binary_directory="$(swift build --disable-sandbox --show-bin-path)"
 qa="$(mktemp -d /private/tmp/safesync-store-qa.XXXXXX)"
 export SAFESYNC_TEST_DATA_DIRECTORY="$qa/data"

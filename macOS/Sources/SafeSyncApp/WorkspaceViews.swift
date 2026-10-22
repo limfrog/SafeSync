@@ -127,7 +127,7 @@ struct ProblemWorkspace: View {
                         Text(chosen.first?.reason ?? "왼쪽에서 확인할 파일을 선택하세요.").textSelection(.enabled)
                         if chosen.contains(where: { $0.path.isEmpty }) {
                             Text("원본·백업 폴더의 연결과 접근 권한을 확인하세요. 클라우드 계정은 환경설정에서 확인할 수 있습니다.").foregroundStyle(.secondary)
-                            if let run, editable { Button("작업 수정") { store.editing = store.jobs.first { $0.id == run.job.id } }; Button("연결 확인 후 다시 실행") { store.run(run.job, full: true) } }
+                            if let run, editable, !store.isRunning(run.job.id) { Button("작업 수정") { store.editing = store.jobs.first { $0.id == run.job.id } }; Button("연결 확인 후 다시 실행") { store.run(run.job, full: true) } }
                         }
                     }
                     Text("실행 중에는 버튼 한 번으로 예약하고 현재 동기화 전체가 끝난 뒤 처리합니다. 실행 전에 다른 버튼을 누르면 마지막 선택으로 바뀝니다. 파일·연결이 바뀌면 덮어쓰지 않고 재확인합니다.").font(.caption).foregroundStyle(.secondary)
