@@ -70,6 +70,7 @@ import CoreServices
     private var journals: [UUID: ChangeJournal] = [:]
     private struct RetryState: Codable { var attempts = 0; var next: Date = .distantPast }
     private var retries: [UUID: RetryState] = [:]
+    private var networkAttempts: [UUID: Int] = [:]
     private let engine = BackupEngine()
     private let cloudEngine = CloudBackupEngine()
     private var configurationUsable = true
@@ -96,6 +97,7 @@ import CoreServices
         let knownIDs = Set(jobs.map(\.id))
         issues = issues.filter { knownIDs.contains($0.jobID) }
         retries = retries.filter { knownIDs.contains($0.key) }
+        for (id, retry) in retries where issues.contains(where: { $0.jobID == id && $0.automaticNetworkRetry }) { networkAttempts[id] = retry.attempts }
         installWindowPolicy()
         rebuildWatchers()
         log("SafeSync \(AppInformation.version) 시작")
@@ -277,7 +279,7 @@ import CoreServices
                 var current = self.journals[job.id] ?? journal
                 if decisions == nil { current.acknowledge(through: checkpoint, full: doFull, retry: self.issues.filter { $0.jobID == job.id }.map(\.path)) }
                 self.journals[job.id] = current; self.saveJournal(job.id)
-                if self.issues.contains(where: { $0.jobID == job.id && !$0.conflict }) { self.scheduleRetry(job.id) } else { self.retries.removeValue(forKey: job.id); self.saveRetries() }
+                if self.issues.contains(where: { $0.jobID == job.id && !$0.conflict }) { self.scheduleRetry(job.id) } else { self.retries.removeValue(forKey: job.id); self.networkAttempts.removeValue(forKey: job.id); self.saveRetries() }
                 self.save()
                 return (true, result.issues.contains(where: \.automaticNetworkRetry))
             } catch is CancellationError { self.statuses[job.id] = self.jobs.first(where: { $0.id == job.id })?.stopped == true ? "중단됨" : "일시정지"; self.log("\(job.name): 중지됨, 다음 실행에서 재검사"); return (false, false) }
@@ -325,7 +327,10 @@ import CoreServices
     private func saveJournal(_ id: UUID) { do { try Storage.save(journals[id] ?? ChangeJournal(), to: journalURL(id)) } catch { configurationUsable = false; self.error = "변경 기록 저장 실패: \(error.localizedDescription)" } }
     private func saveRetries() { do { try Storage.save(retries, to: Storage.applicationDirectory.appendingPathComponent("retries.json")) } catch { self.error = error.localizedDescription } }
     private func scheduleRetry(_ id: UUID) {
-        var retry = retries[id] ?? RetryState(); retry.attempts += 1
+        var retry = retries[id] ?? RetryState()
+        let network = issues.contains { $0.jobID == id && $0.automaticNetworkRetry }
+        retry.attempts = min(6, max(retry.attempts, network ? networkAttempts[id] ?? 0 : 0) + 1)
+        if network { networkAttempts[id] = retry.attempts } else { networkAttempts.removeValue(forKey: id) }
         retry.next = Date().addingTimeInterval(min(300, 30 * pow(2, Double(min(4, retry.attempts - 1)))))
         let problems = issues.filter { $0.jobID == id && !$0.conflict }
         let waitingDates = problems.compactMap { $0.waiting?.nextAttempt }
@@ -370,7 +375,7 @@ import CoreServices
         var journal = journals[jobID] ?? ChangeJournal()
         journal.record(paths: Array(paths), eventID: events.map(\.id).max(), requireFull: full)
         journals[jobID] = journal; saveJournal(jobID)
-        if !paths.isEmpty || full { retries.removeValue(forKey: jobID) }
+        if (!paths.isEmpty || full) && !issues.contains(where: { $0.jobID == jobID && $0.automaticNetworkRetry }) { retries.removeValue(forKey: jobID) }
     }
     func tick() {
         guard configurationUsable, !isImportingJobList else { return }

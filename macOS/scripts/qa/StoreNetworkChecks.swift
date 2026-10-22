@@ -48,6 +48,7 @@ actor UploadBoundary {
                         check(store.issues.contains { $0.jobID == job.id && $0.automaticNetworkRetry })
                         let retryFile = Storage.applicationDirectory.appendingPathComponent("retries.json")
                         let retries = try JSONDecoder().decode([UUID: Retry].self, from: Data(contentsOf: retryFile))
+                        print("BACKOFF attempts=\(retries[job.id]!.attempts), seconds=\(retries[job.id]!.next.timeIntervalSinceNow)")
                         check(retries[job.id]!.attempts >= 2 && retries[job.id]!.next.timeIntervalSinceNow > 20)
                         try await Task.sleep(for: .milliseconds(300)); check(!store.isRunning(job.id))
                     } else {
