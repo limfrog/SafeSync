@@ -126,6 +126,13 @@ func check(_ value: Bool, file: StaticString = #file, line: UInt = #line) { prec
 func checkFalse(_ value: Bool, file: StaticString = #file, line: UInt = #line) { precondition(!value, "Assertion failed", file: file, line: line) }
 func checkEqual<T: Equatable>(_ a: T, _ b: T, file: StaticString = #file, line: UInt = #line) { precondition(a == b, "Expected \(b), got \(a)", file: file, line: line) }
 func fail(_ value: String) { fatalError(value) }
+final class StageRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+    func append(_ value: String) { lock.lock(); values.append(value); lock.unlock() }
+    func reset() { lock.lock(); values.removeAll(); lock.unlock() }
+    func contains(_ value: String) -> Bool { lock.lock(); defer { lock.unlock() }; return values.contains(value) }
+}
 @main struct Checks {
     static func main() async throws {
         setbuf(stdout, nil)

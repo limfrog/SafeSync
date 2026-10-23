@@ -9,8 +9,16 @@ public actor SyncCoordinator {
         var backupRoot: String
         var endpoint: BackupJob
         var files: [String: Pair] = [:]
+        var remoteInventory: RemoteIndex? = nil
     }
-    private struct Pair: Codable { var source: ComparedFile?; var backup: ComparedFile? }
+    private struct Pair: Codable {
+        var source: ComparedFile?
+        var backup: ComparedFile?
+        // Missing in legacy snapshots: one verified deep comparison is
+        // required before metadata-only restart comparison is permitted.
+        var fastVerificationVersion: Int? = nil
+        var verifiedRemote: RemoteItem? = nil
+    }
     private let directory: URL
     private let local: BackupEngine
     private let cloud: CloudBackupEngine
@@ -75,7 +83,9 @@ public actor SyncCoordinator {
         }
         try await visit(root, prefix: ""); return paths
     }
-    public func run(_ job: BackupJob, storage: (any RemoteStorage)? = nil, deferredPaths: Set<String> = [], progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }) async throws -> BackupResult {
+    public func run(_ job: BackupJob, storage: (any RemoteStorage)? = nil, fullScan: Bool = false,
+                    forceContentVerification: Bool = false, changedPaths: Set<String>? = nil,
+                    deferredPaths: Set<String> = [], progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }) async throws -> BackupResult {
         try BackupEngine.validate(job)
         guard active.insert(job.id).inserted else { throw BackupError.unsafe("같은 작업이 실행 중입니다.") }
         defer { active.remove(job.id) }
@@ -93,15 +103,65 @@ public actor SyncCoordinator {
         progress(BackupProgress(path: "양쪽 폴더 전체 목록 확인", completed: 0, total: 1))
         // Complete both enumerations before allowing any file or directory deletion.
         let left = try tree(BackupEngine.canonical(job.source))
-        let right = if let storage { try await remoteTree(job.cloudFolderID!, storage: storage) } else { try tree(BackupEngine.canonical(job.destination)) }
+        var remoteGroups: [String: [RemoteItem]] = [:]
+        let right: Set<String>
+        if let storage {
+            progress(BackupProgress(path: "클라우드 변경 목록 확인", completed: 0, total: 1))
+            // `fullScan` can be required solely because the local watcher was
+            // unavailable. Preserve the cloud delta cursor unless the user
+            // explicitly requested content verification.
+            let index = try await storage.inventory(root: job.cloudFolderID!, previous: forceContentVerification ? nil : state.remoteInventory)
+            state.remoteInventory = index
+            remoteGroups = try index.groupsByAllPaths()
+            right = Set(remoteGroups.keys)
+            try Storage.save(state, to: url)
+        } else { right = try tree(BackupEngine.canonical(job.destination)) }
         let discovered = left.union(right).union(state.files.keys).subtracting(deferredPaths)
         let excluded = discovered.filter { path in
             job.cloudProvider.map { CloudPathPolicy.isExcluded(path, provider: $0) } ?? false
         }
         let all = discovered.subtracting(excluded)
         // Files first; directories missing on one side are deleted only after their children.
-        var snapshots: [String: FileComparison] = [:]
-        for path in all.sorted() { snapshots[path] = try await FileComparisons.read(job: job, path: path, storage: storage) }
+        func dirty(_ path: String) -> Bool {
+            changedPaths?.contains { $0.isEmpty || path == $0 || path.hasPrefix($0 + "/") } == true
+        }
+        func metadataMatches(_ current: ComparedFile?, _ prior: ComparedFile?) -> Bool {
+            guard let current, let prior else { return current == nil && prior == nil }
+            return current.folder == prior.folder && current.identity == prior.identity && current.stamp == prior.stamp && (prior.folder || prior.hash != nil)
+        }
+        func remoteGroup(_ path: String) -> [RemoteItem] {
+            guard let storage else { return [] }
+            if storage.provider == .dropbox { return remoteGroups.first { $0.key.caseInsensitiveCompare(path) == .orderedSame }?.value ?? [] }
+            return remoteGroups[path] ?? []
+        }
+        func cached(_ path: String) throws -> FileComparison? {
+            guard !forceContentVerification, !dirty(path), let prior = state.files[path],
+                  prior.fastVerificationVersion == 1, same(prior.source, prior.backup) else { return nil }
+            let currentSource = try FileComparisons.localMetadata(root: job.source, path: path)
+            guard metadataMatches(currentSource, prior.source) else { return nil }
+            if storage != nil {
+                let group = remoteGroup(path)
+                guard group.count <= 1, let verified = prior.verifiedRemote,
+                      let item = group.first, item == verified else { return nil }
+                let backup = ComparedFile(stamp: item.stamp, identity: item.id, hash: item.hash, folder: item.folder)
+                guard metadataMatches(backup, prior.backup) else { return nil }
+                var source = currentSource
+                source?.hash = prior.source?.hash
+                return FileComparison(job: job, path: path, sourceRoot: sourceRoot, backupRoot: backupRoot,
+                                      source: source, backup: backup, remote: item, candidates: [item])
+            }
+            let currentBackup = try FileComparisons.localMetadata(root: job.destination, path: path)
+            guard metadataMatches(currentBackup, prior.backup) else { return nil }
+            var source = currentSource, backup = currentBackup
+            source?.hash = prior.source?.hash; backup?.hash = prior.backup?.hash
+            return FileComparison(job: job, path: path, sourceRoot: sourceRoot, backupRoot: backupRoot,
+                                  source: source, backup: backup)
+        }
+        var snapshots: [String: FileComparison] = [:], fastPaths: Set<String> = []
+        for path in all.sorted() {
+            if let comparison = try cached(path) { snapshots[path] = comparison; fastPaths.insert(path) }
+            else { snapshots[path] = try await FileComparisons.read(job: job, path: path, storage: storage) }
+        }
         let paths = all.sorted {
             let a = snapshots[$0]!, b = snapshots[$1]!
             let ad = a.source?.folder == true || a.backup?.folder == true
@@ -114,9 +174,11 @@ public actor SyncCoordinator {
         result.evaluatedPaths.formUnion(excluded); result.skipped += excluded.count
         for (offset, path) in paths.enumerated() {
             try Task.checkCancellation(); result.evaluatedPaths.insert(path)
-            progress(BackupProgress(path: path, completed: offset, total: paths.count, stage: "양방향 비교·반영"))
+            progress(BackupProgress(path: path, completed: offset, total: paths.count,
+                                    stage: fastPaths.contains(path) ? "저장된 검증 기록으로 빠른 비교" : "양방향 비교·반영"))
             try Task.checkCancellation()
             do {
+                if fastPaths.contains(path) { result.skipped += 1; continue }
                 // Parent timestamps can legitimately change as verified child operations complete.
                 let c = try await FileComparisons.read(job: job, path: path, storage: storage)
                 if c.waiting { throw BackupError.fileBusy(c.sourceError + " " + c.backupError) }
@@ -137,7 +199,7 @@ public actor SyncCoordinator {
                     throw Conflict("중복 이름이 있습니다. 문제 해결에서 사본을 모두 보존하며 정리하세요.")
                 }
                 if try equal(c) {
-                    state.files[path] = Pair(source: c.source, backup: c.backup); result.skipped += 1
+                    state.files[path] = Pair(source: c.source, backup: c.backup, fastVerificationVersion: 1, verifiedRemote: c.remote); result.skipped += 1
                 } else {
                     if let a = c.source, let b = c.backup, a.folder != b.folder { throw Conflict("파일과 폴더가 같은 경로를 사용합니다.") }
                     let forward: Bool
@@ -161,7 +223,7 @@ public actor SyncCoordinator {
                     }
                     let updated = try await FileComparisons.read(job: job, path: path, storage: storage)
                     guard try equal(updated) else { throw BackupError.unsafe("반영 후 양쪽 비교에 실패했습니다. 비교 기록을 갱신하지 않습니다.") }
-                    state.files[path] = Pair(source: updated.source, backup: updated.backup)
+                    state.files[path] = Pair(source: updated.source, backup: updated.backup, fastVerificationVersion: 1, verifiedRemote: updated.remote)
                 }
                 try Storage.save(state, to: url)
             } catch is CancellationError { throw CancellationError() }

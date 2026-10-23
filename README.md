@@ -1,8 +1,9 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.18 공개 프리뷰**, macOS는 **0.3.13 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.18 공개 프리뷰**, macOS는 **0.3.14 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.13 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.13-universal.zip)
+- [macOS 0.3.14 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.14-universal.zip)
+- [macOS 0.3.14 빠른 클라우드 비교 검증 범위](macOS/0.3.14-VALIDATION.md)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
@@ -27,11 +28,9 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
 
-## Windows 프리뷰 17 · macOS 0.3.13 변경사항
+## Windows 프리뷰 18 · macOS 0.3.14 변경사항
 
-두 버전 모두 환경설정에 **업데이트 확인** 버튼 하나만 남깁니다. 확인 화면에서 검증 다운로드·설치 안내로 이어지며 자동 확인/다운로드 선택은 유지합니다. Windows 백업 엔진은 preview.16과 동일합니다.
-
-맥에도 네트워크 오류의 진단 목록 전용 표시·동기화 끝 한 번 재시도·지속 실패 지연과 실행 중 처리 버튼의 즉시 예약·실행 전 마지막 선택 우선·선택 취소를 반영합니다. 파일 감시 이벤트가 네트워크 실패 횟수와 대기를 초기화하던 조건도 보완합니다. 실제 파일·위치 재검증과 사본 보존은 유지하며 예약은 앱 실행 동안만 유효합니다. [검사 범위](windows-v2/PREVIEW17-VALIDATION.md)와 [최종 결과](windows-v2/PREVIEW17-PACKAGE-RESULT.md)를 확인하세요.
+두 OS 모두 검증된 원본/원격 지문을 재사용해 앱 재시작 후 변경 없는 클라우드 파일의 내용을 매번 다시 읽지 않습니다. 변경 목록 갱신과 로컬 목록 재조사는 필요한 경우 유지하며, 변경·실패·중복·수동 처리·전체 검사 항목은 기존처럼 내용을 정밀 검증합니다. 예전 macOS 스냅샷은 첫 성공 비교에서 새 지문을 쌓습니다. [Windows 검증 범위](windows-v2/PREVIEW18-VALIDATION.md)와 [macOS 검증 범위](macOS/0.3.14-VALIDATION.md)를 확인하세요.
 
 ## Windows 프리뷰 16 변경사항
 

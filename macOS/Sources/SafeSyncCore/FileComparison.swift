@@ -61,6 +61,31 @@ public enum FileComparisons {
         }
         return "\(device):\(inode)"
     }
+    /// Reads only stable filesystem metadata. This is used solely after a
+    /// previously verified content baseline and a refreshed remote catalog
+    /// both agree; callers must fall back to `local` for every dirty, failed,
+    /// legacy or explicit full-inspection path.
+    public static func localMetadata(root: String, path: String) throws -> ComparedFile? {
+        try validatePath(path)
+        let base = BackupEngine.canonical(root)
+        var directory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: base.path, isDirectory: &directory), directory.boolValue else {
+            throw BackupError.unsafe("폴더에 연결할 수 없습니다: \(root)")
+        }
+        var cursor = base
+        for part in path.split(separator: "/") {
+            cursor.appendPathComponent(String(part))
+            let values: URLResourceValues
+            do { values = try cursor.resourceValues(forKeys: [.isSymbolicLinkKey]) }
+            catch let error as NSError where error.domain == NSCocoaErrorDomain && [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code) { return nil }
+            guard values.isSymbolicLink != true else { throw BackupError.unsafe("심볼릭 링크는 처리하지 않습니다.") }
+        }
+        let values = try cursor.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+        guard values.isDirectory == true || values.isRegularFile == true else { throw BackupError.unsafe("일반 파일 또는 폴더가 아닙니다.") }
+        let before = try FileStamp(cursor), id = try identity(cursor)
+        guard try FileStamp(cursor) == before, try identity(cursor) == id else { throw BackupError.fileBusy("파일 정보 확인 중 내용이 변경되었습니다.") }
+        return ComparedFile(stamp: before, identity: id, hash: nil, folder: values.isDirectory == true)
+    }
     public static func local(root: String, path: String) throws -> ComparedFile? {
         try validatePath(path)
         let base = BackupEngine.canonical(root)

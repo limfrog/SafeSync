@@ -237,13 +237,16 @@ import CoreServices
             let journal = self.journals[job.id] ?? ChangeJournal(), checkpoint = journal.sequence
             let doFull = BackupScanPolicy.requiresFullScan(explicit: full, watcherReady: watcherReady, journal: journal,
                 network: self.isNetwork(job.source) || (job.cloudProvider == nil && self.isNetwork(job.destination)))
-            let changedPaths = doFull ? nil : Set(journal.pending.keys)
+            // Keep the concrete dirty paths even when local reconciliation must
+            // enumerate the full tree. Cloud engines use them to decide which
+            // verified fingerprints must be re-read.
+            let changedPaths = Set(journal.pending.keys)
             let deferredPaths = automatic ? Set(self.waitingIssues.filter { $0.jobID == job.id && ($0.waiting?.nextAttempt ?? .distantPast) > Date() }.map(\.path)) : []
             self.statuses[job.id] = doFull ? "전체 검사 중" : "변경 파일 검사 중"
             let worker = Task.detached {
                 if let decisions { return try await coordinator.apply(decisions, job: runJob, storage: remoteStorage, progress: updateProgress) }
-                if runJob.mode == .twoWay { return try await coordinator.run(runJob, storage: remoteStorage, deferredPaths: deferredPaths, progress: updateProgress) }
-                if let remoteStorage { return try await cloudEngine.run(job, storage: remoteStorage, fullScan: doFull, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress) }
+                if runJob.mode == .twoWay { return try await coordinator.run(runJob, storage: remoteStorage, fullScan: doFull, forceContentVerification: full, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress) }
+                if let remoteStorage { return try await cloudEngine.run(job, storage: remoteStorage, fullScan: doFull, forceContentVerification: full, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress) }
                 return try await engine.run(job, fullScan: doFull, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress)
             }
             do {

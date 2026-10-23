@@ -90,6 +90,30 @@ public struct RemoteIndex: Codable, Sendable {
         return groups.compactMapValues { $0.first }
     }
 
+    /// Returns files and folders from the already refreshed catalog without
+    /// issuing one network request per directory. Orphans are ignored because
+    /// they are outside the selected root and therefore cannot authorize a
+    /// local deletion.
+    public func groupsByAllPaths() throws -> [String: [RemoteItem]] {
+        var result: [String: [RemoteItem]] = [:]
+        for node in nodes.values {
+            guard !node.name.isEmpty, !node.name.contains("/"), node.name != ".", node.name != ".." else {
+                throw BackupError.unsafe("백업 경로로 해석할 수 없는 클라우드 항목 이름이 있습니다.")
+            }
+            var current = node, components = [node.name], visited: Set<String> = [node.id]
+            while current.parent != root {
+                guard let parent = nodes[current.parent], !visited.contains(parent.id) else { components = []; break }
+                guard !parent.name.contains("/"), parent.name != ".", parent.name != ".." else {
+                    throw BackupError.unsafe("백업 경로로 해석할 수 없는 클라우드 폴더 이름이 있습니다.")
+                }
+                visited.insert(parent.id); components.insert(parent.name, at: 0); current = parent
+            }
+            if components.isEmpty || components.first?.hasPrefix(".safesync-") == true { continue }
+            result[components.joined(separator: "/"), default: []].append(node)
+        }
+        return result
+    }
+
 }
 public protocol RemoteStorage: Sendable {
     var provider: CloudProvider { get }

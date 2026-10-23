@@ -60,6 +60,13 @@ enum TwoWayChecks {
             try CloudChecks.write("initial", job: job)
             let sync = SyncCoordinator(dataDirectory: root.appendingPathComponent("state"))
             let initial = try await sync.run(job, storage: storage); check(initial.issues.isEmpty)
+            let stages = StageRecorder()
+            let restarted = SyncCoordinator(dataDirectory: root.appendingPathComponent("state"))
+            let fast = try await restarted.run(job, storage: storage, fullScan: true, progress: { if let stage = $0.stage { stages.append(stage) } })
+            check(fast.issues.isEmpty); check(stages.contains("저장된 검증 기록으로 빠른 비교"))
+            stages.reset()
+            _ = try await restarted.run(job, storage: storage, fullScan: true, forceContentVerification: true, progress: { if let stage = $0.stage { stages.append(stage) } })
+            checkFalse(stages.contains("저장된 검증 기록으로 빠른 비교"))
             let old = await storage.children(job.cloudFolderID!).first { $0.name == "a.txt" }!
             await storage.remove(old)
             let upload = root.appendingPathComponent("external"); try Data("remote edit".utf8).write(to: upload)
@@ -69,7 +76,7 @@ enum TwoWayChecks {
             try FileManager.default.removeItem(at: URL(fileURLWithPath: job.source).appendingPathComponent("a.txt"))
             let removed = try await sync.run(job, storage: storage); check(removed.issues.isEmpty); checkEqual(removed.removed, 1)
             check(await storage.children(job.cloudFolderID!).allSatisfy { $0.name != "a.txt" })
-            print("PASS \(provider.title) two-way upload, external edit download, checksum validation and deletion to remote trash")
+            print("PASS \(provider.title) two-way fast restart, explicit deep inspection, external edit download and deletion to remote trash")
         }
         do {
             let (root, job, engine, cloud) = try CloudChecks.fixture(.googleDrive); defer { try? FileManager.default.removeItem(at: root) }
