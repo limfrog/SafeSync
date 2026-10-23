@@ -2,12 +2,13 @@
 
 SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.19 공개 프리뷰**, macOS는 **0.3.15 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- macOS 0.3.15 다운로드 — Apple Silicon·Intel Universal ZIP (검증 빌드 후 게시)
+- [macOS 0.3.15 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.15-universal.zip)
 - [macOS 0.3.15 연결 검증 수정 범위](macOS/0.3.15-VALIDATION.md)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- Windows 1.0.0 Preview 19 설치 파일·무설치 ZIP (검증 빌드 후 게시)
+- [Windows 1.0.0 Preview 19 설치 파일](dist/SafeSync-Setup-1.0.0-preview.19.exe)
+- [Windows 1.0.0 Preview 19 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.19.zip)
 - [프리뷰 18 빠른 클라우드 비교와 한계](windows-v2/PREVIEW18-VALIDATION.md)
 - [프리뷰 17·Mac 0.3.13 검사 범위](windows-v2/PREVIEW17-VALIDATION.md)
 - [프리뷰 17·Mac 0.3.13 배포 검사 결과](windows-v2/PREVIEW17-PACKAGE-RESULT.md)

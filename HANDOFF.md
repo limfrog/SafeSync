@@ -6,7 +6,7 @@
 
 # Windows preview.19 · macOS 0.3.15(24) — 2026-10-24
 
-macOS 연결 검증 원본을 앱 자체 데이터 폴더에 만들던 오류를 수정했다. 자체 데이터 재백업 방지 정책 때문에 파일이 제외되어 `완료 수 불일치`가 발생했으며, 이제 고유한 OS 임시 폴더를 사용하고 종료 시 제거한다. Windows에도 Dropbox·Google Drive 연결 검증을 추가했고, 두 운영체제 모두 계정 창 안의 고정 영역에서 단계와 결과를 확인한다. 검증은 새 `SafeSync-test-*` 클라우드 폴더만 사용한다. 세부 범위는 `windows-v2/PREVIEW19-VALIDATION.md`, `macOS/0.3.15-VALIDATION.md`에 남긴다.
+macOS 연결 검증 원본을 앱 자체 데이터 폴더에 만들던 오류를 수정했다. 자체 데이터 재백업 방지 정책 때문에 파일이 제외되어 `완료 수 불일치`가 발생했으며, 이제 고유한 OS 임시 폴더를 사용하고 종료 시 제거한다. Windows에도 Dropbox·Google Drive 연결 검증을 추가했고, 두 운영체제 모두 계정 창 안의 고정 영역에서 단계와 결과를 확인한다. 검증은 새 `SafeSync-test-*` 클라우드 폴더만 사용한다. Windows 실행 `40020161442`, macOS 실행 `40020443088`이 성공했다. Windows EXE `6094ddb1…` / ZIP `f6b67222…`, macOS ZIP `2282428e…`. 세부 범위는 `windows-v2/PREVIEW19-VALIDATION.md`, `macOS/0.3.15-VALIDATION.md`에 남긴다.
 
 # Windows preview.18 · macOS 0.3.14(23) — 2026-10-24
 
