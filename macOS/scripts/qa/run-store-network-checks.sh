@@ -3,6 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 test "$(grep -Fc 'Button("업데이트 확인")' Sources/SafeSyncApp/SettingsView.swift)" = 1
 if grep -Fq 'Button("다운로드 / 업데이트")' Sources/SafeSyncApp/SettingsView.swift; then echo 'Duplicate update entry'; exit 1; fi
+grep -Fq 'FileManager.default.temporaryDirectory.appendingPathComponent("SafeSync-connection-diagnostic-' Sources/SafeSyncApp/CloudDiagnostics.swift
+if grep -Fq 'Storage.applicationDirectory.appendingPathComponent("diagnostics/' Sources/SafeSyncApp/CloudDiagnostics.swift; then echo 'Cloud diagnostics source is inside the protected application data tree'; exit 1; fi
 binary_directory="$(swift build --disable-sandbox --show-bin-path)"
 qa="$(mktemp -d /private/tmp/safesync-store-qa.XXXXXX)"
 export SAFESYNC_TEST_DATA_DIRECTORY="$qa/data"

@@ -23,14 +23,14 @@
   </Style>
  </Window.Resources>
  <Grid x:Name="CloudAccountsLayout" Margin="24">
-  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <StackPanel Margin="0,0,0,18"><TextBlock Text="클라우드 계정 연결" FontSize="23" FontWeight="Bold"/><TextBlock Text="연결 정보는 Windows 사용자 계정으로 암호화되어 이 PC에만 저장됩니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,5,0,0"/></StackPanel>
   <ScrollViewer x:Name="AccountsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
   <GroupBox Header="Dropbox" Padding="16" Margin="0,0,0,14">
    <StackPanel>
     <TextBlock x:Name="DropboxLoginHint" Text="아래 버튼을 누르면 Dropbox 공식 로그인 페이지가 브라우저에서 열립니다.&#10;본인 계정으로 로그인하고 SafeSync 연결을 허용하세요. App Key를 입력할 필요가 없습니다."/>
     <TextBlock Text="SafeSync는 Dropbox 아이디·비밀번호를 직접 받거나 저장하지 않습니다. 연결 후 백업할 폴더를 선택하거나 새로 만들 수 있습니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,6,0,0" FontSize="12"/>
-    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="DropboxConnect" Content="Dropbox로 로그인" Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/><Button x:Name="DropboxDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="DropboxStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
+    <Grid Margin="0,12,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="DropboxConnect" Content="Dropbox로 로그인" Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/><Button x:Name="DropboxValidate" Content="연결 검증"/><Button x:Name="DropboxDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="DropboxStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
     <TextBlock Text="공개 심사 신청은 접수됐으며 승인 전까지 개발 사용자 한도가 적용됩니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,10,0,0" FontSize="12"/>
     <Expander x:Name="DropboxDeveloperSettings" Header="개발자 설정 · 일반 사용자는 변경할 필요가 없습니다" IsExpanded="False" Margin="0,10,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderBrush}">
      <Expander.Template><ControlTemplate TargetType="{x:Type Expander}"><StackPanel>
@@ -53,10 +53,16 @@
     <Grid Margin="0,10,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client ID" VerticalAlignment="Center"/><TextBox x:Name="GoogleClientId" Grid.Column="1"/></Grid>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client Secret" VerticalAlignment="Center"/><PasswordBox x:Name="GoogleSecret" Grid.Column="1"/></Grid>
     <TextBlock Text="Client Secret을 비워 두면 기존에 암호화 저장된 값을 유지합니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="110,4,0,0" FontSize="12"/>
-    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="GoogleConnect" Content="Google Drive 연결"/><Button x:Name="GoogleDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="GoogleStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
+    <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><Button x:Name="GoogleConnect" Content="Google Drive 연결"/><Button x:Name="GoogleValidate" Content="연결 검증"/><Button x:Name="GoogleDisconnect" Content="연결 해제"/></StackPanel><TextBlock x:Name="GoogleStatus" Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/></Grid>
    </StackPanel>
   </GroupBox>
   </StackPanel></ScrollViewer>
-  <Border Grid.Row="2" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="0,1,0,0" Padding="0,14,0,0" Margin="0,16,0,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="SaveCredentials" Content="입력값 저장"/><Button x:Name="CloseButton" Content="닫기" MinWidth="80" Margin="0" Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/></StackPanel></Border>
+  <Border x:Name="ValidationPanel" Grid.Row="2" Visibility="Collapsed" Margin="0,14,0,0" Padding="14" Background="{DynamicResource SafeSyncSurfaceBrush}" BorderBrush="{DynamicResource SafeSyncBorderBrush}" BorderThickness="1" CornerRadius="8">
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <ProgressBar x:Name="ValidationProgress" Width="34" Height="6" Margin="0,7,12,0" VerticalAlignment="Top" IsIndeterminate="True"/>
+    <StackPanel Grid.Column="1"><TextBlock x:Name="ValidationTitle" Text="연결 검증" FontWeight="SemiBold"/><TextBlock x:Name="ValidationResult" Margin="0,4,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}" TextWrapping="Wrap"/></StackPanel>
+   </Grid>
+  </Border>
+  <Border Grid.Row="3" BorderBrush="{DynamicResource SafeSyncBorderSoftBrush}" BorderThickness="0,1,0,0" Padding="0,14,0,0" Margin="0,16,0,0"><StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="SaveCredentials" Content="입력값 저장"/><Button x:Name="CloseButton" Content="닫기" MinWidth="80" Margin="0" Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/></StackPanel></Border>
  </Grid>
 </Window>

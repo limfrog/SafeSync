@@ -19,6 +19,7 @@ public sealed class CloudServices : IDisposable
         return Create(job.DestinationType,job.CloudFolderId,account,job.CloudFolderIdentity);
     }
     public IRemoteStore ForAccountRoot(string provider)=>Create(provider,provider=="GoogleDrive" ? "root" : "/",CloudAccounts.Read(config()).For(provider));
+    public IRemoteStore ForSelectedRoot(string provider,string root,string folderIdentity="")=>Create(provider,root,CloudAccounts.Read(config()).For(provider),folderIdentity);
     private IRemoteStore Create(string provider,string root,CloudAccount account,string folderIdentity="")
     {
         if(account.RefreshTokenProtected.Length==0 || account.AccountId.Length==0)throw new InvalidOperationException("클라우드 계정을 먼저 연결하세요.");

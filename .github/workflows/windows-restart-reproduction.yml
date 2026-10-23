@@ -86,10 +86,10 @@ jobs:
         if: success() && matrix.os == 'windows-2022'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-preview18-package
+          name: windows-preview19-package
           path: |
-            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.18.exe
-            windows-v2/artifacts/SafeSync-1.0.0-preview.18-Windows-x64.zip
+            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.19.exe
+            windows-v2/artifacts/SafeSync-1.0.0-preview.19-Windows-x64.zip
           if-no-files-found: error
           retention-days: 7
       - name: Upload synthetic test reports even on failure

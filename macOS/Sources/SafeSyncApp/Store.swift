@@ -46,6 +46,7 @@ import CoreServices
     func showProblems(_ issue: BackupIssue? = nil) { workspace = .sync; detailTab = .problems; problemSelection = issue?.id }
     @Published var validatingCloud = false
     @Published var cloudValidationReport: String?
+    @Published var cloudValidationStage: String?
     @Published var accounts: [CloudAccount] = []
     @Published var jobs: [BackupJob] = []
     @Published var selection: UUID?
@@ -521,11 +522,13 @@ import CoreServices
     }
     func validateCloudAccount(_ account: CloudAccount) {
         guard !validatingCloud, !busyTrash else { return }
-        validatingCloud = true; cloudValidationReport = "새로운 SafeSync-test 폴더에서 안전한 전송과 복구를 확인하고 있습니다."
+        validatingCloud = true; cloudValidationReport = nil; cloudValidationStage = "연결 검증을 준비하는 중…"
         Task {
-            defer { validatingCloud = false }
+            defer { validatingCloud = false; cloudValidationStage = nil }
             do {
-                let report = try await CloudDiagnostics.run(account: account)
+                let report = try await CloudDiagnostics.run(account: account) { stage in
+                    Task { @MainActor in self.cloudValidationStage = stage }
+                }
                 log(report)
                 cloudValidationReport = report
             } catch { self.cloudValidationReport = "클라우드 검증 실패: \(error.localizedDescription)"; log(self.cloudValidationReport!) }

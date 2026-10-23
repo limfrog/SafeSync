@@ -419,6 +419,8 @@ internal sealed partial class DesktopController
                 {
                     Check(!window.Find<Expander>("DropboxDeveloperSettings").IsExpanded && !window.Find<TextBox>("DropboxKey").IsVisible,"일반 연결 화면에 Dropbox App Key 입력이 노출됩니다.");
                     Check(window.Find<Button>("DropboxConnect").Content.ToString()=="Dropbox로 로그인" && window.Find<TextBlock>("DropboxLoginHint").Text.Contains("공식 로그인"),"Dropbox 브라우저 로그인 안내가 없습니다.");
+                    Check(window.Find<Button>("DropboxValidate").Content.ToString()=="연결 검증" && window.Find<Button>("GoogleValidate").Content.ToString()=="연결 검증","Windows 클라우드 연결 검증 버튼이 없습니다.");
+                    Check(window.Find<Border>("ValidationPanel").Visibility==Visibility.Collapsed,"검증 전 결과 영역이 표시됩니다.");
                     Check(window.Find<ScrollViewer>("AccountsScroll").ScrollableHeight<1,"기본 크기에서 클라우드 연결 버튼이 스크롤 아래로 가려집니다.");
                 }
                 if(previewDirectory!=null)
@@ -494,6 +496,7 @@ internal sealed partial class DesktopController
         CheckModal(ShowCloudAccounts,w=>
         {
             Check(w.Find<Button>("GoogleConnect").IsEnabled && w.Find<Button>("DropboxConnect").IsEnabled,"계정 연결 버튼이 비활성화되었습니다.");
+            Check(!w.Find<Button>("GoogleValidate").IsEnabled && !w.Find<Button>("DropboxValidate").IsEnabled,"연결되지 않은 계정의 검증 버튼이 활성화되었습니다.");
             Check(w.Find<TextBlock>("GoogleStatus").Text=="연결되지 않음","격리 UI 검사가 실제 계정을 읽었습니다.");
             Check(w.Find<TextBox>("DropboxKey").Text==PublicCloudRegistration.DropboxAppKey,"기본 Dropbox 키가 자동 적용되지 않았습니다.");
             w.Find<Expander>("DropboxDeveloperSettings").IsExpanded=true;w.UpdateLayout();

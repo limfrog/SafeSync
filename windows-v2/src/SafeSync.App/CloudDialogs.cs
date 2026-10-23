@@ -26,14 +26,40 @@ internal sealed partial class DesktopController
             {
                 var account=accounts.For(provider);var status=window.Find<TextBlock>(provider=="Dropbox" ? "DropboxStatus" : "GoogleStatus");
                 status.Text=account.RefreshTokenProtected.Length==0 ? "연결되지 않음" : "연결됨: "+account.AccountName;
+                window.Find<Button>(provider=="Dropbox" ? "DropboxValidate" : "GoogleValidate").IsEnabled=!busy && account.RefreshTokenProtected.Length>0 && account.AccountId.Length>0;
             }
         }
         void SetBusy(bool value)
         {
             busy=value;
-            foreach(var name in new[]{"DropboxConnect","DropboxDisconnect","GoogleConnect","GoogleDisconnect","SaveCredentials"})window.Find<Button>(name).IsEnabled=!busy;
+            foreach(var name in new[]{"DropboxConnect","DropboxValidate","DropboxDisconnect","GoogleConnect","GoogleValidate","GoogleDisconnect","SaveCredentials"})window.Find<Button>(name).IsEnabled=!busy;
             foreach(var name in new[]{"DropboxKey","GoogleClientId"})window.Find<TextBox>(name).IsEnabled=!busy;
             window.Find<PasswordBox>("GoogleSecret").IsEnabled=!busy;
+        }
+        async Task ValidateAsync(string provider)
+        {
+            if(busy)return;
+            var account=accounts.For(provider);
+            if(account.RefreshTokenProtected.Length==0 || account.AccountId.Length==0){window.Find<TextBlock>(provider=="Dropbox" ? "DropboxStatus" : "GoogleStatus").Text="먼저 계정을 연결하세요.";return;}
+            var panel=window.Find<Border>("ValidationPanel");var title=window.Find<TextBlock>("ValidationTitle");var result=window.Find<TextBlock>("ValidationResult");var bar=window.Find<ProgressBar>("ValidationProgress");
+            panel.Visibility=Visibility.Visible;title.Text=(provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 연결 검증 중";result.Text="계정과 클라우드 루트를 확인하는 중…";bar.IsIndeterminate=true;bar.Visibility=Visibility.Visible;
+            try
+            {
+                SetBusy(true);
+                var root=cloud.ForAccountRoot(provider);await root.InitializeAsync(lifetime.Token);
+                var folderName="SafeSync-test-"+Guid.NewGuid().ToString("N");result.Text="전용 시험 폴더를 만드는 중…";
+                await root.EnsureFolderAsync(folderName,lifetime.Token);
+                var folder=await root.StatAsync(folderName,lifetime.Token) ?? throw new IOException("검증 폴더를 다시 확인할 수 없습니다.");
+                if(!folder.Folder)throw new IOException("검증 위치가 폴더가 아닙니다.");
+                var selectedRoot=provider=="GoogleDrive" ? folder.Id : "/"+folderName;
+                var selected=cloud.ForSelectedRoot(provider,selectedRoot,folder.Id);
+                var progress=new Progress<BackupProgress>(value=>result.Text=string.IsNullOrWhiteSpace(value.CurrentFile) ? value.Stage : value.Stage+" · "+value.CurrentFile);
+                var report=await CloudConnectionDiagnostics.RunAsync(selected,progress,lifetime.Token);
+                title.Text=(provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 연결 검증 완료";result.Text=report+". 클라우드의 ‘"+folderName+"’ 폴더에 검증 파일을 남겼습니다.";Log(report);
+            }
+            catch(OperationCanceledException){title.Text="연결 검증 취소";result.Text="연결 검증을 취소했습니다.";}
+            catch(Exception ex){title.Text="연결 검증 실패";result.Text=ex.Message;Log((provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 연결 검증 실패: "+ex.Message);}
+            finally{bar.IsIndeterminate=false;bar.Visibility=Visibility.Collapsed;SetBusy(false);Refresh();}
         }
         bool SaveInputs()
         {
@@ -69,6 +95,7 @@ internal sealed partial class DesktopController
             try{accounts.Write(config);store.Save(config);Refresh();}catch(Exception ex){Tell(ex.Message);}
         }
         Click(window,"DropboxConnect",()=>TrackAuxiliary(ConnectAsync("Dropbox")));Click(window,"GoogleConnect",()=>TrackAuxiliary(ConnectAsync("GoogleDrive")));
+        Click(window,"DropboxValidate",()=>TrackAuxiliary(ValidateAsync("Dropbox")));Click(window,"GoogleValidate",()=>TrackAuxiliary(ValidateAsync("GoogleDrive")));
         Click(window,"DropboxDisconnect",()=>Disconnect("Dropbox"));Click(window,"GoogleDisconnect",()=>Disconnect("GoogleDrive"));
         Click(window,"SaveCredentials",()=>{try{if(SaveInputs())Log("클라우드 입력값을 암호화 저장했습니다.");}catch(Exception ex){Tell(ex.Message);}});
         Click(window,"CloseButton",window.Close);window.Closed+=(_,_)=>lifetime.Cancel();Refresh();window.ShowDialog();

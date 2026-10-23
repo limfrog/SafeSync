@@ -11,6 +11,9 @@ internal static class CloudTests
         var ct=CancellationToken.None;
         foreach(var provider in new[]{"GoogleDrive","Dropbox"})
         {
+            var diagnosticRemote=new MemoryRemote(provider);
+            var diagnostic=await CloudConnectionDiagnostics.RunAsync(diagnosticRemote,null,ct);
+            check(diagnostic.Contains("실제 검증 통과") && diagnosticRemote.Files.ContainsKey("한글 폴더/검증.txt"),provider+" connection diagnostic did not complete and restore its file");
             var home=Path.Combine(root,"cloud-"+provider);Directory.CreateDirectory(home);
             var source=Path.Combine(home,"source");Directory.CreateDirectory(source);
             var store=new ConfigStore(Path.Combine(home,"data"));var remote=new MemoryRemote(provider);

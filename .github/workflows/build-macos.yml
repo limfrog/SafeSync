@@ -43,23 +43,23 @@ jobs:
           codesign --force --deep --sign - macOS/build/SafeSync.app
           codesign --verify --deep --strict macOS/build/SafeSync.app
           plutil -lint macOS/build/SafeSync.app/Contents/Info.plist
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' macOS/build/SafeSync.app/Contents/Info.plist)" = '0.3.14'
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' macOS/build/SafeSync.app/Contents/Info.plist)" = '23'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' macOS/build/SafeSync.app/Contents/Info.plist)" = '0.3.15'
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' macOS/build/SafeSync.app/Contents/Info.plist)" = '24'
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' macOS/build/SafeSync.app/Contents/Info.plist)" = 'io.limfrog.SafeSync.macOS'
           test -x macOS/build/SafeSync.app/Contents/MacOS/SafeSync
           cmp "$registration" macOS/build/SafeSync.app/Contents/Resources/GoogleDesktopOAuth.plist
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSHumanReadableCopyright' macOS/build/SafeSync.app/Contents/Info.plist)" = 'SafeSync · Horizon Entertainment'
           lipo -info macOS/build/SafeSync.app/Contents/MacOS/SafeSync
           lipo macOS/build/SafeSync.app/Contents/MacOS/SafeSync -verify_arch arm64 x86_64
-          ditto -c -k --sequesterRsrc --keepParent macOS/build/SafeSync.app "$RUNNER_TEMP/SafeSync-macOS-0.3.14-universal.zip"
-          unzip -t "$RUNNER_TEMP/SafeSync-macOS-0.3.14-universal.zip"
-          shasum -a 256 "$RUNNER_TEMP/SafeSync-macOS-0.3.14-universal.zip"
+          ditto -c -k --sequesterRsrc --keepParent macOS/build/SafeSync.app "$RUNNER_TEMP/SafeSync-macOS-0.3.15-universal.zip"
+          unzip -t "$RUNNER_TEMP/SafeSync-macOS-0.3.15-universal.zip"
+          shasum -a 256 "$RUNNER_TEMP/SafeSync-macOS-0.3.15-universal.zip"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: SafeSync-macOS-0.3.14-universal
+          name: SafeSync-macOS-0.3.15-universal
           path: |
-            ${{ runner.temp }}/SafeSync-macOS-0.3.14-universal.zip
+            ${{ runner.temp }}/SafeSync-macOS-0.3.15-universal.zip
             ${{ runner.temp }}/SafeSync-macOS-checks.txt
             ${{ runner.temp }}/SafeSync-macOS-xctests.txt
             ${{ runner.temp }}/SafeSync-macOS-store-checks.txt
