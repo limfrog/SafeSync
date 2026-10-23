@@ -48,7 +48,7 @@ struct CloudAccountsView: View {
                 HStack(alignment: .top, spacing: 10) {
                     if store.validatingCloud { ProgressView().controlSize(.small) }
                     Image(systemName: store.cloudValidationReport?.hasPrefix("클라우드 검증 실패") == true ? "exclamationmark.triangle.fill" : "checkmark.shield")
-                        .foregroundStyle(store.cloudValidationReport?.hasPrefix("클라우드 검증 실패") == true ? .red : .tint)
+                        .foregroundStyle(store.cloudValidationReport?.hasPrefix("클라우드 검증 실패") == true ? Color.red : Color.accentColor)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(store.validatingCloud ? "연결 검증 중" : "연결 검증 결과").font(.callout.weight(.semibold))
                         Text(store.cloudValidationReport ?? store.cloudValidationStage ?? "클라우드 연결을 확인하고 있습니다.")
