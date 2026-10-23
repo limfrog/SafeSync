@@ -30,6 +30,11 @@ internal static class FastCloudComparisonTests
             await Run();check(stages.Contains("클라우드 파일 내용 동일 여부 검증"),provider+" legacy success is not unchecked cache authority");
             saved=store.LoadState(job);saved.PendingPaths.Add("file.txt");store.SaveState(saved);
             await Run();check(stages.Contains("클라우드 파일 내용 동일 여부 검증"),provider+" unfinished checkpoint is reverified");
+            var originalTime=File.GetLastWriteTimeUtc(file);
+            File.WriteAllText(file,"changed content");File.SetLastWriteTimeUtc(file,originalTime);
+            check((await Run()).Skipped==1 && stages.Contains("저장된 검증 기록으로 빠른 비교"),provider+" documented metadata-only offline limitation");
+            check((await Run(true)).Conflicts.Count==1,provider+" deep inspection detects same-size same-time offline edits");
+            File.WriteAllText(file,"initial content");File.SetLastWriteTimeUtc(file,originalTime);await Run(true);
             await remote.SeedAsync("file.txt","different bytes",DateTime.UtcNow.AddMinutes(5));
             var changed=await Run();check(changed.Conflicts.Count==1 && !stages.Contains("저장된 검증 기록으로 빠른 비교"),provider+" remote replacement invalidates cache");
         }
