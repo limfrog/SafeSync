@@ -60,7 +60,7 @@ enum TwoWayChecks {
             try CloudChecks.write("initial", job: job)
             let sync = SyncCoordinator(dataDirectory: root.appendingPathComponent("state"))
             let initial = try await sync.run(job, storage: storage); check(initial.issues.isEmpty)
-            let stages = StageRecorder()
+            let stages = CloudStageRecorder()
             let restarted = SyncCoordinator(dataDirectory: root.appendingPathComponent("state"))
             let fast = try await restarted.run(job, storage: storage, fullScan: true, progress: { if let stage = $0.stage { stages.append(stage) } })
             check(fast.issues.isEmpty); check(stages.contains("저장된 검증 기록으로 빠른 비교"))

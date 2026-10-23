@@ -1,6 +1,14 @@
 import Foundation
 import SafeSyncCore
 
+final class CloudStageRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+    func append(_ value: String) { lock.lock(); values.append(value); lock.unlock() }
+    func reset() { lock.lock(); values.removeAll(); lock.unlock() }
+    func contains(_ value: String) -> Bool { lock.lock(); defer { lock.unlock() }; return values.contains(value) }
+}
+
 actor MemoryCloud: RemoteStorage {
     nonisolated let provider: CloudProvider
     private var items: [String: RemoteItem] = [:]
@@ -92,16 +100,16 @@ struct CloudChecks {
             try write("first", job: job)
             let first = try await engine.run(job, storage: cloud); checkEqual(first.copied, 1); check(first.issues.isEmpty)
             let skipped = try await engine.run(job, storage: cloud); checkEqual(skipped.skipped, 1)
-            let stages = StageRecorder()
+            let stages = CloudStageRecorder()
             let restarted = CloudBackupEngine(dataDirectory: root.appendingPathComponent("settings"))
             let restart = try await restarted.run(job, storage: cloud, fullScan: true, progress: { if let stage = $0.stage { stages.append(stage) } })
-            checkEqual(restart.skipped, 1); check(stages.contains("저장된 검증 기록으로 빠른 비교")); checkFalse(stages.contains("클라우드 파일 내용 동일 여부 검증"))
+            checkEqual(restart.skipped, 1); check(stages.contains("저장된 검증 기록으로 빠른 비교")); check(!stages.contains("클라우드 파일 내용 동일 여부 검증"))
             stages.reset()
             _ = try await restarted.run(job, storage: cloud, fullScan: true, forceContentVerification: true, progress: { if let stage = $0.stage { stages.append(stage) } })
-            checkFalse(stages.contains("저장된 검증 기록으로 빠른 비교")); check(stages.contains("클라우드 파일 내용 동일 여부 검증"))
+            check(!stages.contains("저장된 검증 기록으로 빠른 비교")); check(stages.contains("클라우드 파일 내용 동일 여부 검증"))
             stages.reset()
             _ = try await restarted.run(job, storage: cloud, fullScan: true, changedPaths: ["a.txt"], progress: { if let stage = $0.stage { stages.append(stage) } })
-            checkFalse(stages.contains("저장된 검증 기록으로 빠른 비교")); check(stages.contains("클라우드 파일 내용 동일 여부 검증"))
+            check(!stages.contains("저장된 검증 기록으로 빠른 비교")); check(stages.contains("클라우드 파일 내용 동일 여부 검증"))
             print("PASS \(provider.title): restart reuses verified fingerprints; full inspection and watcher changes still hash")
             try write("second", job: job, time: 2000)
             let second = try await engine.run(job, storage: cloud); checkEqual(second.copied, 1); check(second.issues.isEmpty)
