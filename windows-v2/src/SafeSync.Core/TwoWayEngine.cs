@@ -119,7 +119,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                         await FileComparisons.VerifyAsync(job,relative,remote,resolutions,token);
                         var sourcePath=PathPolicy.Combine(job.Source,relative);
                         var backupPath=remote==null ? PathPolicy.Combine(job.Destination,relative) : "";
-                        bool rehash=forceFull || IsDirty(relative) || previous?.Status!="BackedUp" || resolutions?.ContainsKey(relative)==true;
+                        bool rehash=(remote==null ? full : forceFull) || IsDirty(relative) || previous?.Status!="BackedUp" || resolutions?.ContainsKey(relative)==true;
                         a=await ReadLocalAsync(sourcePath,previous?.SyncSource,rehash,token);
                         var ri=remoteItems?.GetValueOrDefault(relative);
                         if(remote!=null && ri==null && implicitParents.Contains(relative))

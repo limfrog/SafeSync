@@ -73,12 +73,12 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                     try
                     {
                         Report("변경 파일의 클라우드 정보 확인",relative,completed,work.Length);
-                        roots.Check();
                         if(CanReuse(relative))
                         {
                             Report("저장된 검증 기록으로 빠른 비교",relative,completed,work.Length);
                             lock(checkpointLock)result.Skipped++;handled=true;return;
                         }
+                        roots.Check();
                         var action=resolutions!=null && resolutions.TryGetValue(relative,out var selected) ? selected : (ConflictAction?)null;
                         if(action==ConflictAction.Ignore){entries[relative]=FileEntry.From(info,relative,"Conflict","이번 동기화에서 제외");lock(checkpointLock)result.Skipped++;handled=true;return;}
                         if(catalog.IsAmbiguous(relative))
