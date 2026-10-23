@@ -136,7 +136,11 @@ public actor SyncCoordinator {
         }
         func cached(_ path: String) throws -> FileComparison? {
             guard !forceContentVerification, !dirty(path), let prior = state.files[path],
-                  prior.fastVerificationVersion == 1, same(prior.source, prior.backup) else { return nil }
+                  prior.fastVerificationVersion == 1, prior.source != nil, prior.backup != nil else { return nil }
+            // Cloud providers may use a different digest algorithm from the
+            // local baseline (Dropbox content hash versus local SHA-256). The
+            // verified remote item is the cross-algorithm equality authority.
+            if storage == nil, !same(prior.source, prior.backup) { return nil }
             let currentSource = try FileComparisons.localMetadata(root: job.source, path: path)
             guard metadataMatches(currentSource, prior.source) else { return nil }
             if storage != nil {
