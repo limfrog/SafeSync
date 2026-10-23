@@ -68,6 +68,8 @@ public sealed class FileEntry
     public long BackupFileId {get;set;}
     public int LockRetryCount {get;set;}
     public string RemoteId { get; set; } = "";
+    // Only populated after verified content equality or a verified upload.
+    public Cloud.RemoteItem? VerifiedRemote { get; set; }
     public string RemoteParentId { get; set; } = "";
     // Older snapshots must not authorize deletion until this source was observed
     // under a verified root. Missing legacy files remain reviewable conflicts.

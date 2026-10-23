@@ -204,6 +204,7 @@ try
     await ComparisonRegressionTests.RunAsync(testRoot,Check);
     await OneWaySafetyTests.RunAsync(testRoot,Check);
     await RestartIndexRegressionTests.RunAsync(testRoot,Check);
+    await FastCloudComparisonTests.RunAsync(testRoot,Check);
     await AppUpdateTests.RunAsync(testRoot,Check);
     await GracefulStopTests.RunAsync(testRoot,Check);
     await RecoveryRegressionTests.RunAsync(testRoot,Check);

@@ -20,9 +20,11 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             await new VerifiedFiles().RecoverAsync(job.Source,token);
             var offline=OfflineJournal.Read(job.Source,state.SourceJournal,token,OfflineJournal.TrackedIds(state.Files));bool journalInvalid=state.SourceJournal!=null && offline.RequiresScan;state.SourceJournal=offline.Checkpoint;
             changes=(changes ?? []).Concat(offline.Paths);
+            var dirty=changes.ToArray();
             var entries=new System.Collections.Concurrent.ConcurrentDictionary<string,FileEntry>(state.Files.ToDictionary(f=>PathPolicy.Relative(f.RelativePath),StringComparer.OrdinalIgnoreCase),StringComparer.OrdinalIgnoreCase);
             var pending=new HashSet<string>(state.PendingPaths,StringComparer.OrdinalIgnoreCase);
-            foreach(var entry in entries.Values.Where(e=>e.Status!="BackedUp"))pending.Add(entry.RelativePath);
+            var retryPaths=new HashSet<string>(pending,StringComparer.OrdinalIgnoreCase);
+            foreach(var entry in entries.Values.Where(e=>e.Status!="BackedUp")){pending.Add(entry.RelativePath);retryPaths.Add(entry.RelativePath);}
             var publisher=new CloudPublisher(store,job,remote);
             publisher.ValidateDeletion=relative=>roots.RequireDeletion(relative,entries.GetValueOrDefault(relative) ?? throw new CloudConflictException(relative,"삭제 전 원본 확인 기록이 없습니다. 기존 백업을 보존합니다."));
             Report("중단된 클라우드 전송 및 교체 확인","",0,0);
@@ -58,7 +60,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             IReadOnlyDictionary<string,RemoteItem?>? metadata=null;
             if(remote is IRemoteBatch batchStore)
             {
-                try{metadata=await batchStore.StatManyAsync(tree,work.Where(p=>!catalog.IsAmbiguous(p)),token);}
+                try{metadata=await batchStore.StatManyAsync(tree,work.Where(p=>!catalog.IsAmbiguous(p) && !CanReuse(p)),token);}
                 catch(CloudDuplicateNameException){await catalog.RefreshAsync(true,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);}
             }
             try
@@ -72,6 +74,11 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                     {
                         Report("변경 파일의 클라우드 정보 확인",relative,completed,work.Length);
                         roots.Check();
+                        if(CanReuse(relative))
+                        {
+                            Report("저장된 검증 기록으로 빠른 비교",relative,completed,work.Length);
+                            lock(checkpointLock)result.Skipped++;handled=true;return;
+                        }
                         var action=resolutions!=null && resolutions.TryGetValue(relative,out var selected) ? selected : (ConflictAction?)null;
                         if(action==ConflictAction.Ignore){entries[relative]=FileEntry.From(info,relative,"Conflict","이번 동기화에서 제외");lock(checkpointLock)result.Skipped++;handled=true;return;}
                         if(catalog.IsAmbiguous(relative))
@@ -138,6 +145,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                             if(action==null && target!=null && target.Length==info.Length && sameContent)
                             {
                                 entries[relative]=FileEntry.From(info,relative);entries[relative].RemoteId=target.Id;
+                                entries[relative].VerifiedRemote=target;
                                 lock(checkpointLock)result.Skipped++;handled=true;return;
                             }
                             if(action==null && target!=null && info.LastWriteTimeUtc<=target.ModifiedUtc.AddSeconds(2))
@@ -148,6 +156,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                         Report("검증 전용 임시 위치로 분할 전송",relative,completed,work.Length);
                         var final=await publisher.PublishAsync(relative,snapshot,target,action==ConflictAction.KeepBoth,pause,token);
                         entries[relative]=new(){RelativePath=relative,Length=snapshot.Length,SourceFileId=sourceFileId,CreationTimeUtc=snapshot.CreatedUtc.ToString("O"),LastWriteTimeUtc=snapshot.ModifiedUtc.ToString("O"),Status="BackedUp",RemoteId=final.Id,LastAttemptUtc=DateTime.UtcNow.ToString("O"),DeletionSourceVerified=true};
+                        entries[relative].VerifiedRemote=final;
                         lock(checkpointLock){catalog.Update(relative,final);result.Copied++;}handled=true;
                     }
                     catch(OperationCanceledException ex) when(!NetworkFailures.IsTransient(ex) || token.IsCancellationRequested || pause.IsStopRequested){throw;}
@@ -201,6 +210,21 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             catch(OperationCanceledException ex) when(!NetworkFailures.IsTransient(ex) || token.IsCancellationRequested || pause.IsStopRequested){result.Canceled=true;}
             finally{state.CheckpointActive=pending.Count>0;Save();catalog.Save();}
             return result;
+            bool CanReuse(string relative)
+            {
+                if(forceFull || retryPaths.Contains(relative) || blocked.Contains(relative) || catalog.IsAmbiguous(relative) || resolutions?.ContainsKey(relative)==true ||
+                    dirty.Any(p=>relative.Equals(p,StringComparison.OrdinalIgnoreCase)||relative.StartsWith(p+"/",StringComparison.OrdinalIgnoreCase)))return false;
+                if(!entries.TryGetValue(relative,out var prior) || prior.Status!="BackedUp" || prior.SourceFileId==0 || prior.VerifiedRemote is not {} verified ||
+                    tree?.GetValueOrDefault(relative) is not {} current || current!=verified)return false;
+                try
+                {
+                    var local=PathPolicy.Combine(job.Source,relative);PathPolicy.RejectLinks(job.Source,local);
+                    var info=new FileInfo(local);info.Refresh();
+                    return info.Exists && info.Length==prior.Length && info.LastWriteTimeUtc.ToString("O")==prior.LastWriteTimeUtc &&
+                        info.CreationTimeUtc.ToString("O")==prior.CreationTimeUtc && OfflineJournal.FileIdentity(local)==prior.SourceFileId;
+                }
+                catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){return false;}
+            }
             void Save(){state.PendingPaths=pending.Order(StringComparer.OrdinalIgnoreCase).ToList();state.Files=entries.Values.OrderBy(f=>f.RelativePath,StringComparer.OrdinalIgnoreCase).ToList();store.SaveState(state);}
         }
         finally{gate.Release();}

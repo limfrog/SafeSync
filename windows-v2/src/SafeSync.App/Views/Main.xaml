@@ -76,7 +76,7 @@
       </MenuItem>
       <MenuItem Header="작업" Style="{StaticResource MenuHeaderItem}">
         <MenuItem x:Name="EditButton" Header="작업 수정"/><MenuItem x:Name="DeleteButton" Header="작업 삭제"/><Separator/>
-        <MenuItem x:Name="FullScanButton" Header="전체 검사" ToolTip="선택한 작업의 모든 파일을 다시 비교합니다."/>
+        <MenuItem x:Name="FullScanButton" Header="전체 검사" ToolTip="정밀 검사: 모든 파일 내용을 다시 읽어 검증합니다. 일반 비교는 성공 기록과 파일 정보를 재사용하므로 크기·시각을 유지한 내용 변경은 놓칠 수 있습니다."/>
         <MenuItem x:Name="RebindCloudJobMenuItem" Header="클라우드 위치 다시 연결..." ToolTip="계정·폴더를 확인한 뒤 이전 삭제 기준을 재사용하지 않고 다시 연결합니다."/>
         <MenuItem x:Name="ResolveJobMenuItem" Header="실패 원인 / 해결..."/>
         <Separator/><MenuItem x:Name="StopJobMenuItem" Header="작업 종료" ToolTip="현재 처리 중인 파일을 안전하게 마친 뒤 남은 작업을 저장하고 대기합니다. 지금 백업 또는 다시 시작으로 재개합니다."/>
