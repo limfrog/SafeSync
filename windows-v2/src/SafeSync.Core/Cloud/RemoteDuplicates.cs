@@ -11,9 +11,12 @@ public interface IRemoteDuplicates
 
 public static class RemoteDuplicates
 {
+    public sealed record IdenticalSet(RemoteItem Selected,IReadOnlyList<RemoteItem> Candidates);
     // A name (or a timestamp) is never proof of identity. All physical copies
     // must match the guarded source, including across duplicate parent folders.
     public static async Task<RemoteItem?> IdenticalAsync(IRemoteStore remote,string source,string relative,CancellationToken token)
+        =>(await IdenticalSetAsync(remote,source,relative,token))?.Selected;
+    public static async Task<IdenticalSet?> IdenticalSetAsync(IRemoteStore remote,string source,string relative,CancellationToken token)
     {
         if(remote is not IRemoteDuplicates duplicates || !File.Exists(source))return null;
         using var guard=new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.Read);
@@ -26,7 +29,7 @@ public static class RemoteDuplicates
         if(!candidates.All(c=>RemotePath.Content(c,snapshot)))return null;
         var after=await duplicates.CandidatesAsync(relative,token);
         if(!Same(candidates,after))throw new CloudConflictException(relative,"동일 내용 확인 중 중복 사본이 변경되었습니다. 다시 비교하세요.");
-        return candidates.OrderBy(c=>c.Id,StringComparer.Ordinal).First();
+        return new(candidates.OrderBy(c=>c.Id,StringComparer.Ordinal).First(),candidates.ToArray());
     }
     public static bool Same(IReadOnlyList<RemoteItem> a,IReadOnlyList<RemoteItem> b)=>a.Count==b.Count && a.OrderBy(i=>i.Id,StringComparer.Ordinal).Zip(b.OrderBy(i=>i.Id,StringComparer.Ordinal)).All(p=>p.First==p.Second);
     public static bool Same(DuplicatePlan? a,DuplicatePlan? b)=>a==null ? b==null : b!=null && a.Selected==b.Selected && a.Groups.Length==b.Groups.Length && a.Groups.Zip(b.Groups).All(p=>p.First.Relative==p.Second.Relative && p.First.ParentId==p.Second.ParentId && Same(p.First.Items,p.Second.Items));

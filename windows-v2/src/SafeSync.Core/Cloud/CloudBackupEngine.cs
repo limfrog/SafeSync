@@ -87,12 +87,13 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                             if(action==null && remote is IRemoteDuplicates duplicates)
                             {
                                 if(Directory.Exists(path) && (await duplicates.CandidatesAsync(relative,token)) is {Count:>0} folders && folders.All(i=>i.Folder))
-                                {entries.TryRemove(relative,out _);lock(checkpointLock)result.Skipped++;handled=true;return;}
-                                var identical=await RemoteDuplicates.IdenticalAsync(remote,path,relative,token);
+                                {catalog.TrustAmbiguous(relative,folders);entries.TryRemove(relative,out _);lock(checkpointLock)result.Skipped++;handled=true;return;}
+                                var identical=await RemoteDuplicates.IdenticalSetAsync(remote,path,relative,token);
                                 if(identical!=null)
                                 {
                                     info.Refresh();
-                                    entries[relative]=FileEntry.From(info,relative);entries[relative].RemoteId=identical.Id;
+                                    entries[relative]=FileEntry.From(info,relative);entries[relative].RemoteId=identical.Selected.Id;
+                                    entries[relative].VerifiedRemote=identical.Selected;catalog.TrustAmbiguous(relative,identical.Candidates);
                                     lock(checkpointLock)result.Skipped++;handled=true;return;
                                 }
                             }
@@ -212,7 +213,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             return result;
             bool CanReuse(string relative)
             {
-                if(forceFull || retryPaths.Contains(relative) || blocked.Contains(relative) || catalog.IsAmbiguous(relative) || resolutions?.ContainsKey(relative)==true ||
+                if(forceFull || retryPaths.Contains(relative) || blocked.Contains(relative) || (catalog.IsAmbiguous(relative) && !catalog.IsStableAmbiguous(relative)) || resolutions?.ContainsKey(relative)==true ||
                     dirty.Any(p=>relative.Equals(p,StringComparison.OrdinalIgnoreCase)||relative.StartsWith(p+"/",StringComparison.OrdinalIgnoreCase)))return false;
                 if(!entries.TryGetValue(relative,out var prior) || prior.Status!="BackedUp" || prior.SourceFileId==0 || prior.VerifiedRemote is not {} verified ||
                     tree?.GetValueOrDefault(relative) is not {} current || current!=verified)return false;

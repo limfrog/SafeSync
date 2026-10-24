@@ -29,6 +29,14 @@ internal static class GoogleDuplicateProtocolTests
         int childRequests=server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b");
         catalog=new RemoteCatalog(catalogStore,remote);await catalog.RefreshAsync(false,new(),default);
         check(server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b")==childRequests && catalog.State.Items.ContainsKey("Project/unique.txt"),"Unchanged duplicate folder rescanned its subtree on restart.");
+        server.Add("stable-a","root","stable.txt",false,"same bytes");server.Add("stable-b","root","STABLE.TXT",false,"same bytes");
+        await catalog.RefreshAsync(true,new(),default);
+        var stableCandidates=await remote.CandidatesAsync("stable.txt",default);catalog.TrustAmbiguous("stable.txt",stableCandidates);catalog.Acknowledge();
+        catalog=new RemoteCatalog(catalogStore,remote);await catalog.RefreshAsync(false,new(),default);
+        check(catalog.IsStableAmbiguous("stable.txt") && !catalog.State.Pending.Contains("stable.txt",StringComparer.OrdinalIgnoreCase),"Verified unchanged duplicate files were queued again after restart.");
+        server.Nodes["stable-b"]=server.Nodes["stable-b"] with{Hash="changed",Version="2"};server.ChangedIds.Add("stable-b");
+        await catalog.RefreshAsync(false,new(),default);
+        check(!catalog.IsStableAmbiguous("stable.txt") && catalog.State.Pending.Contains("stable.txt",StringComparer.OrdinalIgnoreCase),"A changed duplicate file reused stale verification.");
         server.Nodes["unique-b"]=server.Nodes["unique-b"] with{Hash="changed",Version="2"};server.ChangedIds.Add("unique-b");
         await catalog.RefreshAsync(false,new(),default);
         check(catalog.State.Items["Project/unique.txt"].Hash=="changed" && server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b")>childRequests,"Change feed under duplicate folder reused stale subtree.");

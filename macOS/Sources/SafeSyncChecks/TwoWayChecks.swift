@@ -84,6 +84,9 @@ enum TwoWayChecks {
             let file = URL(fileURLWithPath: job.source).appendingPathComponent("a.txt")
             for _ in 0..<2 { _ = try await cloud.upload(file: file, name: "a.txt", parent: "root", modified: Date(), resumeKey: "duplicate") }
             let same = try await engine.run(job, storage: cloud); check(same.issues.isEmpty); checkEqual(same.skipped, 1)
+            let restarted = CloudBackupEngine(dataDirectory: root.appendingPathComponent("settings"))
+            let stable = try await restarted.run(job, storage: cloud, fullScan: true)
+            check(stable.issues.isEmpty); checkEqual(stable.skipped, 0); checkFalse(stable.evaluatedPaths.contains("a.txt"))
             try CloudChecks.write("different", job: job)
             let different = try await engine.run(job, storage: cloud); checkEqual(different.issues.count, 1); check(different.issues[0].conflict)
             let c = try await FileComparisons.read(job: job, path: "a.txt", storage: cloud)

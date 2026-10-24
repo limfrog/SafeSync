@@ -14,6 +14,10 @@ public actor CloudBackupEngine {
         // fast-comparison authority only after one successful content check.
         var sourceIdentity: String?
         var verifiedRemote: RemoteItem?
+        // Google Drive permits several physical items at one logical path.
+        // Once every copy has been content-verified, keep the exact set so an
+        // unchanged remote poll does not hash the same files again.
+        var verifiedDuplicates: [RemoteItem]?
     }
     private struct State: Codable {
         var source: String
@@ -242,11 +246,16 @@ public actor CloudBackupEngine {
             changedPaths?.contains { $0.isEmpty || path == $0 || path.hasPrefix($0 + "/") } == true
         }
         func canReuse(_ path: String, file: URL, stamp: FileStamp) throws -> Bool {
-            guard !forceContentVerification, !dirty(path), group(path).count <= 1,
+            guard !forceContentVerification, !dirty(path),
                   let prior = state.files[path], prior.verificationVersion == 1,
                   prior.source == stamp, let identity = prior.sourceIdentity,
-                  try FileComparisons.identity(file) == identity,
-                  let verified = prior.verifiedRemote, let current = entry(path), current == verified else { return false }
+                  try FileComparisons.identity(file) == identity else { return false }
+            let currentGroup = group(path).sorted { $0.id < $1.id }
+            if currentGroup.count > 1 {
+                guard let verified = prior.verifiedDuplicates?.sorted(by: { $0.id < $1.id }) else { return false }
+                return currentGroup == verified && prior.verifiedRemote == currentGroup.first
+            }
+            guard let verified = prior.verifiedRemote, let current = entry(path), current == verified else { return false }
             return true
         }
         let scannedFiles: [String: FileStamp]
@@ -258,8 +267,12 @@ public actor CloudBackupEngine {
         if storage.provider == .dropbox, Set(files.keys.map { $0.lowercased() }).count != files.count { throw BackupError.unsafe("원본에 대소문자만 다른 파일이 있습니다. Dropbox는 두 파일을 구분할 수 없습니다.") }
         // Include removed paths that never had a successful manifest entry (for stale conflict/wait cleanup).
         result.evaluatedPaths.formUnion((changedPaths ?? []).filter { !deferredPaths.contains($0) })
-        let paths = files.keys.filter { path in
+        let paths = try files.keys.filter { path in
             guard !deferredPaths.contains(path) else { return false }
+            if group(path).count > 1, let stamp = files[path] {
+                let file = try SourceScanner.file(source, path: path)
+                if try canReuse(path, file: file, stamp: stamp) { return false }
+            }
             guard let changedPaths, !fullScan, !legacy else { return true }
             return group(path).count > 1 || state.files[path]?.verificationVersion != 1 || entry(path)?.revision != state.files[path]?.remote.revision || entry(path)?.id != state.files[path]?.remote.id || changedPaths.contains { path == $0 || path.hasPrefix($0 + "/") || $0.isEmpty }
         }.sorted()
@@ -290,6 +303,12 @@ public actor CloudBackupEngine {
                     let fresh = try await RemoteDuplicates.inspect(path: path, root: job.cloudFolderID!, storage: storage)
                     guard identical, fresh.candidates == inspection.candidates, fresh.groups == inspection.groups, try FileStamp(file) == stamp else {
                         result.issues.append(BackupIssue(jobID: job.id, path: path, reason: "클라우드 중복 사본의 내용이 다릅니다. 문제 해결에서 사본을 보존하며 정리하세요.", conflict: true, source: stamp, backup: inspection.selected?.stamp)); continue
+                    }
+                    let verified = inspection.candidates.sorted { $0.id < $1.id }
+                    if let selected = verified.first {
+                        state.files[path] = Record(source: stamp, remote: selected, verificationVersion: 1,
+                                                   sourceIdentity: try FileComparisons.identity(file), verifiedRemote: selected,
+                                                   verifiedDuplicates: verified)
                     }
                     result.skipped += 1; continue
                 }

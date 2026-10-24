@@ -27,6 +27,11 @@ public sealed class RemoteCatalog
         public List<string> Pending {get;set;}=[];
         public List<string> Ambiguous {get;set;}=[];
         public Dictionary<string,string[]> DuplicateFolderIds {get;set;}=new(StringComparer.OrdinalIgnoreCase);
+        // A duplicate name remains ambiguous until the user normalizes it, but
+        // identical physical copies do not need to be hashed on every remote
+        // poll. The signature is invalidated by any related change-feed path
+        // or an explicit full refresh.
+        public Dictionary<string,string> StableAmbiguous {get;set;}=new(StringComparer.OrdinalIgnoreCase);
     }
     private readonly string path,identity,scope;
     private readonly IRemoteStore remote;
@@ -35,10 +40,24 @@ public sealed class RemoteCatalog
     {
         this.remote=remote;this.scope=scope;identity=remote.Provider+"|"+remote.AccountId+"|"+remote.Root+"|"+scope;
         var key=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));path=Path.Combine(store.Root,"remote-catalogs",key+".json");
-        if(File.Exists(path)){var saved=JsonFile.Read<Data>(path);if(saved.Identity==identity){saved.Items=new(saved.Items,StringComparer.OrdinalIgnoreCase);State=saved;}}
+        if(File.Exists(path)){var saved=JsonFile.Read<Data>(path);if(saved.Identity==identity){saved.Items=new(saved.Items,StringComparer.OrdinalIgnoreCase);saved.DuplicateFolderIds=new(saved.DuplicateFolderIds,StringComparer.OrdinalIgnoreCase);saved.StableAmbiguous=new(saved.StableAmbiguous,StringComparer.OrdinalIgnoreCase);State=saved;}}
     }
     private bool InScope(string relative)=>scope.Length==0 ? !PathPolicy.Internal(relative) : relative.Equals(scope,StringComparison.OrdinalIgnoreCase)||relative.StartsWith(scope+"/",StringComparison.OrdinalIgnoreCase);
     public bool IsAmbiguous(string path)=>State.Ambiguous.Any(p=>Related(path,p));
+    public bool IsStableAmbiguous(string path)=>State.StableAmbiguous.ContainsKey(path);
+    public void TrustAmbiguous(string relative,IReadOnlyList<RemoteItem> candidates)
+    {
+        relative=PathPolicy.Relative(relative);
+        if(candidates.Count<2 || candidates.Any(i=>i.Id.Length==0))return;
+        State.StableAmbiguous[relative]=Signature(candidates);
+        State.Items[relative]=candidates.OrderBy(i=>i.Id,StringComparer.Ordinal).First();
+        JsonFile.Save(path,State);
+    }
+    private static string Signature(IEnumerable<RemoteItem> items)
+    {
+        var value=string.Join("\n",items.OrderBy(i=>i.Id,StringComparer.Ordinal).Select(i=>string.Join("\u001f",i.Id,i.Name,i.Folder,i.Length,i.ModifiedUtc.ToUniversalTime().Ticks,i.CreatedUtc.ToUniversalTime().Ticks,i.Hash,i.Revision,i.Binary,i.Sha256)));
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    }
     private static bool Related(string a,string b)=>a.Equals(b,StringComparison.OrdinalIgnoreCase)||a.StartsWith(b+"/",StringComparison.OrdinalIgnoreCase)||b.StartsWith(a+"/",StringComparison.OrdinalIgnoreCase);
     private async Task AddTreeAsync(string folder,Dictionary<string,RemoteItem> index,HashSet<string> ambiguous,Dictionary<string,string[]> duplicateFolders,PauseGate pause,CancellationToken token)
     {
@@ -71,10 +90,11 @@ public sealed class RemoteCatalog
         var index=new Dictionary<string,RemoteItem>(State.Items,StringComparer.OrdinalIgnoreCase);
         var ambiguous=State.Ambiguous.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var duplicateFolders=new Dictionary<string,string[]>(State.DuplicateFolderIds,StringComparer.OrdinalIgnoreCase);
+        var stableAmbiguous=new Dictionary<string,string>(State.StableAmbiguous,StringComparer.OrdinalIgnoreCase);
         string cursor;
         if(full)
         {
-            cursor=feed!=null ? await feed.CaptureCursorAsync(token) : "";index.Clear();ambiguous.Clear();duplicateFolders.Clear();
+            cursor=feed!=null ? await feed.CaptureCursorAsync(token) : "";index.Clear();ambiguous.Clear();duplicateFolders.Clear();stableAmbiguous.Clear();
             if(scope.Length==0 || (await remote.StatAsync(scope,token))?.Folder==true)await AddTreeAsync(scope,index,ambiguous,duplicateFolders,pause,token);
             foreach(var key in State.Items.Keys.Concat(index.Keys))pending.Add(key);
         }
@@ -86,6 +106,7 @@ public sealed class RemoteCatalog
             {
                 pause.ThrowIfStopRequested();
                 var relative=PathPolicy.Relative(changed);if(!InScope(relative))continue;
+                foreach(var key in stableAmbiguous.Keys.Where(p=>Related(p,relative)).ToArray())stableAmbiguous.Remove(key);
                 if(traversed.Any(p=>relative.StartsWith(p+"/",StringComparison.OrdinalIgnoreCase)))continue;
                 // A stable ambiguous folder must not trigger a whole subtree
                 // scan every minute. Validate its physical IDs; feed changes
@@ -118,8 +139,8 @@ public sealed class RemoteCatalog
                 }
             }
         }
-        foreach(var conflict in ambiguous)pending.Add(conflict);
-        var next=new Data {Identity=identity,Cursor=cursor,Items=index,Pending=pending.ToList(),Ambiguous=ambiguous.ToList(),DuplicateFolderIds=duplicateFolders};JsonFile.Save(path,next);State=next;
+        foreach(var conflict in ambiguous)if(!stableAmbiguous.ContainsKey(conflict))pending.Add(conflict);
+        var next=new Data {Identity=identity,Cursor=cursor,Items=index,Pending=pending.ToList(),Ambiguous=ambiguous.ToList(),DuplicateFolderIds=duplicateFolders,StableAmbiguous=stableAmbiguous};JsonFile.Save(path,next);State=next;
     }
     public void Acknowledge(){if(State.Pending.Count==0)return;State.Pending.Clear();JsonFile.Save(path,State);}
     public void Update(string relative,RemoteItem? item){if(item==null)State.Items.Remove(relative);else State.Items[relative]=item;}
