@@ -6,11 +6,11 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
     // Account-wide serialization also covers nested/aliased roots.
     public static SemaphoreSlim ScopeGate(IRemoteStore remote)=>Gates.GetOrAdd(remote.Provider+"|"+remote.AccountId,_=>new(1,1));
     public async Task<BackupResult> RunAsync(BackupJob job,bool forceFull,IEnumerable<string>? changes,PauseGate pause,IProgress<BackupProgress>? progress,CancellationToken token,
-        IReadOnlyDictionary<string,ConflictAction>? resolutions,bool reconcileOffline,int retentionDays)
+        IReadOnlyDictionary<string,ConflictAction>? resolutions,bool reconcileOffline,int retentionDays,bool remoteInitialized=false)
     {
         if(!Directory.Exists(job.Source))throw new DirectoryNotFoundException("원본 폴더에 접근할 수 없습니다.");
         if(job.CloudAccountId.Length==0 || job.CloudAccountId!=remote.AccountId)throw new InvalidOperationException("클라우드 계정을 확인하고 작업의 백업 폴더를 다시 선택하세요.");
-        Report("클라우드 계정 및 백업 폴더 확인","",0,0);await remote.InitializeAsync(token);
+        if(!remoteInitialized){Report("클라우드 계정 및 백업 폴더 확인","",0,0);await remote.InitializeAsync(token);}
         var gate=ScopeGate(remote);await pause.WaitForBoundaryAsync(gate,token);
         try
         {

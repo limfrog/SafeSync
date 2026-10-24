@@ -4,6 +4,8 @@ cd "$(dirname "$0")/../.."
 test "$(grep -Fc 'Button("업데이트 확인")' Sources/SafeSyncApp/SettingsView.swift)" = 1
 if grep -Fq 'Button("다운로드 / 업데이트")' Sources/SafeSyncApp/SettingsView.swift; then echo 'Duplicate update entry'; exit 1; fi
 grep -Fq 'FileManager.default.temporaryDirectory.appendingPathComponent("SafeSync-connection-diagnostic-' Sources/SafeSyncApp/CloudDiagnostics.swift
+grep -Fq 'try await storage.remove(remoteFolder)' Sources/SafeSyncApp/CloudDiagnostics.swift
+grep -Fq '검증용 클라우드 폴더와 파일을 모두 정리했습니다.' Sources/SafeSyncApp/CloudDiagnostics.swift
 if grep -Fq 'Storage.applicationDirectory.appendingPathComponent("diagnostics/' Sources/SafeSyncApp/CloudDiagnostics.swift; then echo 'Cloud diagnostics source is inside the protected application data tree'; exit 1; fi
 binary_directory="$(swift build --disable-sandbox --show-bin-path)"
 qa="$(mktemp -d /private/tmp/safesync-store-qa.XXXXXX)"

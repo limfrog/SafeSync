@@ -51,6 +51,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $root 'PREVIEW17-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW17-VALIDATION.md') -Force
         Copy-Item -LiteralPath (Join-Path $root 'PREVIEW18-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW18-VALIDATION.md') -Force
         Copy-Item -LiteralPath (Join-Path $root 'PREVIEW19-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW19-VALIDATION.md') -Force
+        Copy-Item -LiteralPath (Join-Path $root 'PREVIEW20-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW20-VALIDATION.md') -Force
         if($RunTests){& (Join-Path $PSScriptRoot 'Test-Desktop.ps1') -AppPath (Join-Path $publish 'SafeSync.exe') -Bundled}
         & (Join-Path $PSScriptRoot 'Build-Installer.ps1') -PublishPath $publish -RunTests:$RunTests
         $zip=$publish+'.zip'

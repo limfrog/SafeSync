@@ -1,14 +1,14 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.19 공개 프리뷰**, macOS는 **0.3.15 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.20 공개 프리뷰**, macOS는 **0.3.16 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.15 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.15-universal.zip)
-- [macOS 0.3.15 연결 검증 수정 범위](macOS/0.3.15-VALIDATION.md)
+- [macOS 0.3.16 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.16-universal.zip)
+- [macOS 0.3.16 연결 검증 수정 범위](macOS/0.3.16-VALIDATION.md)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 19 설치 파일](dist/SafeSync-Setup-1.0.0-preview.19.exe)
-- [Windows 1.0.0 Preview 19 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.19.zip)
+- [Windows 1.0.0 Preview 20 설치 파일](dist/SafeSync-Setup-1.0.0-preview.20.exe)
+- [Windows 1.0.0 Preview 20 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.20.zip)
 - [프리뷰 18 빠른 클라우드 비교와 한계](windows-v2/PREVIEW18-VALIDATION.md)
 - [프리뷰 17·Mac 0.3.13 검사 범위](windows-v2/PREVIEW17-VALIDATION.md)
 - [프리뷰 17·Mac 0.3.13 배포 검사 결과](windows-v2/PREVIEW17-PACKAGE-RESULT.md)
@@ -28,7 +28,11 @@ SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 �
 - [홈페이지](https://www.horizonent.co.kr/apps/safesync/)
 - [개발·macOS 이식 인계](HANDOFF.md)
 
-## Windows 프리뷰 19 · macOS 0.3.15 변경사항
+## Windows 프리뷰 20 · macOS 0.3.16 변경사항
+
+- Google Drive 연결 검증의 중복 초기화와 불필요한 루트 조회를 제거했습니다.
+- 검증 성공·실패·취소 뒤 Google Drive와 Dropbox의 시험 폴더 및 파일을 자동 정리합니다.
+- Windows는 3분 시간 초과와 정리 결과를, macOS는 실제 처리 수를 연결 창에서 바로 표시합니다.
 
 macOS 연결 검증 원본이 앱 자체 데이터 보호 범위 안에 만들어져 처리 건수가 0이 되던 문제를 수정했습니다. 두 운영체제 모두 클라우드 계정 화면에 연결 검증 버튼과 항상 보이는 진행·결과 영역을 제공합니다. 검증은 새 `SafeSync-test-*` 폴더 안에서만 전송·체크섬·변경 없음·안전 교체·휴지통·복구를 확인합니다.
 

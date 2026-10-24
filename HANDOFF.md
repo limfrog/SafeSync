@@ -4,9 +4,9 @@
 
 이후 SafeSync 기능 변경은 **Windows와 macOS를 항상 하나의 배포 묶음으로 검토한다.** 공통 동작은 두 OS에 모두 반영하고 각각의 자동 검사·빌드·번들 검증을 마친 뒤 소스, 설치 파일, 체크섬, 업데이트 목록, 홈페이지와 릴리스 노트를 함께 갱신한다. OS 전용 변경이라면 다른 OS에 필요 없음을 검토·기록한다. 한쪽의 빌드나 공통 회귀 검사가 실패하면 두 OS 묶음의 공개를 완료로 표시하지 않는다.
 
-# Windows preview.19 · macOS 0.3.15(24) — 2026-10-24
+# Windows preview.20 · macOS 0.3.16(25) — 2026-10-24
 
-macOS 연결 검증 원본을 앱 자체 데이터 폴더에 만들던 오류를 수정했다. 자체 데이터 재백업 방지 정책 때문에 파일이 제외되어 `완료 수 불일치`가 발생했으며, 이제 고유한 OS 임시 폴더를 사용하고 종료 시 제거한다. Windows에도 Dropbox·Google Drive 연결 검증을 추가했고, 두 운영체제 모두 계정 창 안의 고정 영역에서 단계와 결과를 확인한다. 검증은 새 `SafeSync-test-*` 클라우드 폴더만 사용한다. Windows 실행 `40020161442`, macOS 실행 `40020443088`이 성공했다. Windows EXE `6094ddb1…` / ZIP `f6b67222…`, macOS ZIP `2282428e…`. 세부 범위는 `windows-v2/PREVIEW19-VALIDATION.md`, `macOS/0.3.15-VALIDATION.md`에 남긴다.
+Google Drive 연결 검증에서 Windows의 중복 초기화와 macOS의 불필요한 루트 조회를 제거했다. Windows는 3분 시간 제한과 상세 단계를 제공하고, macOS는 실제 처리 수를 실패 메시지에 표시한다. 두 운영체제 모두 검증 성공·실패·취소 뒤 Google Drive와 Dropbox의 고유 시험 폴더 전체를 최대 3회 자동 삭제한다. 세부 범위는 `windows-v2/PREVIEW20-VALIDATION.md`, `macOS/0.3.16-VALIDATION.md`에 남긴다.
 
 # Windows preview.18 · macOS 0.3.14(23) — 2026-10-24
 

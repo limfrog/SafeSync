@@ -43,23 +43,50 @@ internal sealed partial class DesktopController
             if(account.RefreshTokenProtected.Length==0 || account.AccountId.Length==0){window.Find<TextBlock>(provider=="Dropbox" ? "DropboxStatus" : "GoogleStatus").Text="먼저 계정을 연결하세요.";return;}
             var panel=window.Find<Border>("ValidationPanel");var title=window.Find<TextBlock>("ValidationTitle");var result=window.Find<TextBlock>("ValidationResult");var bar=window.Find<ProgressBar>("ValidationProgress");
             panel.Visibility=Visibility.Visible;title.Text=(provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 연결 검증 중";result.Text="계정과 클라우드 루트를 확인하는 중…";bar.IsIndeterminate=true;bar.Visibility=Visibility.Visible;
+            IRemoteStore? accountRoot=null;string cleanupPath="";string cleanupMessage="";
             try
             {
                 SetBusy(true);
-                var root=cloud.ForAccountRoot(provider);await root.InitializeAsync(lifetime.Token);
-                var folderName="SafeSync-test-"+Guid.NewGuid().ToString("N");result.Text="전용 시험 폴더를 만드는 중…";
-                await root.EnsureFolderAsync(folderName,lifetime.Token);
-                var folder=await root.StatAsync(folderName,lifetime.Token) ?? throw new IOException("검증 폴더를 다시 확인할 수 없습니다.");
+                using var validationTimeout=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+                validationTimeout.CancelAfter(TimeSpan.FromMinutes(3));var validationToken=validationTimeout.Token;
+                accountRoot=cloud.ForAccountRoot(provider);await accountRoot.InitializeAsync(validationToken);
+                var folderName=".safesync-validation-"+Guid.NewGuid().ToString("N");
+                cleanupPath=folderName;result.Text="격리된 시험 폴더를 만드는 중…";
+                await accountRoot.EnsureFolderAsync(cleanupPath,validationToken);
+                var folder=await accountRoot.StatAsync(cleanupPath,validationToken) ?? throw new IOException("검증 폴더를 다시 확인할 수 없습니다.");
                 if(!folder.Folder)throw new IOException("검증 위치가 폴더가 아닙니다.");
-                var selectedRoot=provider=="GoogleDrive" ? folder.Id : "/"+folderName;
+                var selectedRoot=provider=="GoogleDrive" ? folder.Id : "/"+cleanupPath;
                 var selected=cloud.ForSelectedRoot(provider,selectedRoot,folder.Id);
                 var progress=new Progress<BackupProgress>(value=>result.Text=string.IsNullOrWhiteSpace(value.CurrentFile) ? value.Stage : value.Stage+" · "+value.CurrentFile);
-                var report=await CloudConnectionDiagnostics.RunAsync(selected,progress,lifetime.Token);
-                title.Text=(provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 연결 검증 완료";result.Text=report+". 클라우드의 ‘"+folderName+"’ 폴더에 검증 파일을 남겼습니다.";Log(report);
+                var report=await CloudConnectionDiagnostics.RunAsync(selected,progress,validationToken);
+                result.Text="검증용 클라우드 파일과 폴더를 정리하는 중…";
+                cleanupMessage=await CleanupCloudDiagnosticAsync(accountRoot,cleanupPath);
+                cleanupPath="";
+                title.Text=(provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 연결 검증 완료";result.Text=report+". "+cleanupMessage;Log(report+". "+cleanupMessage);
             }
+            catch(OperationCanceledException) when(!lifetime.IsCancellationRequested){title.Text="연결 검증 시간 초과";result.Text="3분 안에 Google Drive 또는 Dropbox 응답을 받지 못했습니다. 네트워크와 계정 권한을 확인한 뒤 다시 시도하세요.";}
             catch(OperationCanceledException){title.Text="연결 검증 취소";result.Text="연결 검증을 취소했습니다.";}
             catch(Exception ex){title.Text="연결 검증 실패";result.Text=ex.Message;Log((provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 연결 검증 실패: "+ex.Message);}
-            finally{bar.IsIndeterminate=false;bar.Visibility=Visibility.Collapsed;SetBusy(false);Refresh();}
+            finally
+            {
+                if(accountRoot!=null && cleanupPath.Length>0)
+                {
+                    var cleanup=await CleanupCloudDiagnosticAsync(accountRoot,cleanupPath);
+                    result.Text+="\n"+cleanup;
+                }
+                bar.IsIndeterminate=false;bar.Visibility=Visibility.Collapsed;SetBusy(false);Refresh();
+            }
+        }
+        static async Task<string> CleanupCloudDiagnosticAsync(IRemoteStore root,string path)
+        {
+            Exception? last=null;
+            for(var attempt=0;attempt<3;attempt++)
+            {
+                using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                try{await root.DeleteAsync(path,timeout.Token);return "검증용 클라우드 폴더와 파일을 모두 정리했습니다.";}
+                catch(Exception ex) when(ex is IOException or HttpRequestException or OperationCanceledException){last=ex;if(attempt<2)await Task.Delay(500*(attempt+1));}
+            }
+            return "검증은 끝났지만 임시 폴더 자동 정리에 실패했습니다: "+last?.Message;
         }
         bool SaveInputs()
         {

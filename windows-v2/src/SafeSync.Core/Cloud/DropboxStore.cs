@@ -141,7 +141,8 @@ public sealed partial class DropboxStore(CloudHttp http,ISecretVault vault,strin
     }
     public async Task DeleteAsync(string relative,CancellationToken token)
     {
-        if(!relative.StartsWith(".safesync-trash/",StringComparison.Ordinal) && !relative.StartsWith(".safesync-staging/",StringComparison.Ordinal))throw new InvalidDataException("휴지통/임시 파일 외의 직접 삭제는 허용하지 않습니다.");
+        bool diagnostic=System.Text.RegularExpressions.Regex.IsMatch(relative,"^\\.safesync-validation-[a-f0-9]{32}$",System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        if(!diagnostic && !relative.StartsWith(".safesync-trash/",StringComparison.Ordinal) && !relative.StartsWith(".safesync-staging/",StringComparison.Ordinal))throw new InvalidDataException("휴지통/검증용 임시 파일 외의 직접 삭제는 허용하지 않습니다.");
         // Personal Dropbox apps cannot use the Business-only permanently_delete API.
         // This removes it from SafeSync trash; Dropbox's own recovery policy remains.
         await CheckRoot(token);await Rpc("files/delete_v2",new{path=Full(relative)},token);

@@ -12,20 +12,21 @@ public static class CloudConnectionDiagnostics
         Directory.CreateDirectory(Path.Combine(source,"한글 폴더"));
         try
         {
-            await remote.InitializeAsync(token);
             var store=new ConfigStore(Path.Combine(workspace,"state"));
             var job=new BackupJob
             {
                 Name="클라우드 연결 검증",Source=source,Destination=remote.Provider+" / SafeSync-test",
                 DestinationType=remote.Provider,CloudFolderId=remote.Root,CloudAccountId=remote.AccountId,MirrorDeletes=true
             };
+            progress?.Report(new(job.Id,job.Name,"검증 폴더의 계정과 권한 확인","",0,0));
+            await remote.InitializeAsync(token);
             var engine=new CloudBackupEngine(store,remote);var gate=new PauseGate();
             var file=Path.Combine(source,"한글 폴더","검증.txt");
             void Write(string value,DateTime modified)
             {
                 File.WriteAllText(file,value,Encoding.UTF8);File.SetLastWriteTimeUtc(file,modified);
             }
-            Task<BackupResult> Run()=>engine.RunAsync(job,true,null,gate,progress,token,null,false,100);
+            Task<BackupResult> Run()=>engine.RunAsync(job,true,null,gate,progress,token,null,false,100,true);
 
             Write("SafeSync diagnostic original "+tokenText,DateTime.UtcNow.AddMinutes(-2));
             var first=await Run();
