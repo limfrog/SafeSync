@@ -6,7 +6,7 @@
 
 # Windows preview.20 · macOS 0.3.16(25) — 2026-10-24
 
-Google Drive 연결 검증에서 Windows의 중복 초기화와 macOS의 불필요한 루트 조회를 제거했다. Windows는 3분 시간 제한과 상세 단계를 제공하고, macOS는 실제 처리 수를 실패 메시지에 표시한다. 두 운영체제 모두 검증 성공·실패·취소 뒤 Google Drive와 Dropbox의 고유 시험 폴더 전체를 최대 3회 자동 삭제한다. 세부 범위는 `windows-v2/PREVIEW20-VALIDATION.md`, `macOS/0.3.16-VALIDATION.md`에 남긴다.
+Google Drive 연결 검증에서 Windows의 중복 초기화와 macOS의 불필요한 루트 조회를 제거했다. Windows는 3분 시간 제한과 상세 단계를 제공하고, macOS는 실제 처리 수를 실패 메시지에 표시한다. 두 운영체제 모두 검증 성공·실패·취소 뒤 Google Drive와 Dropbox의 `SafeSync-test-<고유 ID>` 폴더 전체를 최대 3회 자동 삭제한다. Windows 실행 `40053105128`, macOS 실행 `40052236746`이 성공했다. Windows EXE `2ad3cd00…` / ZIP `cd65657e…`, macOS ZIP `36c76302…`. 세부 범위는 `windows-v2/PREVIEW20-VALIDATION.md`, `macOS/0.3.16-VALIDATION.md`에 남긴다.
 
 # Windows preview.18 · macOS 0.3.14(23) — 2026-10-24
 

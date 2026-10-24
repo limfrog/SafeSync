@@ -4,4 +4,4 @@
 
 검증 범위는 계정·선택 루트 접근, 전송과 서버 체크섬, 변경 없는 파일 건너뛰기, 안전 교체, SafeSync 휴지통 이동·복구 및 검증 폴더 정리다. 기존 작업 폴더와 사용자 파일은 사용하지 않는다.
 
-최종 GitHub Actions 실행 번호와 배포 파일 SHA-256은 빌드 완료 후 이 문서와 `PREVIEW20-PACKAGE-RESULT.md`에 기록한다.
+GitHub Windows [실행 40053105128](https://github.com/limfrog/SafeSync/actions/runs/40053105128)에서 Windows Server 2022·2025 재부팅/NAS 재현, 핵심 회귀 1,325개, 설치 프로그램 34개, 설치된 파일 해시 510개 검사를 통과했다. 패키지 크기와 SHA-256은 `PREVIEW20-PACKAGE-RESULT.md`에 기록한다.
