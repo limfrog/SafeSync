@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
   "windows": {
-    "version": "1.0.0-preview.20",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.20.exe",
-    "sha256": "2ad3cd006986066a22b640dec9a817bae318c0c4ffcdce98c540547d1b06f87b",
-    "size": 77462016,
+    "version": "1.0.0-preview.21",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.21.exe",
+    "sha256": "164e4dcf10379b4ecd5931efaae570e70d6ffe651db5cf322b0296661cf8c800",
+    "size": 77464576,
     "notes": "Horizon Entertainment · SafeSync 새 버전입니다. 작업과 계정 설정을 유지합니다. 자세한 변경 사항은 GitHub의 사용 안내를 확인하세요."
   },
   "macOS": {
-    "version": "0.3.16",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.16-universal.zip",
-    "sha256": "36c76302820413eef20cd29a182d2971d97db2ce33453e569e42ea03a49739e0",
-    "size": 4265704,
+    "version": "0.3.17",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.17-universal.zip",
+    "sha256": "c5bc87ec6e1621d6c31444f69c166163e152f5bc5dcb8d1f99319f93be93a3b3",
+    "size": 4269668,
     "notes": "Horizon Entertainment · SafeSync 새 버전입니다. 작업과 계정 설정을 유지합니다. 자세한 변경 사항은 GitHub의 사용 안내를 확인하세요."
   }
 }

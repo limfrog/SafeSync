@@ -1,6 +1,8 @@
-# SafeSync macOS 0.3.16 — 공개 테스트 버전
+# SafeSync macOS 0.3.17 — 공개 테스트 버전
 
 개발자 및 운영자: **Horizon Entertainment** · 문의: **apps@horizonent.co.kr**.
+
+0.3.17(26)은 Google Drive의 내용이 같은 중복 이름 사본을 최초 확인한 뒤 정확한 사본 집합을 기억하여, 변경 없는 일반 폴링과 앱 재시작에서 같은 파일을 반복 검사하지 않습니다. 실제 변경과 수동 전체 검사는 다시 내용을 확인합니다. 자세한 범위는 [0.3.17 검증 문서](0.3.17-VALIDATION.md)를 확인하세요.
 
 0.3.16(25)는 Google Drive 검증의 불필요한 루트 조회와 모호한 완료 수 오류를 수정합니다. 시험 원본은 OS 임시 폴더에서 제거하고, 성공·실패·취소 뒤 Google Drive와 Dropbox의 `SafeSync-test-*` 폴더도 자동 삭제합니다. 자세한 범위는 [0.3.16 검증 문서](0.3.16-VALIDATION.md)를 확인하세요.
 

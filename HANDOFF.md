@@ -4,6 +4,10 @@
 
 이후 SafeSync 기능 변경은 **Windows와 macOS를 항상 하나의 배포 묶음으로 검토한다.** 공통 동작은 두 OS에 모두 반영하고 각각의 자동 검사·빌드·번들 검증을 마친 뒤 소스, 설치 파일, 체크섬, 업데이트 목록, 홈페이지와 릴리스 노트를 함께 갱신한다. OS 전용 변경이라면 다른 OS에 필요 없음을 검토·기록한다. 한쪽의 빌드나 공통 회귀 검사가 실패하면 두 OS 묶음의 공개를 완료로 표시하지 않는다.
 
+# Windows preview.21 · macOS 0.3.17(26) — 2026-10-24
+
+Google Drive의 동일 이름 사본 전체가 원본과 같음을 확인한 뒤 정확한 사본 집합을 저장한다. 변경 없는 원격 폴링·앱 재시작에서는 같은 중복 파일을 다시 해시하지 않는다. 원본·사본 집합 변경과 수동 전체 검사는 재검증하며, 다른 내용의 중복은 충돌·사본 보존·삭제 차단을 유지한다. Windows 실행 `40081237109`, macOS 실행 `40080688535`에서 양쪽 구현과 배포 묶음을 검증했다. 상세는 `windows-v2/PREVIEW21-VALIDATION.md`, `windows-v2/PREVIEW21-PACKAGE-RESULT.md`, `macOS/0.3.17-VALIDATION.md`를 확인한다.
+
 # Windows preview.20 · macOS 0.3.16(25) — 2026-10-24
 
 Google Drive 연결 검증에서 Windows의 중복 초기화와 macOS의 불필요한 루트 조회를 제거했다. Windows는 3분 시간 제한과 상세 단계를 제공하고, macOS는 실제 처리 수를 실패 메시지에 표시한다. 두 운영체제 모두 검증 성공·실패·취소 뒤 Google Drive와 Dropbox의 `SafeSync-test-<고유 ID>` 폴더 전체를 최대 3회 자동 삭제한다. Windows 실행 `40053105128`, macOS 실행 `40052236746`이 성공했다. Windows EXE `2ad3cd00…` / ZIP `cd65657e…`, macOS ZIP `36c76302…`. 세부 범위는 `windows-v2/PREVIEW20-VALIDATION.md`, `macOS/0.3.16-VALIDATION.md`에 남긴다.
