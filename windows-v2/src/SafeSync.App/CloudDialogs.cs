@@ -51,7 +51,7 @@ internal sealed partial class DesktopController
                 using var validationTimeout=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
                 validationTimeout.CancelAfter(TimeSpan.FromMinutes(3));var validationToken=validationTimeout.Token;
                 accountRoot=cloud.ForAccountRoot(provider);await accountRoot.InitializeAsync(validationToken);
-                var folderName=".safesync-validation-"+Guid.NewGuid().ToString("N");
+                var folderName="SafeSync-test-"+Guid.NewGuid().ToString("N");
                 cleanupPath=folderName;result.Text="격리된 시험 폴더를 만드는 중…";
                 await accountRoot.EnsureFolderAsync(cleanupPath,validationToken);
                 var folder=await accountRoot.StatAsync(cleanupPath,validationToken) ?? throw new IOException("검증 폴더를 다시 확인할 수 없습니다.");

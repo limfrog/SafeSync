@@ -185,7 +185,7 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     }
     public async Task DeleteAsync(string relative,CancellationToken token)
     {
-        bool diagnostic=Regex.IsMatch(relative,"^\\.safesync-validation-[a-f0-9]{32}$",RegexOptions.CultureInvariant);
+        bool diagnostic=Regex.IsMatch(relative,"^SafeSync-test-(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$",RegexOptions.CultureInvariant|RegexOptions.IgnoreCase);
         if(!diagnostic && !relative.StartsWith(".safesync-trash/",StringComparison.Ordinal) && !relative.StartsWith(".safesync-staging/",StringComparison.Ordinal))throw new InvalidDataException("휴지통/검증용 임시 파일만 삭제할 수 있습니다.");
         var item=await StatAsync(relative,token);if(item==null)return;
         using var response=await http.SendAsync(()=>new HttpRequestMessage(HttpMethod.Delete,Api+"files/"+Id(item.Id)+"?supportsAllDrives=true"),token);
