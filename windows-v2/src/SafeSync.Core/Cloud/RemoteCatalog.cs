@@ -110,12 +110,21 @@ public sealed class RemoteCatalog
             {
                 pause.ThrowIfStopRequested();
                 var relative=PathPolicy.Relative(changed);if(!InScope(relative))continue;
-                foreach(var key in stableAmbiguous.Keys.Where(p=>Related(p,relative)).ToArray())stableAmbiguous.Remove(key);
+                bool feedChanged=delta.Paths.Any(p=>Related(p,relative));
+                // Ambiguous names are revisited on every poll so unresolved
+                // conflicts remain visible. That maintenance pass is not a
+                // remote change and must not discard a previously verified
+                // identical duplicate set. Only the provider change feed (or
+                // a forced full refresh) may invalidate that trust.
+                if(feedChanged)
+                    foreach(var key in stableAmbiguous.Keys.Where(p=>Related(p,relative)).ToArray())stableAmbiguous.Remove(key);
+                else if(stableAmbiguous.ContainsKey(relative))
+                {traversed.Add(relative);continue;}
                 if(traversed.Any(p=>relative.StartsWith(p+"/",StringComparison.OrdinalIgnoreCase)))continue;
                 // A stable ambiguous folder must not trigger a whole subtree
                 // scan every minute. Validate its physical IDs; feed changes
                 // inside the subtree still force a refresh, including deletion.
-                if(!delta.Paths.Any(p=>Related(p,relative)) && duplicateFolders.TryGetValue(relative,out var ids) && remote is IRemoteDuplicates stable)
+                if(!feedChanged && duplicateFolders.TryGetValue(relative,out var ids) && remote is IRemoteDuplicates stable)
                 {
                     var copies=await stable.CandidatesAsync(relative,token);
                     if(copies.All(i=>i.Folder) && ids.SequenceEqual(copies.Select(i=>i.Id).Order(StringComparer.Ordinal)))
