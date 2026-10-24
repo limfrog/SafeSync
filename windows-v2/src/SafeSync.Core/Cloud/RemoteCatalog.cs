@@ -34,6 +34,7 @@ public sealed class RemoteCatalog
         public Dictionary<string,string> StableAmbiguous {get;set;}=new(StringComparer.OrdinalIgnoreCase);
     }
     private readonly string path,identity,scope;
+    private readonly object stableLock=new();
     private readonly IRemoteStore remote;
     public Data State {get;private set;}=new();
     public RemoteCatalog(ConfigStore store,IRemoteStore remote,string scope="")
@@ -49,9 +50,12 @@ public sealed class RemoteCatalog
     {
         relative=PathPolicy.Relative(relative);
         if(candidates.Count<2 || candidates.Any(i=>i.Id.Length==0))return;
-        State.StableAmbiguous[relative]=Signature(candidates);
-        State.Items[relative]=candidates.OrderBy(i=>i.Id,StringComparer.Ordinal).First();
-        JsonFile.Save(path,State);
+        lock(stableLock)
+        {
+            State.StableAmbiguous[relative]=Signature(candidates);
+            State.Items[relative]=candidates.OrderBy(i=>i.Id,StringComparer.Ordinal).First();
+            JsonFile.Save(path,State);
+        }
     }
     private static string Signature(IEnumerable<RemoteItem> items)
     {
