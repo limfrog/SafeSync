@@ -36,7 +36,7 @@ internal sealed partial class DesktopController
             OnCompleted(job,result);Check(notices.Count==0,"Unresolved dismissed file error reappeared on retry");window.Close();
             Check(!Main.Find<MenuItem>("RebindCloudJobMenuItem").IsEnabled,"Local job offered cloud rebind");
             var cloudJob=new BackupJob {Name="가져온 클라우드 작업",Source=job.Source,DestinationType="GoogleDrive",Destination="Google Drive / 이전 위치",CloudFolderId="old-folder",CloudAccountId="old-account",CloudBindingReviewRequired=true};
-            var accounts=CloudAccounts.Read(config);accounts.GoogleDrive.AccountId="synthetic-account";accounts.GoogleDrive.AccountName="화면 검사 계정";accounts.GoogleDrive.RefreshTokenProtected="synthetic-not-a-token";accounts.Write(config);
+            var accounts=CloudAccounts.Read(config);accounts.GoogleDrive.AccountId="synthetic-account";accounts.GoogleDrive.AccountName="화면 검사 계정";accounts.GoogleDrive.RefreshTokenProtected="synthetic-not-a-token";accounts.GoogleDrive.AccessMode=GoogleFileAccess.Mode;accounts.Write(config);
             config.Jobs=[cloudJob];RefreshJobs();OnFailed(cloudJob,new CloudBindingException("계정·폴더 확인 필요 (모사)"));
             Check(cloudJob.Stopped && !cloudJob.Paused && cloudJob.Status=="클라우드 연결 확인 필요" && Main.Find<MenuItem>("RebindCloudJobMenuItem").IsEnabled,"Changed cloud binding did not enter a recoverable waiting state");
             bool confirmedDialogSeen=false;
