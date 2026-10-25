@@ -99,6 +99,14 @@ jobs:
           name: windows-restart-${{ matrix.os }}
           path: ${{ runner.temp }}/safesync-restart-reports/
           retention-days: 7
+      - name: Upload isolated Google Drive trial utility
+        if: success() && matrix.os == 'windows-2022' && startsWith(github.ref, 'refs/heads/codex/drive-file-')
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-drive-file-trial-utility
+          path: windows-v2/tests/SafeSync.Tests/bin/Release/net10.0-windows/
+          if-no-files-found: error
+          retention-days: 7
       - name: Remove this job's temporary share and detach its disk
         if: always() && env.SAFESYNC_PROBE_SHARE != ''
         run: |

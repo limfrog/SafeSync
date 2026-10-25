@@ -143,7 +143,7 @@ struct CloudAccountsView: View {
             if !registration.isAvailable {
                 notice("Google Drive 연결은 배포 준비 중입니다. 연결을 지원하는 업데이트를 설치해 주세요.", symbol: "info.circle", color: .secondary)
             }
-            Label("연결 후 백업할 폴더를 직접 선택할 수 있습니다.", systemImage: "folder")
+            Label(provider == .googleDrive ? "제한 권한으로 새 전용 폴더에 단방향 백업합니다. 이전 연결은 새로 로그인하고 작업의 폴더를 다시 선택하세요." : "연결 후 백업할 폴더를 직접 선택할 수 있습니다.", systemImage: "folder")
                 .font(.caption).foregroundStyle(.secondary)
         }.padding(20).background(cardBackground).disabled(busy)
     }
@@ -208,6 +208,7 @@ struct CloudAccountsView: View {
     }
 }
 struct CloudFolderPicker: View {
+    @EnvironmentObject var store: Store
     let account: CloudAccount
     var selected: (String, String) -> Void
     @Environment(\.dismiss) var dismiss
@@ -254,6 +255,7 @@ struct CloudFolderPicker: View {
         .onDisappear { parentLogin?.cancel() }
     }
     func pickParent() {
+        guard store.runningCount == 0 else { error = "진행 중인 백업을 마친 뒤 상위 폴더를 선택하세요."; return }
         pickingParent = true; loading = true; error = nil
         let login = OAuthLogin(); parentLogin = login
         Task { @MainActor in

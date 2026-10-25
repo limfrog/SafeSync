@@ -70,7 +70,7 @@ public sealed class CloudAuthentication(HttpClient client,ISecretVault vault)
         string name=provider=="GoogleDrive" ? profile.GetProperty("user").String("emailAddress") : profile.String("email");
         string id=provider=="GoogleDrive" ? profile.GetProperty("user").String("permissionId") : profile.String("account_id");
         if(id.Length==0)throw new IOException("클라우드 계정 ID를 확인하지 못했습니다.");
-        if(pickFolder && account.AccountId!=id)throw new CloudBindingException("폴더를 선택한 Google 계정이 연결 계정과 다릅니다. 같은 계정으로 다시 선택하세요.");
+        if(pickFolder && account.AccountId.Length>0 && account.AccountId!=id)throw new CloudBindingException("폴더를 선택한 Google 계정이 연결 계정과 다릅니다. 같은 계정으로 다시 선택하세요.");
         var encrypted=vault.Protect(refresh);
         account.RefreshTokenProtected=encrypted;account.AccountName=name;account.AccountId=id;
         if(provider=="GoogleDrive")account.AccessMode=GoogleFileAccess.Mode;

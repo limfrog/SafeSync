@@ -27,6 +27,8 @@ string Write(string root,string relative,string text,int age=0)
 }
 try
 {
+    var driveFileTrial=Array.IndexOf(args,"--drive-file-trial");
+    if(driveFileTrial>=0){await LiveGoogleFileTrial.RunAsync(testRoot,args[driveFileTrial+1],args.Contains("--pick-parent"));return;}
     if(args.Contains("--updates"))
     {
         await AppUpdateTests.RunAsync(testRoot,Check);

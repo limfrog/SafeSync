@@ -47,9 +47,9 @@
     </Expander>
    </StackPanel>
   </GroupBox>
-  <GroupBox Header="Google Drive — 전체 Drive" Padding="16">
+  <GroupBox Header="Google Drive — 제한 권한 · 전용 폴더 백업" Padding="16">
    <StackPanel>
-    <TextBlock Text="Drive API를 켜고 OAuth 클라이언트를 ‘데스크톱 앱’으로 생성하세요.&#10;테스트 중인 앱은 OAuth 동의 화면에 본인 계정을 테스트 사용자로 등록합니다."/>
+    <TextBlock Text="SafeSync가 만든 파일과 직접 허용한 항목만 접근합니다. 새 전용 폴더에 단방향 백업하며, 이전 전체 Drive 연결은 다시 로그인해야 합니다.&#10;양방향 동기화는 Google Drive 데스크톱 폴더를 로컬 위치로 지정하세요." TextWrapping="Wrap"/>
     <Grid Margin="0,10,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client ID" VerticalAlignment="Center"/><TextBox x:Name="GoogleClientId" Grid.Column="1"/></Grid>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Client Secret" VerticalAlignment="Center"/><PasswordBox x:Name="GoogleSecret" Grid.Column="1"/></Grid>
     <TextBlock Text="Client Secret을 비워 두면 기존에 암호화 저장된 값을 유지합니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="110,4,0,0" FontSize="12"/>

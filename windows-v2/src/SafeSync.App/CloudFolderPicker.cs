@@ -21,6 +21,7 @@ internal sealed class CloudFolderPicker
     private IRemoteStore remote;
     private readonly Func<Task<IRemoteStore?>>? pickGoogleParent;
     private readonly string accountName;
+    private string parentDisplay="내 드라이브 · 허용된 폴더";
     private readonly CancellationTokenSource lifetime;
     private readonly Action<Task> track;
     private bool initialized,busy,ready;
@@ -81,7 +82,7 @@ internal sealed class CloudFolderPicker
         Status("폴더 목록을 불러오는 중…");var entries=await remote.ListAsync(next,lifetime.Token);
         Current=next;ready=true;
         Find<ListBox>("FolderList").ItemsSource=entries.Where(i=>i.Folder && !PathPolicy.Internal(i.Name)).OrderBy(i=>i.Name,StringComparer.CurrentCultureIgnoreCase).ToArray();
-        Find<TextBlock>("PathText").Text=(remote.Provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" · "+accountName+" / "+(Current.Length==0 ? "최상위" : Current);
+        Find<TextBlock>("PathText").Text=(remote.Provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" · "+accountName+" / "+(remote.Provider=="GoogleDrive" ? parentDisplay+(Current.Length==0 ? "" : " / "+Current) : Current.Length==0 ? "최상위" : Current);
         Status(remote.Provider=="GoogleDrive" ? "SafeSync 전용 폴더를 선택하거나 새로 만드세요. 다른 위치에 만들려면 ‘상위 위치 선택’을 누르세요. 다른 앱의 파일은 보이지 않을 수 있으며 API 연결은 단방향 백업만 지원합니다." : Current.Length==0 ? "Dropbox 전체에서 폴더를 선택하거나 새로 만드세요. 작업은 선택한 폴더 안에서만 실행됩니다." : "폴더를 더블클릭해 이동한 뒤 현재 폴더를 선택하세요.");
     }
     private async Task PickParentAsync()
@@ -91,7 +92,10 @@ internal sealed class CloudFolderPicker
         {
             Status("브라우저에서 전용 백업 폴더를 만들 상위 위치를 선택하세요…");
             var selected=await pickGoogleParent();if(selected==null)return;
-            remote=selected;initialized=false;await LoadCoreAsync("");
+            await selected.InitializeAsync(lifetime.Token);
+            var parent=await selected.StatAsync("",lifetime.Token);
+            if(parent?.Folder!=true)throw new DirectoryNotFoundException("선택한 상위 폴더를 확인할 수 없습니다.");
+            remote=selected;parentDisplay=parent.Name;initialized=true;await LoadCoreAsync("");
             Find<Border>("NewFolderPanel").Visibility=Visibility.Visible;Find<TextBox>("FolderNameBox").Focus();
         }
         catch(OperationCanceledException){}
