@@ -455,6 +455,7 @@ public actor CloudBackupEngine {
     public func changeStructure(_ comparison: FileComparison, forward: Bool, deleting: Bool, storage: any RemoteStorage, local: BackupEngine) async throws {
         try Task.checkCancellation()
         let job = comparison.job
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         let token = try lease(job); defer { release(token) }
         try await recover(job, storage: storage)
         try await FileComparisons.verify(comparison, job: job, storage: storage)

@@ -175,6 +175,21 @@ import CoreServices
             if !automatic { error = "클라우드 계정을 연결하고 작업 수정에서 계정과 백업 폴더를 선택하세요." }
             return false
         }
+        var enforceDrivePolicy = true
+        #if DEBUG
+        enforceDrivePolicy = qaRemoteFactory == nil
+        #endif
+        if enforceDrivePolicy, job.cloudProvider == .googleDrive {
+            do {
+                if let account = accounts.first(where: { $0.id == job.cloudAccountID }) { try GoogleFileAccess.validateAccount(account) }
+                try GoogleFileAccess.validateJob(job)
+            } catch {
+                statuses[job.id] = "제한 권한 재연결 필요"
+                if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].stopped = true; save() }
+                if !automatic { self.error = error.localizedDescription }
+                return false
+            }
+        }
         statuses[job.id] = "변경 기록 확인 중"; log("\(job.name): 백업 시작")
         let remoteStorage: (any RemoteStorage)?
         do { remoteStorage = job.cloudProvider == nil ? nil : try remote(job) }
