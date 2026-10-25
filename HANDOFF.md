@@ -4,6 +4,10 @@
 
 이후 SafeSync 기능 변경은 **Windows와 macOS를 항상 하나의 배포 묶음으로 검토한다.** 공통 동작은 두 OS에 모두 반영하고 각각의 자동 검사·빌드·번들 검증을 마친 뒤 소스, 설치 파일, 체크섬, 업데이트 목록, 홈페이지와 릴리스 노트를 함께 갱신한다. OS 전용 변경이라면 다른 OS에 필요 없음을 검토·기록한다. 한쪽의 빌드나 공통 회귀 검사가 실패하면 두 OS 묶음의 공개를 완료로 표시하지 않는다.
 
+# Google Drive 제한 권한 시험 — 2026-10-26
+
+`codex/drive-file-preview22` 브랜치에 Windows preview.22와 macOS 0.3.18(27)을 준비했다. `drive.file` 단독 요청, 과도한 토큰 권한 차단, Google의 네이티브 브라우저 Picker, 앱 생성 전용 폴더 속성 검증과 단방향 제한을 반영했다. 이전 계정·작업은 재연결 전 자동 실행을 차단하고, 다시 연결하면 새 작업 ID·기준을 사용한다. 기존 전체 폴더의 자동 이전·Google API 양방향은 지원하지 않는다. 두 OS의 자동검사·번들검사가 통과했고, Windows 실계정에서 Picker·백업·교체·복구·재접속·시험 폴더 자동 정리도 통과했다. Mac 실계정 검사는 별도다. 시험 파일만 별도로 게시하고 `updates/latest.json` 및 Google Cloud 심사 설정은 그대로 유지했다. 상세는 `DRIVE-FILE-TRIAL.md`와 `dist/DRIVE-FILE-SHA256SUMS.txt`다. 시험용 보호 토큰과 실제 작업 설정은 저장소에 올리지 않는다.
+
 # Windows preview.21 · macOS 0.3.17(26) — 2026-10-24
 
 Google Drive의 동일 이름 사본 전체가 원본과 같음을 확인한 뒤 정확한 사본 집합을 저장한다. 변경 없는 원격 폴링·앱 재시작에서는 같은 중복 파일을 다시 해시하지 않는다. 원본·사본 집합 변경과 수동 전체 검사는 재검증하며, 다른 내용의 중복은 충돌·사본 보존·삭제 차단을 유지한다. Windows 실행 `40081237109`, macOS 실행 `40080688535`에서 양쪽 구현과 배포 묶음을 검증했다. 상세는 `windows-v2/PREVIEW21-VALIDATION.md`, `windows-v2/PREVIEW21-PACKAGE-RESULT.md`, `macOS/0.3.17-VALIDATION.md`를 확인한다.

@@ -1,6 +1,21 @@
 # Google Drive 제한 권한 시험본
 
-Windows `1.0.0-preview.22`, macOS `0.3.18 (27)`의 시험 변경입니다. 공개 업데이트 목록과 Google Cloud 심사 설정은 기존 상태로 유지합니다. 실제 계정 검증을 마친 뒤 공개 전환 여부를 결정합니다.
+Windows `1.0.0-preview.22`, macOS `0.3.18 (27)`의 시험 변경입니다. 공개 업데이트 목록과 Google Cloud 심사 설정은 기존 상태로 유지합니다. Windows 실계정 격리 검사는 통과했으며, 사용자 환경의 동작을 확인한 뒤 공개 전환 여부를 결정합니다.
+
+## 내려받기
+
+- [Windows 시험 설치본](dist/SafeSync-Setup-1.0.0-preview.22.exe)
+- [Windows 시험 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.22.zip)
+- [macOS 시험 Universal ZIP](dist/SafeSync-macOS-0.3.18-universal.zip)
+- [시험본 SHA-256](dist/DRIVE-FILE-SHA256SUMS.txt)
+
+## 확인한 결과 — 2026-10-26
+
+- [Windows Server 2022·2025 검사](https://github.com/limfrog/SafeSync/actions/runs/40232962611): 핵심 1,341개, 라이트·다크 화면 623개, 설치/제거 34개와 설치 파일 해시 511개 통과.
+- [macOS 15 검사](https://github.com/limfrog/SafeSync/actions/runs/40232444604): 기존 통합 회귀, XCTest 14개(새 권한 검사 4개 포함), 실제 Store 모사 경로 24개, Apple Silicon·Intel Universal 번들·임시 서명·ZIP 통과.
+- Windows 실계정: 사용자가 직접 Google 로그인을 승인하고 브라우저에서 상위 폴더를 선택했다. 실제 토큰의 `drive.file` 단독 권한을 확인하고, 새 전용 시험 폴더에서 업로드·서버 체크섬·변경 없음·교체·휴지통·복구를 통과했다. 새 서비스 인스턴스의 토큰 갱신·같은 폴더 재접속도 성공했다.
+- 실계정 검사가 만든 시험 폴더와 파일은 자동 삭제됐으며 결과는 `Status=OK`, `Picker=true`, `Cleanup=true`다. 원래 작업·스냅샷·인증 토큰을 쓰는 설정은 변경하지 않았다.
+- macOS 실기기·실계정 클릭 검사는 별도다. Google Cloud 심사 설정은 변경하지 않았고, 자동 업데이트 목록도 이전 공개 버전이다.
 
 ## 달라지는 동작
 
