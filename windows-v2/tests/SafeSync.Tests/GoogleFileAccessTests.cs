@@ -15,7 +15,7 @@ internal static class GoogleFileAccessTests
         foreach(var invalid in new[]{"","https://www.googleapis.com/auth/drive",GoogleFileAccess.Scope+" https://www.googleapis.com/auth/drive.readonly"})
         {bool rejected=false;try{GoogleFileAccess.ValidateScope(invalid);}catch(CloudBindingException){rejected=true;}check(rejected,"Missing/broad scope was trusted.");}
         GoogleFileAccess.ValidateScope(GoogleFileAccess.Scope);
-        var job=new BackupJob {DestinationType="GoogleDrive",CloudAccountId="account",CloudFolderId="existing"};
+        var job=new BackupJob {Source=Path.GetTempPath(),Destination="Google Drive / existing",DestinationType="GoogleDrive",CloudAccountId="account",CloudFolderId="existing"};
         var config=new AppConfig();var accounts=new CloudAccounts {GoogleDrive=account};accounts.Write(config);
         check(CloudJobBinding.NeedsReview(config,job),"Legacy Drive account resumed without reauthorization.");
         account.AccessMode=GoogleFileAccess.Mode;accounts.Write(config);
