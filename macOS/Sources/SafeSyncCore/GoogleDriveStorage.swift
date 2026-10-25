@@ -7,7 +7,7 @@ public struct GoogleDriveStorage: RemoteStorage {
     let dataDirectory: URL
     public typealias Transport = @Sendable (URLRequest, Set<Int>) async throws -> (Data, HTTPURLResponse)
     private let transport: Transport?
-    private let fields = "id,name,parents,mimeType,size,modifiedTime,createdTime,md5Checksum,sha256Checksum,version,trashed"
+    private let fields = "id,name,parents,mimeType,size,modifiedTime,createdTime,md5Checksum,sha256Checksum,version,trashed,appProperties"
     public init(account: CloudAccount, dataDirectory: URL = Storage.applicationDirectory, transport: Transport? = nil) {
         self.account = account; self.dataDirectory = dataDirectory; self.transport = transport
     }
@@ -27,7 +27,9 @@ public struct GoogleDriveStorage: RemoteStorage {
     private func parse(_ json: [String: Any]) throws -> RemoteItem {
         guard let id = json["id"] as? String, let name = json["name"] as? String else { throw BackupError.unsafe("Google Drive 파일 응답이 올바르지 않습니다.") }
         let sha = json["sha256Checksum"] as? String, md5 = json["md5Checksum"] as? String
-        return RemoteItem(id: id, name: name, parent: (json["parents"] as? [String])?.first ?? "", folder: json["mimeType"] as? String == "application/vnd.google-apps.folder", size: Int64(json["size"] as? String ?? "0") ?? 0, modified: HTTP.date(json["modifiedTime"] as? String), hash: sha ?? md5, hashKind: sha != nil ? "sha256" : md5 != nil ? "md5" : nil, revision: json["version"] as? String ?? "", created: json["createdTime"] == nil ? nil : HTTP.date(json["createdTime"] as? String))
+        var item = RemoteItem(id: id, name: name, parent: (json["parents"] as? [String])?.first ?? "", folder: json["mimeType"] as? String == "application/vnd.google-apps.folder", size: Int64(json["size"] as? String ?? "0") ?? 0, modified: HTTP.date(json["modifiedTime"] as? String), hash: sha ?? md5, hashKind: sha != nil ? "sha256" : md5 != nil ? "md5" : nil, revision: json["version"] as? String ?? "", created: json["createdTime"] == nil ? nil : HTTP.date(json["createdTime"] as? String))
+        item.appAccessMode = (json["appProperties"] as? [String: String])?[GoogleFileAccess.folderKey]
+        return item
     }
     private func escaped(_ value: String) -> String { value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'") }
     public func children(_ parent: String) async throws -> [RemoteItem] {
@@ -42,11 +44,18 @@ public struct GoogleDriveStorage: RemoteStorage {
         return result
     }
     public func metadata(_ id: String) async throws -> RemoteItem? {
+        if id == "root" { return RemoteItem(id: "root", name: "내 드라이브 · 허용된 폴더", parent: "", folder: true) }
         do { let json = try await api("files/" + id, query: ["fields": fields]); return json["trashed"] as? Bool == true ? nil : try parse(json) }
         catch let error as APIError where error.status == 404 { return nil }
     }
     public func createFolder(name: String, parent: String) async throws -> RemoteItem {
-        try parse(await api("files", method: "POST", query: ["fields": fields], body: ["name": name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent]]))
+        try parse(await api("files", method: "POST", query: ["fields": fields], body: ["name": name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent], "appProperties": [GoogleFileAccess.folderKey: GoogleFileAccess.mode]]))
+    }
+    public func validateJobAccess(_ job: BackupJob) async throws {
+        try GoogleFileAccess.validateAccount(account); try GoogleFileAccess.validateJob(job)
+        guard let id = job.cloudFolderID, id != "root", let folder = try await metadata(id), folder.folder, folder.appAccessMode == GoogleFileAccess.mode else {
+            throw BackupError.unsafe("SafeSync 제한 권한으로 만든 전용 백업 폴더를 선택하세요. 이전 백업은 보존됩니다.")
+        }
     }
     private struct UploadSession: Codable { var url: String; var hash: String; var size: Int64; var modified: Date?; var parent: String? }
     public func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String, progress: @Sendable (Int64, Int64) -> Void) async throws -> RemoteItem {

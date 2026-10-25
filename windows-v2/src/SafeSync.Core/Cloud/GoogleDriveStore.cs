@@ -5,10 +5,10 @@ using System.Text.RegularExpressions;
 
 namespace SafeSync.Core.Cloud;
 
-public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,string root,string accountId) : IRemoteStore
+public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,string root,string accountId,bool requireManagedRoot=false,bool fileAccess=false) : IRemoteStore
 {
     private const string Api="https://www.googleapis.com/drive/v3/";
-    private const string Fields="id,name,mimeType,size,modifiedTime,createdTime,md5Checksum,sha256Checksum,version,parents,trashed";
+    private const string Fields="id,name,mimeType,size,modifiedTime,createdTime,md5Checksum,sha256Checksum,version,parents,trashed,appProperties";
     public string Provider=>"GoogleDrive";
     public string Root=>rootId.Length==0 ? Id(root) : rootId;
     public string AccountId=>accountId;
@@ -24,9 +24,16 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     {
         var profile=await http.JsonAsync(HttpMethod.Get,Api+"about?fields=user",null,token);
         if(profile.GetProperty("user").String("permissionId")!=accountId)throw new CloudBindingException("백업 작업에 연결된 Google 계정과 현재 계정이 다릅니다.");
+        if(root=="root" && fileAccess && !requireManagedRoot){rootId="root";return;}
         var metadata=await Metadata(Root,token);
         if(metadata==null || metadata.Value.True("trashed") || !Parse(metadata.Value).Folder)throw new CloudBindingException("Google Drive 백업 폴더가 삭제·이동되었거나 접근할 수 없습니다. 사용할 폴더를 다시 선택하세요.");
         rootId=metadata.Value.String("id");Id(rootId);
+        if(requireManagedRoot && !Managed(metadata.Value))throw new CloudBindingException("SafeSync 제한 권한으로 만든 전용 폴더를 선택하세요. 기존 폴더는 상위 위치로만 사용할 수 있습니다.");
+    }
+    private static bool Managed(JsonElement item)=>item.TryGetProperty("appProperties",out var props) && props.String(GoogleFileAccess.FolderKey)==GoogleFileAccess.Mode;
+    public async Task<bool> IsManagedFolderAsync(string relative,CancellationToken token)
+    {
+        var item=await Find(relative,token);return item!=null && Parse(item.Value).Folder && Managed(item.Value);
     }
     private async Task<List<JsonElement>> Children(string parent,CancellationToken token)
     {
@@ -48,8 +55,11 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     {
         RemotePath.Normalize(directory);
         if(rootId.Length==0)throw new InvalidOperationException("Cloud store is not initialized.");
-        var rootMetadata=await Metadata(rootId,token);
-        if(rootMetadata==null || rootMetadata.Value.True("trashed") || !Parse(rootMetadata.Value).Folder)throw new IOException("Google Drive 백업 루트에 접근할 수 없습니다.");
+        if(rootId!="root")
+        {
+            var rootMetadata=await Metadata(rootId,token);
+            if(rootMetadata==null || rootMetadata.Value.True("trashed") || !Parse(rootMetadata.Value).Folder)throw new IOException("Google Drive 백업 루트에 접근할 수 없습니다.");
+        }
         string current=rootId,relative="";
         foreach(var part in directory.Split('/',StringSplitOptions.RemoveEmptyEntries))
         {
@@ -62,7 +72,7 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
                 current=matches[0].String("id");continue;
             }
             if(!create)return null;
-            var folder=await http.JsonAsync(HttpMethod.Post,Api+"files?fields="+Uri.EscapeDataString(Fields)+"&supportsAllDrives=true",new{name=part,mimeType="application/vnd.google-apps.folder",parents=new[]{current}},token);
+            var folder=await http.JsonAsync(HttpMethod.Post,Api+"files?fields="+Uri.EscapeDataString(Fields)+"&supportsAllDrives=true",new{name=part,mimeType="application/vnd.google-apps.folder",parents=new[]{current},appProperties=new Dictionary<string,string>{{GoogleFileAccess.FolderKey,GoogleFileAccess.Mode}}},token);
             var confirmed=(await Children(current,token)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
             if(confirmed.Length!=1 || confirmed[0].String("id")!=folder.String("id"))throw new IOException("Google Drive 폴더 생성 충돌이 발생했습니다.");
             current=folder.String("id");

@@ -47,7 +47,7 @@ public struct ResolutionDecision: Sendable {
 public enum FileComparisons {
     public static func sameEndpoints(_ a: BackupJob, _ b: BackupJob) -> Bool {
         a.id == b.id && a.source == b.source && a.destination == b.destination && a.cloudProvider == b.cloudProvider &&
-        a.cloudAccountID == b.cloudAccountID && a.cloudFolderID == b.cloudFolderID && a.mode == b.mode
+        a.cloudAccountID == b.cloudAccountID && a.cloudFolderID == b.cloudFolderID && a.mode == b.mode && a.cloudAccessMode == b.cloudAccessMode
     }
     public static func validatePath(_ path: String) throws {
         let parts = path.split(separator: "/", omittingEmptySubsequences: false)

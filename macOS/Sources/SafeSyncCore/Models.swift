@@ -21,6 +21,7 @@ public struct BackupJob: Codable, Identifiable, Hashable, Sendable {
     public var cloudProvider: CloudProvider?
     public var cloudAccountID: UUID?
     public var cloudFolderID: String?
+    public var cloudAccessMode: String?
     public var destinationTypeText: String { cloudProvider?.title ?? "로컬 / 네트워크 / 동기화 폴더" }
     public init() {}
     public var triggerText: String { scheduled ? "매일 \(scheduleTime)" : "파일 변경 시" }

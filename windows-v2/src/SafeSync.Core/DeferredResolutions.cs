@@ -8,7 +8,7 @@ internal sealed class DeferredResolutions(BackupJob job)
     public ComparedResolutions Choices {get;}=new();
     public bool Matches(BackupJob current)=>binding==Binding(current);
     private static string Binding(BackupJob job)=>System.Text.Json.JsonSerializer.Serialize(new
-    {job.Id,job.Source,job.Destination,job.DestinationType,job.CloudAccountId,job.CloudFolderId,job.CloudFolderIdentity,job.SyncMode,job.MirrorDeletes,job.CloudBindingReviewRequired});
+    {job.Id,job.Source,job.Destination,job.DestinationType,job.CloudAccountId,job.CloudFolderId,job.CloudFolderIdentity,job.SyncMode,job.MirrorDeletes,job.CloudBindingReviewRequired,job.CloudAccessMode});
 
     public void Merge(BackupJob current,ComparedResolutions choices)
     {

@@ -41,10 +41,10 @@ internal static class CloudProtocolTests
         using(var client=new HttpClient(new Handler(async(request,ct)=>
         {
             var form=await request.Content!.ReadAsStringAsync(ct);check(form.Contains("grant_type=refresh_token") && form.Contains("refresh_token=synthetic-refresh"),"Refresh form missing token");
-            exchanges++;return Json(new{access_token="synthetic-access-"+exchanges,expires_in=3600});
+            exchanges++;return Json(new{access_token="synthetic-access-"+exchanges,expires_in=3600,scope=GoogleFileAccess.Scope});
         })))
         {
-            var auth=new CloudAuthentication(client,vault);var account=new CloudAccount {ClientId="client",RefreshTokenProtected=vault.Protect("synthetic-refresh")};
+            var auth=new CloudAuthentication(client,vault);var account=new CloudAccount {ClientId="client",RefreshTokenProtected=vault.Protect("synthetic-refresh"),AccessMode=GoogleFileAccess.Mode};
             var one=await auth.AccessAsync("GoogleDrive",account,false,default);var two=await auth.AccessAsync("GoogleDrive",account,false,default);
             check(one==two && exchanges==1,"Access token cache missed");
             check(await auth.AccessAsync("GoogleDrive",account,true,default)!=one && exchanges==2,"Forced token refresh failed");
@@ -138,7 +138,7 @@ internal static class CloudProtocolTests
             check(moved.Id=="file-id" && renamed && parentsUnchanged && timePreserved,"Drive same-folder rename changed parents or timestamp");
         }
     }
-    private static async Task<string> Callback(int port,string path,CancellationToken ct)
+    internal static async Task<string> Callback(int port,string path,CancellationToken ct)
     {
         using var client=new TcpClient();await client.ConnectAsync(IPAddress.Loopback,port,ct);await using var stream=client.GetStream();
         await stream.WriteAsync(Encoding.ASCII.GetBytes("GET "+path+" HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"),ct);

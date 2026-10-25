@@ -11,7 +11,9 @@ import SafeSyncCore
     private var expectedState = ""
     private var redirect = ""
     private var authorization: URL?
-    func connect(_ account: CloudAccount, clientSecret: String) async throws {
+    private var pickedFileIDs: [String] = []
+    @discardableResult func connect(_ account: CloudAccount, clientSecret: String, pickFolder: Bool = false) async throws -> [String] {
+        pickedFileIDs = []
         let pkce = try OAuthPKCE(); expectedState = pkce.state
         let params = NWParameters.tcp
         let port: NWEndpoint.Port = account.provider == .dropbox ? 53682 : .any
@@ -28,7 +30,7 @@ import SafeSyncCore
                     case .ready:
                         guard let port = listener.port else { self.finish(.failure(BackupError.unsafe("인증 포트를 열 수 없습니다."))); return }
                         self.redirect = "http://127.0.0.1:\(port.rawValue)/"
-                        let url = OAuthPKCE.authorizationURL(account: account, redirect: self.redirect, pkce: pkce)
+                        let url = OAuthPKCE.authorizationURL(account: account, redirect: self.redirect, pkce: pkce, pickFolder: pickFolder)
                         if !NSWorkspace.shared.open(url) { self.finish(.failure(BackupError.unsafe("기본 브라우저를 열 수 없습니다."))) }
                     case .failed: self.finish(.failure(BackupError.unsafe("인증 수신 포트를 사용할 수 없습니다. 다른 연결 창을 닫고 재시도하세요.")))
                     default: break
@@ -48,7 +50,13 @@ import SafeSyncCore
             }
         }, onCancel: { Task { @MainActor [weak self] in self?.cancel() } })
         let secret = try await OAuthPKCE.exchange(account: account, code: code, redirect: redirect, verifier: pkce.verifier, clientSecret: clientSecret)
+        if pickFolder {
+            guard pickedFileIDs.count == 1 else { throw BackupError.unsafe("Google Drive에서 상위 폴더 하나를 선택하세요.") }
+            let previous = try CredentialVault.read(account: account.id)
+            guard previous.googleAccountID != nil, previous.googleAccountID == secret.googleAccountID else { throw BackupError.unsafe("연결된 계정과 같은 Google 계정으로 폴더를 선택하세요.") }
+        }
         try CredentialVault.save(secret, account: account.id)
+        return pickedFileIDs
     }
     private func receive(_ connection: NWConnection, id: UUID, accumulated: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] bytes, _, complete, error in
@@ -65,7 +73,9 @@ import SafeSyncCore
             if first.count == 3, first[0] == "GET", let components = URLComponents(string: "http://127.0.0.1" + first[1]), components.path == "/" {
                 let values = components.queryItems ?? []
                 if values.filter({ $0.name == "state" }).count == 1, values.first(where: { $0.name == "state" })?.value == self.expectedState {
-                    if let code = values.first(where: { $0.name == "code" })?.value, !code.isEmpty { response = "200 OK"; result = .success(code) }
+                    let picked = values.first(where: { $0.name == "picked_file_ids" })?.value?.split(separator: ",").map(String.init) ?? []
+                    let validIDs = picked.count <= 100 && picked.allSatisfy { $0.range(of: "^[a-zA-Z0-9_-]{1,200}$", options: .regularExpression) != nil }
+                    if values.filter({ $0.name == "code" }).count == 1, values.filter({ $0.name == "picked_file_ids" }).count <= 1, validIDs, let code = values.first(where: { $0.name == "code" })?.value, !code.isEmpty { self.pickedFileIDs = picked; response = "200 OK"; result = .success(code) }
                     else { result = .failure(BackupError.unsafe("로그인이 취소되었거나 접근 동의가 거부되었습니다.")) }
                 }
             }

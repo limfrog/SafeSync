@@ -18,19 +18,23 @@ internal sealed class CloudFolderPicker
     public Window Window {get;}
     public CloudFolderChoice? Choice {get;private set;}
     public string Current {get;private set;}="";
-    private readonly IRemoteStore remote;
+    private IRemoteStore remote;
+    private readonly Func<Task<IRemoteStore?>>? pickGoogleParent;
     private readonly string accountName;
     private readonly CancellationTokenSource lifetime;
     private readonly Action<Task> track;
     private bool initialized,busy,ready;
     private T Find<T>(string name) where T:class=>Window.Find<T>(name);
-    public CloudFolderPicker(IRemoteStore remote,string accountName,string theme,Window owner,CancellationTokenSource lifetime,Action<Task> track)
+    public CloudFolderPicker(IRemoteStore remote,string accountName,string theme,Window owner,CancellationTokenSource lifetime,Action<Task> track,Func<Task<IRemoteStore?>>? pickGoogleParent=null)
     {
         this.remote=remote;this.accountName=accountName;this.lifetime=lifetime;this.track=track;
+        this.pickGoogleParent=pickGoogleParent;
         Window=Views.Load("CloudFolderPicker");Theme.Apply(Window,theme);Window.Owner=owner;Window.Icon=owner.Icon;
         Window.Title=(remote.Provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" 백업 폴더 선택";
         Find<Button>("UpButton").Click+=(_,_)=>track(NavigateAsync(RemotePath.Parent(Current)));
         Find<Button>("RefreshButton").Click+=(_,_)=>track(NavigateAsync(Current));
+        Find<Button>("GoogleParentButton").Visibility=pickGoogleParent==null ? Visibility.Collapsed : Visibility.Visible;
+        Find<Button>("GoogleParentButton").Click+=(_,_)=>track(PickParentAsync());
         Find<Button>("NewFolderButton").Click+=(_,_)=>
         {
             if(busy || !ready)return;Find<Border>("NewFolderPanel").Visibility=Visibility.Visible;
@@ -57,9 +61,10 @@ internal sealed class CloudFolderPicker
     private void Buttons()
     {
         Find<Button>("RefreshButton").IsEnabled=!busy;
+        Find<Button>("GoogleParentButton").IsEnabled=!busy;
         Find<Button>("UpButton").IsEnabled=!busy && Current.Length>0;
         foreach(var name in new[]{"NewFolderButton","CreateFolderButton","SelectButton"})Find<Button>(name).IsEnabled=!busy && ready;
-        if(remote.Provider=="Dropbox" && Current.Length==0)Find<Button>("SelectButton").IsEnabled=false;
+        if(Current.Length==0)Find<Button>("SelectButton").IsEnabled=false;
         Find<Button>("CancelNewFolderButton").IsEnabled=!busy;Find<TextBox>("FolderNameBox").IsEnabled=!busy;
         Find<ListBox>("FolderList").IsEnabled=!busy && ready;
         Find<ProgressBar>("BusyProgress").Visibility=busy ? Visibility.Visible : Visibility.Collapsed;
@@ -77,7 +82,21 @@ internal sealed class CloudFolderPicker
         Current=next;ready=true;
         Find<ListBox>("FolderList").ItemsSource=entries.Where(i=>i.Folder && !PathPolicy.Internal(i.Name)).OrderBy(i=>i.Name,StringComparer.CurrentCultureIgnoreCase).ToArray();
         Find<TextBlock>("PathText").Text=(remote.Provider=="GoogleDrive" ? "Google Drive" : "Dropbox")+" · "+accountName+" / "+(Current.Length==0 ? "최상위" : Current);
-        Status(remote.Provider=="Dropbox" && Current.Length==0 ? "Dropbox 전체에서 폴더를 선택하거나 새로 만드세요. 작업은 선택한 폴더 안에서만 실행됩니다." : "폴더를 더블클릭해 이동한 뒤 현재 폴더를 선택하세요.");
+        Status(remote.Provider=="GoogleDrive" ? "SafeSync 전용 폴더를 선택하거나 새로 만드세요. 다른 위치에 만들려면 ‘상위 위치 선택’을 누르세요. 다른 앱의 파일은 보이지 않을 수 있으며 API 연결은 단방향 백업만 지원합니다." : Current.Length==0 ? "Dropbox 전체에서 폴더를 선택하거나 새로 만드세요. 작업은 선택한 폴더 안에서만 실행됩니다." : "폴더를 더블클릭해 이동한 뒤 현재 폴더를 선택하세요.");
+    }
+    private async Task PickParentAsync()
+    {
+        if(busy || pickGoogleParent==null)return;busy=true;Buttons();
+        try
+        {
+            Status("브라우저에서 전용 백업 폴더를 만들 상위 위치를 선택하세요…");
+            var selected=await pickGoogleParent();if(selected==null)return;
+            remote=selected;initialized=false;await LoadCoreAsync("");
+            Find<Border>("NewFolderPanel").Visibility=Visibility.Visible;Find<TextBox>("FolderNameBox").Focus();
+        }
+        catch(OperationCanceledException){}
+        catch(Exception ex){Status(ex.Message,true);}
+        finally{busy=false;Buttons();}
     }
     public async Task NavigateAsync(string next)
     {
@@ -107,6 +126,7 @@ internal sealed class CloudFolderPicker
         {
             Status("선택한 폴더 확인 중…");var item=await remote.StatAsync(Current,lifetime.Token);
             if(item?.Folder!=true)throw new DirectoryNotFoundException("선택한 폴더에 접근할 수 없습니다.");
+            if(remote is GoogleDriveStore google && !await google.IsManagedFolderAsync(Current,lifetime.Token))throw new InvalidOperationException("이 위치에 ‘새 폴더’를 만들어 선택하세요. 이전 백업 폴더는 제한 권한 작업에 직접 재사용할 수 없습니다.");
             if(remote.Provider=="Dropbox" && Current.Length==0)throw new InvalidOperationException("Dropbox 전체가 아닌 작업 전용 폴더를 선택하세요.");
             Choice=new(remote.Provider=="Dropbox" ? "/"+Current : item.Id,Find<TextBlock>("PathText").Text,remote.AccountId,item.Id);
             Window.DialogResult=true;

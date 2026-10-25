@@ -26,7 +26,7 @@ internal sealed partial class DesktopController
             foreach(var provider in new[]{"Dropbox","GoogleDrive"})
             {
                 var account=accounts.For(provider);var status=window.Find<TextBlock>(provider=="Dropbox" ? "DropboxStatus" : "GoogleStatus");
-                status.Text=account.RefreshTokenProtected.Length==0 ? "연결되지 않음" : "연결됨: "+account.AccountName;
+                status.Text=account.RefreshTokenProtected.Length==0 ? "연결되지 않음" : provider=="GoogleDrive" && account.AccessMode!=GoogleFileAccess.Mode ? "제한 권한으로 다시 연결 필요: "+account.AccountName : "연결됨: "+account.AccountName;
                 window.Find<Button>(provider=="Dropbox" ? "DropboxValidate" : "GoogleValidate").IsEnabled=!busy && account.RefreshTokenProtected.Length>0 && account.AccountId.Length>0;
             }
         }
@@ -133,7 +133,15 @@ internal sealed partial class DesktopController
         IRemoteStore remote;
         try{remote=cloud.ForAccountRoot(provider);}catch(Exception ex){Tell(ex.Message);return null;}
         var account=CloudAccounts.Read(config).For(provider);var lifetime=new CancellationTokenSource();auxiliaryTokens.Add(lifetime);
-        var picker=new CloudFolderPicker(remote,account.AccountName,config.ThemeMode,owner,lifetime,TrackAuxiliary);
+        async Task<IRemoteStore?> PickGoogleParent()
+        {
+            if(scheduler.RunningCount>0)throw new InvalidOperationException("진행 중인 백업을 마친 뒤 상위 폴더를 선택하세요.");
+            var accounts=CloudAccounts.Read(config);var current=accounts.GoogleDrive;
+            var ids=await cloud.Authentication.ConnectAsync("GoogleDrive",current,lifetime.Token,pickFolder:true);
+            accounts.Write(config);store.Save(config);
+            return cloud.ForSelectedRoot("GoogleDrive",ids.Single());
+        }
+        var picker=new CloudFolderPicker(remote,account.AccountName,config.ThemeMode,owner,lifetime,TrackAuxiliary,provider=="GoogleDrive" ? PickGoogleParent : null);
         auxiliary.Add(picker.Window);picker.Window.Closed+=(_,_)=>auxiliary.Remove(picker.Window);
         return picker.Window.ShowDialog()==true ? picker.Choice : null;
     }

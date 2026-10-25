@@ -10,7 +10,7 @@ public static class CloudJobBinding
     {
         if(job.DestinationType=="Local")return false;
         var account=CloudAccounts.Read(config).For(job.DestinationType);
-        return job.CloudBindingReviewRequired || job.CloudAccountId.Length==0 || job.CloudAccountId!=account.AccountId;
+        return job.CloudBindingReviewRequired || job.CloudAccountId.Length==0 || job.CloudAccountId!=account.AccountId || (job.DestinationType=="GoogleDrive" && (account.AccessMode!=GoogleFileAccess.Mode || job.CloudAccessMode!=GoogleFileAccess.Mode || job.SyncMode!="OneWay"));
     }
     // The caller must obtain explicit confirmation of the selected folder.
     // A fresh job ID prevents old baselines, pending deletions or transactions
@@ -24,6 +24,7 @@ public static class CloudJobBinding
         var job=JsonSerializer.Deserialize<BackupJob>(JsonSerializer.Serialize(previous))!;
         job.Id=Guid.NewGuid().ToString("N");job.CloudFolderId=folder;job.Destination=display;
         job.CloudAccountId=accountId;job.CloudFolderIdentity=identity;job.CloudBindingReviewRequired=false;
+        if(job.DestinationType=="GoogleDrive"){GoogleFileAccess.ValidateAccount(account);job.CloudAccessMode=GoogleFileAccess.Mode;job.SyncMode="OneWay";}
         job.Stopped=true;job.Paused=false;job.LastScheduledRun="";
         ConfigStore.ValidateJob(job);return job;
     }

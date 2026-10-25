@@ -118,6 +118,7 @@ import CoreServices
     func upsert(_ job: BackupJob) throws {
         guard configurationUsable, !isImportingJobList else { throw BackupError.unsafe("설정을 읽을 수 없거나 작업 목록을 가져오는 중입니다.") }
         try BackupEngine.validate(job)
+        if job.cloudProvider == .googleDrive { try GoogleFileAccess.validateJob(job) }
         guard running[job.id] == nil else { throw BackupError.unsafe("실행 중인 작업은 완료 후 수정하세요.") }
         for other in jobs where other.id != job.id {
             if (job.mode == .twoWay || other.mode == .twoWay), BackupEngine.overlaps(BackupEngine.canonical(job.source), BackupEngine.canonical(other.source)) { throw BackupError.unsafe("양방향 작업의 원본 위치는 다른 작업의 원본과 겹칠 수 없습니다.") }
@@ -512,6 +513,7 @@ import CoreServices
         if let qaRemoteFactory { return try qaRemoteFactory(job) }
         #endif
         guard let account = accounts.first(where: { $0.id == job.cloudAccountID && $0.provider == job.cloudProvider }) else { throw BackupError.unsafe("클라우드 계정을 연결하세요.") }
+        if account.provider == .googleDrive { try GoogleFileAccess.validateAccount(account); try GoogleFileAccess.validateJob(job) }
         return Self.storage(account)
     }
     static func storage(_ account: CloudAccount) -> any RemoteStorage { account.provider == .dropbox ? DropboxStorage(account: account) : GoogleDriveStorage(account: account) }

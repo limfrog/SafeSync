@@ -99,7 +99,7 @@ struct CloudAccountsView: View {
                                 .frame(width: 38, height: 38).background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(account.name).font(.callout.weight(.semibold)).lineLimit(1)
-                                Text((account.provider == .dropbox ? "Dropbox" : "Google Drive")).font(.caption).foregroundStyle(.secondary)
+                                Text(account.provider == .dropbox ? "Dropbox" : account.accessMode == GoogleFileAccess.mode ? "Google Drive · 제한 권한" : "Google Drive · 새 계정 연결로 제한 권한 재연결 필요").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button("연결 검증") { store.validateCloudAccount(account) }.disabled(store.validatingCloud || busy)
@@ -220,9 +220,14 @@ struct CloudFolderPicker: View {
     @ViewState private var newFolderError: String?
     @FocusState private var folderNameFocused: Bool
     @ViewState private var error: String?
+    @ViewState private var parentLogin: OAuthLogin?
+    @ViewState private var pickingParent = false
+    private var canSelect: Bool { !loading && !creatingFolder && !pickingParent && error == nil && stack.last.map { account.provider == .dropbox ? !$0.locator.isEmpty : $0.appAccessMode == GoogleFileAccess.mode } == true }
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("클라우드 폴더 선택 · \(account.name)").font(.title2.bold())
+            if account.provider == .googleDrive { Text("SafeSync 전용 폴더를 선택하거나 새로 만드세요. 다른 위치에 만들려면 ‘상위 위치 선택’을 사용하세요. 다른 앱이 만든 파일은 이 연결에서 보이지 않을 수 있습니다.").font(.caption).foregroundStyle(.secondary) }
+            if account.provider == .googleDrive { Button(pickingParent ? "브라우저에서 선택 중…" : "상위 위치 선택…") { pickParent() }.disabled(loading || creatingFolder || pickingParent) }
             HStack {
                 Button("상위 폴더") { if stack.count > 1 { stack.removeLast(); load() } }.disabled(stack.count < 2 || loading || creatingFolder)
                 Text(stack.map(\.name).joined(separator: " / ")).lineLimit(2)
@@ -235,16 +240,32 @@ struct CloudFolderPicker: View {
             }
             List(children) { item in Button { stack.append(item); load() } label: { Label(item.name, systemImage: "folder").frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.plain).disabled(loading || creatingFolder) }
             if let error { Text(error).foregroundStyle(.red).font(.caption) }
-            HStack { Button("취소") { dismiss() }.disabled(creatingFolder); Spacer(); Button("현재 폴더 선택") { if let current = stack.last { selected(current.locator, stack.map(\.name).joined(separator: " / ")); dismiss() } }.buttonStyle(.borderedProminent).disabled(loading || creatingFolder || stack.isEmpty || error != nil) }
+            HStack { Button("취소") { parentLogin?.cancel(); dismiss() }.disabled(creatingFolder); Spacer(); Button("현재 폴더 선택") { if let current = stack.last, canSelect { selected(current.locator, stack.map(\.name).joined(separator: " / ")); dismiss() } }.buttonStyle(.borderedProminent).disabled(!canSelect) }
         }.padding(24).frame(width: 680, height: 500)
         .interactiveDismissDisabled(creatingFolder)
         .sheet(isPresented: $showNewFolder) { newFolderSheet }
         .task {
             do {
                 if account.provider == .dropbox { stack = [RemoteItem(id: "", name: "Dropbox", parent: "", folder: true, locator: "")] }
-                else { guard let root = try await Store.storage(account).metadata("root") else { throw BackupError.unsafe("Drive 루트를 열 수 없습니다.") }; stack = [root] }
+                else { try GoogleFileAccess.validateAccount(account); guard let root = try await Store.storage(account).metadata("root") else { throw BackupError.unsafe("Drive 루트를 열 수 없습니다.") }; stack = [root] }
                 load()
             } catch { self.error = error.localizedDescription; loading = false }
+        }
+        .onDisappear { parentLogin?.cancel() }
+    }
+    func pickParent() {
+        pickingParent = true; loading = true; error = nil
+        let login = OAuthLogin(); parentLogin = login
+        Task { @MainActor in
+            defer { pickingParent = false; parentLogin = nil; loading = false }
+            do {
+                let secret = try CredentialVault.read(account: account.id)
+                let ids = try await login.connect(account, clientSecret: secret.clientSecret, pickFolder: true)
+                guard let id = ids.first, let folder = try await Store.storage(account).metadata(id), folder.folder else { throw BackupError.unsafe("선택한 상위 폴더에 접근할 수 없습니다.") }
+                stack = [folder]; children = []; showNewFolder = true; newFolderName = ""; newFolderError = nil
+                // Loading the chosen parent may show only app-authorized children.
+                children = try await Store.storage(account).children(folder.locator).filter { $0.folder && !$0.name.hasPrefix(".safesync-") }
+            } catch { self.error = error.localizedDescription }
         }
     }
     var newFolderSheet: some View {

@@ -15,6 +15,7 @@ public sealed class BackupJob
     public string CloudFolderIdentity { get; set; } = "";
     public string CloudAccountId { get; set; } = "";
     public bool CloudBindingReviewRequired { get; set; }
+    public string CloudAccessMode { get; set; } = "";
     public string TriggerType { get; set; } = "Realtime";
     public string ScheduleTime { get; set; } = "23:00";
     public bool MirrorDeletes { get; set; }

@@ -88,6 +88,7 @@ internal static class CloudTests
         }
         await MigrationAsync(root,check);
         await CloudProtocolTests.RunAsync(root,check);
+        await GoogleFileAccessTests.RunAsync(check);
     }
     private static async Task MigrationAsync(string root,Action<bool,string> check)
     {

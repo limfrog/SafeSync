@@ -80,6 +80,7 @@ public actor CloudAuthorization {
     public func token(_ account: CloudAccount, forceRefresh: Bool = false) async throws -> String {
         if let task = refreshes[account.id] { return try await task.value }
         let secret = try CredentialVault.read(account: account.id)
+        if account.provider == .googleDrive { try GoogleFileAccess.validateAccount(account); try GoogleFileAccess.validateScope(secret.grantedScope) }
         if !forceRefresh, secret.expiresAt.timeIntervalSinceNow > 90, !secret.accessToken.isEmpty { return secret.accessToken }
         guard !secret.refreshToken.isEmpty else { throw BackupError.unsafe("클라우드 계정을 다시 연결하세요.") }
         let task = Task<String, Error> {
@@ -88,6 +89,7 @@ public actor CloudAuthorization {
             var request = URLRequest(url: URL(string: account.provider == .dropbox ? "https://api.dropboxapi.com/oauth2/token" : "https://oauth2.googleapis.com/token")!)
             request.httpMethod = "POST"; request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type"); request.httpBody = HTTP.form(params)
             let (data, _) = try await HTTP.send(request); let json = try HTTP.object(data)
+            if account.provider == .googleDrive { try GoogleFileAccess.validateScope(json["scope"] as? String) }
             guard let access = json["access_token"] as? String else { throw BackupError.unsafe("인증 토큰 응답이 올바르지 않습니다.") }
             var updated = secret; updated.accessToken = access; updated.expiresAt = Date().addingTimeInterval((json["expires_in"] as? Double) ?? 3600)
             if let refresh = json["refresh_token"] as? String { updated.refreshToken = refresh }

@@ -154,7 +154,8 @@ struct JobEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("백업 작업 설정").font(.title.bold())
-            Picker("동기화 방향", selection: Binding(get: { job.mode }, set: { job.syncMode = $0 })) { ForEach(SyncMode.allCases, id: \.self) { Text($0.title).tag($0) } }.pickerStyle(.radioGroup).horizontalRadioGroupLayout()
+            Picker("동기화 방향", selection: Binding(get: { job.mode }, set: { job.syncMode = $0 })) { ForEach(SyncMode.allCases.filter { job.cloudProvider != .googleDrive || $0 == .oneWay }, id: \.self) { Text($0.title).tag($0) } }.pickerStyle(.radioGroup).horizontalRadioGroupLayout()
+            if job.cloudProvider == .googleDrive { Text("Google Drive 제한 권한은 전용 폴더의 단방향 백업만 지원합니다. 양방향은 Drive 데스크톱 폴더를 로컬 위치로 지정하세요.").font(.caption).foregroundStyle(.secondary) }
             Text(job.mode == .twoWay ? "양쪽의 변경과 삭제를 반영합니다. 양쪽에서 수정된 파일은 비교 후 직접 선택합니다." : "원본의 변경을 백업에 반영합니다. 이전 파일은 SafeSync 휴지통에 보존합니다.").font(.callout).foregroundStyle(.secondary)
             Form {
                 TextField("작업 이름", text: $job.name)
@@ -162,12 +163,12 @@ struct JobEditor: View {
                 Picker("백업 방식", selection: $job.cloudProvider) {
                     Text("로컬 / 네트워크 / 동기화 폴더").tag(CloudProvider?.none)
                     ForEach(CloudProvider.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
-                }.onChange(of: job.cloudProvider) { _, _ in job.cloudAccountID = nil; job.cloudFolderID = nil; job.destination = "" }
+                }.onChange(of: job.cloudProvider) { _, _ in job.cloudAccountID = nil; job.cloudFolderID = nil; job.cloudAccessMode = nil; job.destination = ""; if job.cloudProvider == .googleDrive { job.syncMode = .oneWay } }
                 if let provider = job.cloudProvider {
                     Picker("클라우드 계정", selection: $job.cloudAccountID) {
                         Text("계정 선택").tag(UUID?.none)
                         ForEach(store.accounts.filter { $0.provider == provider }) { Text($0.name).tag(Optional($0.id)) }
-                    }.onChange(of: job.cloudAccountID) { _, _ in job.cloudFolderID = nil; job.destination = "" }
+                    }.onChange(of: job.cloudAccountID) { _, _ in job.cloudFolderID = nil; job.cloudAccessMode = nil; job.destination = "" }
                     HStack { Text(job.destination.isEmpty ? "백업 폴더를 선택하세요" : job.destination).lineLimit(2); Spacer(); Button("클라우드 폴더 선택") { showCloudPicker = true }.disabled(job.cloudAccountID == nil) }
                 } else { HStack { TextField("백업 위치", text: $job.destination); Button("위치 선택") { choose(source: false) } } }
                 Picker("실행 방식", selection: $job.scheduled) { Text("파일 변경 시").tag(false); Text("매일 정해진 시간").tag(true) }
@@ -180,7 +181,7 @@ struct JobEditor: View {
         .confirmationDialog("변경된 위치·방향으로 새 비교 기록을 시작할까요?", isPresented: $confirmEndpointChange, titleVisibility: .visible) { Button("변경 후 일시정지 상태로 저장") { save() }; Button("취소", role: .cancel) {} } message: { Text("기존 백업 파일과 휴지통은 보존합니다. 새 위치를 확인한 뒤 직접 다시 시작하세요.") }
         .sheet(isPresented: $showCloudPicker) {
             if let account = store.accounts.first(where: { $0.id == job.cloudAccountID }) {
-                CloudFolderPicker(account: account) { id, label in job.cloudFolderID = id; job.destination = "\(account.provider.title) · \(label)" }
+                CloudFolderPicker(account: account) { id, label in job.cloudFolderID = id; job.destination = "\(account.provider.title) · \(label)"; job.cloudAccessMode = account.provider == .googleDrive ? GoogleFileAccess.mode : nil; if account.provider == .googleDrive { job.syncMode = .oneWay } }
             }
         }
     }

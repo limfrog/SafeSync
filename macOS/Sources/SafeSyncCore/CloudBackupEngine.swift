@@ -62,6 +62,7 @@ public actor CloudBackupEngine {
         guard let item = try await storage.metadata(previous.id), item.revision == previous.revision, item.parent == previous.parent, item.name == previous.name else { throw BackupError.unsafe("백업 파일이 검사 후 변경되었습니다. 현재 파일을 보존하고 다시 검사합니다.") }; return item
     }
     private func verifyRemoteRoot(_ job: BackupJob, storage: any RemoteStorage, expected: String?) async throws -> String {
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         guard let folder = try await storage.metadata(job.cloudFolderID!), folder.folder,
               expected == nil || folder.id == expected else {
             throw BackupError.unsafe("클라우드 폴더가 이전 백업과 다르거나 연결할 수 없습니다. 기존 파일을 보존합니다.")
@@ -419,10 +420,12 @@ public actor CloudBackupEngine {
         try Storage.save(state, to: stateURL(job))
     }
     public func prepareSync(_ job: BackupJob, storage: any RemoteStorage) async throws {
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         let token = try lease(job); defer { release(token) }; try await recover(job, storage: storage)
     }
     public func apply(_ comparison: FileComparison, action: ConflictAction, storage: any RemoteStorage, local: BackupEngine) async throws {
         let job = comparison.job
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         let token = try lease(job); defer { release(token) }
         try await recover(job, storage: storage)
         guard comparison.allows(action) else { throw BackupError.unsafe("선택한 처리를 적용할 수 없습니다.") }
@@ -467,6 +470,7 @@ public actor CloudBackupEngine {
         }
     }
     private func trashEntries(_ job: BackupJob, storage: any RemoteStorage) async throws -> [(TrashItem, RemoteItem, RemoteItem)] {
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         let roots = try await storage.children(job.cloudFolderID!).filter { $0.name == ".safesync-trash" && $0.folder }
         guard roots.count <= 1 else { throw BackupError.unsafe("클라우드 휴지통이 중복되었습니다.") }
         guard let root = roots.first else { return [] }
@@ -484,6 +488,7 @@ public actor CloudBackupEngine {
     }
     public func listTrash(_ job: BackupJob, storage: any RemoteStorage) async throws -> [TrashItem] { try await trashEntries(job, storage: storage).map { $0.0 } }
     public func restore(_ items: [TrashItem], job: BackupJob, storage: any RemoteStorage) async throws {
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         let token = try lease(job); defer { release(token) }
         try await recover(job, storage: storage)
         guard Set(items.map(\.path)).count == items.count else { throw BackupError.unsafe("같은 경로는 한 번에 한 버전만 복구하세요.") }
@@ -510,6 +515,7 @@ public actor CloudBackupEngine {
         }
     }
     public func deleteTrash(_ items: [TrashItem], job: BackupJob, storage: any RemoteStorage) async throws {
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         let token = try lease(job); defer { release(token) }
         try await recover(job, storage: storage)
         let entries = try await trashEntries(job, storage: storage)
@@ -519,6 +525,7 @@ public actor CloudBackupEngine {
         }
     }
     public func pruneTrash(_ job: BackupJob, storage: any RemoteStorage, retentionDays: Int, now: Date = Date()) async throws -> Int {
+        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         guard retentionDays >= 1 else { throw BackupError.unsafe("보관기간은 1일 이상이어야 합니다.") }
         let token = try lease(job); defer { release(token) }
         try await recover(job, storage: storage)

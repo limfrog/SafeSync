@@ -39,6 +39,7 @@ enum CloudDiagnostics {
         let source = local.appendingPathComponent("source")
         try FileManager.default.createDirectory(at: source.appendingPathComponent("한글 폴더"), withIntermediateDirectories: true)
         var job = BackupJob(); job.name = "클라우드 연결 검증"; job.source = source.path; job.destination = folderName; job.cloudProvider = account.provider; job.cloudAccountID = account.id; job.cloudFolderID = remoteFolder.locator
+        job.cloudAccessMode = account.provider == .googleDrive ? GoogleFileAccess.mode : nil
         let engine = CloudBackupEngine(dataDirectory: local.appendingPathComponent("state"))
         let file = source.appendingPathComponent("한글 폴더/검증.txt")
         func write(_ content: String, ago: TimeInterval) throws {

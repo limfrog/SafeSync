@@ -11,13 +11,16 @@ public struct CloudAccount: Codable, Identifiable, Hashable, Sendable {
     public var provider: CloudProvider
     public var name: String
     public var clientID: String
-    public init(provider: CloudProvider, name: String, clientID: String) { id = UUID(); self.provider = provider; self.name = name; self.clientID = clientID }
+    public var accessMode: String?
+    public init(provider: CloudProvider, name: String, clientID: String) { id = UUID(); self.provider = provider; self.name = name; self.clientID = clientID; accessMode = provider == .googleDrive ? GoogleFileAccess.mode : nil }
 }
 public struct CloudSecret: Codable, Sendable {
     public var accessToken: String
     public var refreshToken: String
     public var clientSecret: String
     public var expiresAt: Date
+    public var grantedScope: String?
+    public var googleAccountID: String?
     public init(accessToken: String = "", refreshToken: String = "", clientSecret: String = "", expiresAt: Date = .distantPast) {
         self.accessToken = accessToken; self.refreshToken = refreshToken; self.clientSecret = clientSecret; self.expiresAt = expiresAt
     }
@@ -58,6 +61,7 @@ public struct RemoteItem: Codable, Identifiable, Equatable, Sendable {
     public var hashKind: String?
     public var revision: String
     public var locator: String
+    public var appAccessMode: String?
     public init(id: String, name: String, parent: String, folder: Bool = false, size: Int64 = 0, modified: Date = .distantPast, hash: String? = nil, hashKind: String? = nil, revision: String = "", locator: String? = nil, created: Date? = nil) {
         self.id = id; self.name = name; self.parent = parent; self.folder = folder; self.size = size; self.modified = modified; self.created = created; self.hash = hash; self.hashKind = hashKind; self.revision = revision; self.locator = locator ?? id
     }

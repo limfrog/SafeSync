@@ -24,7 +24,7 @@ internal static class RecoveryRegressionTests
             var store=new ConfigStore(Path.Combine(home,"data"));var remote=new MemoryRemote(provider);
             var job=new BackupJob {Source=source,Destination=provider+" / old",DestinationType=provider,CloudFolderId="old-root",CloudAccountId="old-account",SyncMode="TwoWay",MirrorDeletes=true};
             var oldState=ConfigStore.NewState(job);oldState.Files.Add(new(){RelativePath="retained.txt",Status="BackedUp"});store.SaveState(oldState);
-            var config=new AppConfig {Jobs=[job]};var accounts=new CloudAccounts();var account=accounts.For(provider);account.AccountId=remote.AccountId;account.RefreshTokenProtected="synthetic-not-a-token";accounts.Write(config);
+            var config=new AppConfig {Jobs=[job]};var accounts=new CloudAccounts();var account=accounts.For(provider);account.AccountId=remote.AccountId;account.RefreshTokenProtected="synthetic-not-a-token";account.AccessMode=GoogleFileAccess.Mode;accounts.Write(config);
             check(CloudJobBinding.NeedsReview(config,job),provider+" changed account did not require confirmation.");
             using(var service=new CloudServices(()=>config))
             {
@@ -33,13 +33,13 @@ internal static class RecoveryRegressionTests
             var rebound=CloudJobBinding.Rebind(config,job,remote.Root,provider+" / new",remote.AccountId,"new-folder-id");
             check(rebound.Id!=job.Id && rebound.Stopped && !rebound.Paused && !rebound.CloudBindingReviewRequired,provider+" rebind reused old run identity or started automatically.");
             check(job.CloudAccountId=="old-account" && store.LoadState(job).Files.Count==1 && store.LoadState(rebound).Files.Count==0,provider+" rebind lost old state or reused old deletion baseline.");
-            check(!CloudJobBinding.NeedsReview(config,rebound) && rebound.Source==job.Source && rebound.SyncMode==job.SyncMode && rebound.MirrorDeletes,provider+" confirmed folder did not retain job options.");
+            check(!CloudJobBinding.NeedsReview(config,rebound) && rebound.Source==job.Source && rebound.SyncMode==(provider=="GoogleDrive" ? "OneWay" : job.SyncMode) && rebound.MirrorDeletes,provider+" confirmed folder did not retain supported job options.");
             bool changedAgain=false;try{CloudJobBinding.Rebind(config,job,remote.Root,"new","unexpected-account","");}catch(CloudBindingException){changedAgain=true;}
             check(changedAgain,provider+" account change during folder selection was accepted.");
             await remote.SeedAsync("remote-only.txt","remote stays",DateTime.UtcNow);
             var engine=new BackupEngine(store){CloudFactory=_=>remote};rebound.Stopped=false;
             var result=await engine.RunAsync(rebound,true,null,new(),null,default);
-            check(result.Errors.Count==0 && result.Conflicts.Count==0 && File.Exists(Path.Combine(source,"retained.txt")) && File.Exists(Path.Combine(source,"remote-only.txt")) && remote.Files.ContainsKey("retained.txt"),provider+" confirmed rebind propagated stale deletion instead of initial union.");
+            check(result.Errors.Count==0 && result.Conflicts.Count==0 && File.Exists(Path.Combine(source,"retained.txt")) && File.Exists(Path.Combine(source,"remote-only.txt"))==(provider=="Dropbox") && remote.Files.ContainsKey("retained.txt") && remote.Files.ContainsKey("remote-only.txt"),provider+" confirmed rebind propagated stale deletion or downloaded outside one-way policy.");
             rebound.CloudBindingReviewRequired=true;
             check(CloudJobBinding.NeedsReview(config,rebound),provider+" imported binding flag was ignored.");
         }

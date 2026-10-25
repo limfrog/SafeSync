@@ -15,6 +15,7 @@ public sealed class CloudAccount
     public string RefreshTokenProtected {get;set;}="";
     public string AccountName {get;set;}="";
     public string AccountId {get;set;}="";
+    public string AccessMode {get;set;}="";
     [JsonExtensionData] public Dictionary<string,JsonElement>? Extra {get;set;}
 }
 public sealed class CloudAccounts

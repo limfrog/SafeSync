@@ -93,13 +93,17 @@ internal sealed partial class DesktopController
         var oneWay=window.Find<RadioButton>("OneWayRadio");var twoWay=window.Find<RadioButton>("TwoWayRadio");
         void ModeChanged()
         {
+            twoWay.IsEnabled=Provider()!="GoogleDrive";
+            if(Provider()=="GoogleDrive" && twoWay.IsChecked==true)oneWay.IsChecked=true;
             bool both=twoWay.IsChecked==true;
             window.Find<TextBlock>("ModeHintText").Text=both ? "양방향: 양쪽 변경·삭제를 서로 반영합니다. 삭제 파일은 각 위치의 휴지통에 보관하며, 양쪽이 함께 바뀌면 충돌로 남깁니다." : "단방향: 원본의 변경을 백업 위치에 반영합니다.";
             window.Find<CheckBox>("MirrorCheck").IsEnabled=!both;
             window.Find<CheckBox>("MirrorCheck").Content=both ? "양쪽 삭제 반영 · 삭제 전 각 위치의 SafeSync 휴지통에 보관" : "원본에서 사라진 파일은 백업 위치의 SafeSync 휴지통으로 이동";
+            if(Provider()=="GoogleDrive")window.Find<TextBlock>("ModeHintText").Text="Google Drive 제한 권한: SafeSync 전용 폴더에 단방향 백업합니다. 양방향은 Drive 데스크톱 폴더를 로컬 위치로 지정하세요.";
         }
         oneWay.Checked+=(_,_)=>ModeChanged();twoWay.Checked+=(_,_)=>ModeChanged();
         (existing?.SyncMode=="TwoWay" ? twoWay : oneWay).IsChecked=true;
+        type.SelectionChanged+=(_,_)=>ModeChanged();ModeChanged();
         void Browse(string field)
         {
             var dialog=new Microsoft.Win32.OpenFolderDialog {Title=field=="SourceBox" ? "원본 폴더 선택" : "백업 폴더 선택",Multiselect=false};
@@ -124,7 +128,8 @@ internal sealed partial class DesktopController
                 ScheduleTime=window.Find<TextBox>("TimeBox").Text.Trim(),MirrorDeletes=window.Find<CheckBox>("MirrorCheck").IsChecked==true,
                 Paused=existing?.Paused ?? false,Stopped=existing?.Stopped ?? false,CloudBindingReviewRequired=(existing?.CloudBindingReviewRequired ?? false) && !selectedCloudFolder
             };
-            if(existing!=null && !(existing.CloudBindingReviewRequired && selectedCloudFolder) && existing.SyncMode==job.SyncMode && string.Equals(existing.Source,job.Source,StringComparison.OrdinalIgnoreCase) && string.Equals(existing.Destination,job.Destination,StringComparison.OrdinalIgnoreCase) && existing.DestinationType==job.DestinationType && existing.CloudFolderId==job.CloudFolderId && existing.CloudAccountId==job.CloudAccountId && existing.CloudFolderIdentity==job.CloudFolderIdentity)job.Id=existing.Id;
+            job.CloudAccessMode=Provider()=="GoogleDrive" && selectedCloudFolder ? GoogleFileAccess.Mode : existing?.CloudAccessMode ?? "";
+            if(existing!=null && existing.CloudAccessMode==job.CloudAccessMode && !(existing.CloudBindingReviewRequired && selectedCloudFolder) && existing.SyncMode==job.SyncMode && string.Equals(existing.Source,job.Source,StringComparison.OrdinalIgnoreCase) && string.Equals(existing.Destination,job.Destination,StringComparison.OrdinalIgnoreCase) && existing.DestinationType==job.DestinationType && existing.CloudFolderId==job.CloudFolderId && existing.CloudAccountId==job.CloudAccountId && existing.CloudFolderIdentity==job.CloudFolderIdentity)job.Id=existing.Id;
             try
             {
                 ConfigStore.ValidateJob(job);
