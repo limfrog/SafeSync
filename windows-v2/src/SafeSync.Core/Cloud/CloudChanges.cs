@@ -12,6 +12,7 @@ public sealed partial class GoogleDriveStore : IRemoteChanges,IRemoteBatch,IRemo
     }
     public async Task<RemoteChanges> ChangesAsync(string cursor,IReadOnlyDictionary<string,RemoteItem> known,CancellationToken token)
     {
+        InvalidateFolders();
         var paths=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var byId=known.GroupBy(p=>p.Value.Id).ToDictionary(g=>g.Key,g=>g.First().Key,StringComparer.Ordinal);
         var resolved=new Dictionary<string,string?>(StringComparer.Ordinal){{rootId,""}};

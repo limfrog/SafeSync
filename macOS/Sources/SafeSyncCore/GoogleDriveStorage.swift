@@ -7,11 +7,15 @@ public struct GoogleDriveStorage: RemoteStorage {
     let dataDirectory: URL
     public typealias Transport = @Sendable (URLRequest, Set<Int>) async throws -> (Data, HTTPURLResponse)
     private let transport: Transport?
+    let folderIndex = GoogleFolderIndex()
+    let childReads = GoogleReadFlights<[RemoteItem]>()
+    let folderReads = GoogleReadFlights<[Data?]>()
+    let folderCreation = GoogleFolderCreationGate()
     private let fields = "id,name,parents,mimeType,size,modifiedTime,createdTime,md5Checksum,sha256Checksum,version,trashed,appProperties"
     public init(account: CloudAccount, dataDirectory: URL = Storage.applicationDirectory, transport: Transport? = nil) {
         self.account = account; self.dataDirectory = dataDirectory; self.transport = transport
     }
-    private func request(url: URL, method: String = "GET", body: Data? = nil, headers: [String: String] = [:], accepted: Set<Int> = Set(200...299)) async throws -> (Data, HTTPURLResponse) {
+    func request(url: URL, method: String = "GET", body: Data? = nil, headers: [String: String] = [:], accepted: Set<Int> = Set(200...299)) async throws -> (Data, HTTPURLResponse) {
         if let transport {
             var request = URLRequest(url: url); request.httpMethod = method; request.httpBody = body
             for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
@@ -19,12 +23,12 @@ public struct GoogleDriveStorage: RemoteStorage {
         }
         return try await CloudAuthorization.shared.request(account, url: url, method: method, body: body, headers: headers, accepted: accepted)
     }
-    private func api(_ path: String, method: String = "GET", query: [String: String] = [:], body: Any? = nil) async throws -> [String: Any] {
+    func api(_ path: String, method: String = "GET", query: [String: String] = [:], body: Any? = nil) async throws -> [String: Any] {
         var q = query; q["supportsAllDrives"] = "true"
         let (data, _) = try await request(url: HTTP.url("https://www.googleapis.com/drive/v3/" + path, query: q), method: method, body: try body.map(HTTP.json), headers: ["Content-Type": "application/json"])
         return data.isEmpty ? [:] : try HTTP.object(data)
     }
-    private func parse(_ json: [String: Any]) throws -> RemoteItem {
+    func parse(_ json: [String: Any]) throws -> RemoteItem {
         guard let id = json["id"] as? String, let name = json["name"] as? String else { throw BackupError.unsafe("Google Drive 파일 응답이 올바르지 않습니다.") }
         let sha = json["sha256Checksum"] as? String, md5 = json["md5Checksum"] as? String
         var item = RemoteItem(id: id, name: name, parent: (json["parents"] as? [String])?.first ?? "", folder: json["mimeType"] as? String == "application/vnd.google-apps.folder", size: Int64(json["size"] as? String ?? "0") ?? 0, modified: HTTP.date(json["modifiedTime"] as? String), hash: sha ?? md5, hashKind: sha != nil ? "sha256" : md5 != nil ? "md5" : nil, revision: json["version"] as? String ?? "", created: json["createdTime"] == nil ? nil : HTTP.date(json["createdTime"] as? String))
@@ -33,6 +37,9 @@ public struct GoogleDriveStorage: RemoteStorage {
     }
     private func escaped(_ value: String) -> String { value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'") }
     public func children(_ parent: String) async throws -> [RemoteItem] {
+        try await childReads.read(parent) { try await childrenCore(parent) }
+    }
+    func childrenCore(_ parent: String) async throws -> [RemoteItem] {
         var result: [RemoteItem] = [], next: String?
         repeat {
             var query = ["q": "'\(escaped(parent))' in parents and trashed = false", "fields": "nextPageToken,files(\(fields))", "pageSize": "1000", "includeItemsFromAllDrives": "true"]
@@ -124,9 +131,14 @@ public struct GoogleDriveStorage: RemoteStorage {
     public func move(_ item: RemoteItem, name: String, parent: String) async throws -> RemoteItem {
         var query = ["fields": fields]
         if item.parent != parent { query["addParents"] = parent; query["removeParents"] = item.parent }
-        return try parse(await api("files/" + item.id, method: "PATCH", query: query, body: ["name": name]))
+        let moved = try parse(await api("files/" + item.id, method: "PATCH", query: query, body: ["name": name]))
+        if item.folder { await folderIndex.invalidate(id: item.id) }
+        return moved
     }
-    public func remove(_ item: RemoteItem) async throws { _ = try await api("files/" + item.id, method: "DELETE") }
+    public func remove(_ item: RemoteItem) async throws {
+        _ = try await api("files/" + item.id, method: "DELETE")
+        if item.folder { await folderIndex.invalidate(id: item.id) }
+    }
     public func download(_ item: RemoteItem, to file: URL) async throws {
         if transport != nil { try await download(item).write(to: file, options: .atomic); return }
         try await CloudAuthorization.shared.download(account, url: HTTP.url("https://www.googleapis.com/drive/v3/files/" + item.id, query: ["alt": "media", "supportsAllDrives": "true"]), to: file)
@@ -135,6 +147,7 @@ public struct GoogleDriveStorage: RemoteStorage {
         let (data, _) = try await request(url: HTTP.url("https://www.googleapis.com/drive/v3/files/" + item.id, query: ["alt": "media", "supportsAllDrives": "true"])); return data
     }
     public func inventory(root: String, previous: RemoteIndex?) async throws -> RemoteIndex {
+        await folderIndex.clear(root: root)
         guard let rootItem = try await metadata(root), rootItem.folder else { throw BackupError.unsafe("Google Drive 백업 폴더에 접근할 수 없습니다.") }
         var index = previous ?? RemoteIndex(); index.root = rootItem.id
         if previous?.cursor == nil {
@@ -173,6 +186,7 @@ public struct GoogleDriveStorage: RemoteStorage {
             for item in try await children(parent) { if item.folder && index.nodes[item.id] == nil { queue.append(item.id) }; index.nodes[item.id] = item; reachable.insert(item.id) }
         }
         index.nodes = index.nodes.filter { reachable.contains($0.key) }
+        try await folderIndex.seed(index)
         return index
     }
 }

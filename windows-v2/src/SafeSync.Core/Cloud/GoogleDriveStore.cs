@@ -13,7 +13,6 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     public string Root=>rootId.Length==0 ? Id(root) : rootId;
     public string AccountId=>accountId;
     private string rootId="";
-    private readonly SemaphoreSlim folderCreation=new(1,1);
     private readonly SemaphoreSlim idGate=new(1,1);
     private readonly Queue<string> uploadIds=new();
     private async Task<string> NewUploadId(CancellationToken token)
@@ -40,6 +39,7 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     }
     public async Task InitializeAsync(CancellationToken token)
     {
+        InvalidateFolders();
         var profile=await http.JsonAsync(HttpMethod.Get,Api+"about?fields=user",null,token);
         if(profile.GetProperty("user").String("permissionId")!=accountId)throw new CloudBindingException("백업 작업에 연결된 Google 계정과 현재 계정이 다릅니다.");
         if(root=="root" && fileAccess && !requireManagedRoot){rootId="root";return;}
@@ -54,6 +54,8 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         var item=await Find(relative,token);return item!=null && Parse(item.Value).Folder && Managed(item.Value);
     }
     private async Task<List<JsonElement>> Children(string parent,CancellationToken token,bool pathOnly=false)
+        =>await SharedRead(childReads,parent+"|"+pathOnly,()=>ChildrenCore(parent,token,pathOnly),token);
+    private async Task<List<JsonElement>> ChildrenCore(string parent,CancellationToken token,bool pathOnly=false)
     {
         Id(parent);var result=new List<JsonElement>();string next="";
         do
@@ -64,15 +66,11 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         }while(next.Length>0);
         return result;
     }
-    private async Task<string?> Folder(string directory,bool create,CancellationToken token)
+    private async Task<string?> Folder(string directory,bool create,CancellationToken token,bool mutation=false)
     {
-        if(!create)return await FolderCore(directory,false,token);
-        await folderCreation.WaitAsync(token);try{return await FolderCore(directory,true,token);}finally{folderCreation.Release();}
-    }
-    private async Task<string?> FolderCore(string directory,bool create,CancellationToken token)
-    {
-        RemotePath.Normalize(directory);
+        directory=RemotePath.Normalize(directory);
         if(rootId.Length==0)throw new InvalidOperationException("Cloud store is not initialized.");
+        if(await CachedFolder(directory,create || mutation,token) is {} cached)return cached;
         if(rootId!="root")
         {
             var rootMetadata=await Metadata(rootId,token);
@@ -87,21 +85,39 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
             if(matches.Length==1)
             {
                 if(!Parse(matches[0]).Folder)throw new IOException("폴더 경로에 일반 파일이 있습니다: "+part);
-                current=matches[0].String("id");continue;
+                current=matches[0].String("id");if(folderIndexEnabled)folders[relative]=current;continue;
             }
-            if(!create)return null;
-            var folder=await http.JsonAsync(HttpMethod.Post,Api+"files?fields="+Uri.EscapeDataString(Fields)+"&supportsAllDrives=true",new{name=part,mimeType="application/vnd.google-apps.folder",parents=new[]{current},appProperties=new Dictionary<string,string>{{GoogleFileAccess.FolderKey,GoogleFileAccess.Mode}}},token);
-            var confirmed=(await Children(current,token,true)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
-            if(confirmed.Length!=1 || confirmed[0].String("id")!=folder.String("id"))throw new IOException("Google Drive 폴더 생성 충돌이 발생했습니다.");
-            current=folder.String("id");
+            if(!create){InvalidateFolders(relative);return null;}
+            var creation=folderCreation.GetOrAdd(relative,_=>new(1,1));await creation.WaitAsync(token);
+            try
+            {
+                // Recheck after acquiring the per-folder creation lock. Do not
+                // join a listing which started before a concurrent creation.
+                var fresh=(await ChildrenCore(current,token,true)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
+                if(fresh.Length>1)throw new CloudDuplicateNameException(relative);
+                if(fresh.Length==1)
+                {
+                    if(!Parse(fresh[0]).Folder)throw new IOException("폴더 경로에 일반 파일이 있습니다: "+part);
+                    current=fresh[0].String("id");
+                }
+                else
+                {
+                    var folder=await http.JsonAsync(HttpMethod.Post,Api+"files?fields="+Uri.EscapeDataString(Fields)+"&supportsAllDrives=true",new{name=part,mimeType="application/vnd.google-apps.folder",parents=new[]{current},appProperties=new Dictionary<string,string>{{GoogleFileAccess.FolderKey,GoogleFileAccess.Mode}}},token);
+                    var confirmed=(await ChildrenCore(current,token,true)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
+                    if(confirmed.Length!=1 || confirmed[0].String("id")!=folder.String("id"))throw new IOException("Google Drive 폴더 생성 충돌이 발생했습니다.");
+                    current=folder.String("id");
+                }
+                if(folderIndexEnabled)folders[relative]=current;
+            }
+            finally{creation.Release();}
         }
         return current;
     }
-    private async Task<JsonElement?> Find(string relative,CancellationToken token)
+    private async Task<JsonElement?> Find(string relative,CancellationToken token,bool mutation=false)
     {
         RemotePath.Normalize(relative);
         if(relative.Length==0)return await Metadata(rootId,token);
-        var parent=await Folder(RemotePath.Parent(relative),false,token);if(parent==null)return null;
+        var parent=await Folder(RemotePath.Parent(relative),false,token,mutation);if(parent==null)return null;
         var matches=(await Children(parent,token)).Where(f=>f.String("name").Equals(RemotePath.Name(relative),StringComparison.OrdinalIgnoreCase)).ToArray();
         if(matches.Length>1)throw new CloudDuplicateNameException(relative);
         return matches.Length==0 ? null : matches[0];
@@ -217,12 +233,13 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     }
     public async Task<RemoteItem> MoveAsync(string from,string to,CancellationToken token)
     {
-        var source=await Find(from,token) ?? throw new FileNotFoundException("이동할 클라우드 파일이 없습니다.");
+        var source=await Find(from,token,true) ?? throw new FileNotFoundException("이동할 클라우드 파일이 없습니다.");
         var parent=await Folder(RemotePath.Parent(to),true,token) ?? throw new IOException("클라우드 대상 폴더가 없습니다.");
         if((await Children(parent,token)).Any(f=>f.String("name").Equals(RemotePath.Name(to),StringComparison.OrdinalIgnoreCase)))throw new IOException("이동 대상에 이미 파일이 있습니다.");
         var oldParents=source.GetProperty("parents").EnumerateArray().Select(v=>v.GetString()).Where(v=>!string.IsNullOrEmpty(v)).ToArray();
         var query=CloudJson.Query(("addParents",oldParents.Contains(parent) ? "" : parent),("removeParents",string.Join(',',oldParents.Where(p=>p!=parent))),("supportsAllDrives","true"),("fields",Fields));
         var moved=await http.JsonAsync(HttpMethod.Patch,Api+"files/"+Id(source.String("id"))+"?"+query,new{name=RemotePath.Name(to),modifiedTime=source.String("modifiedTime")},token);
+        if(Parse(source).Folder){InvalidateFolders(from);InvalidateFolders(to);}
         var confirmed=await StatAsync(to,token);
         if(confirmed==null || confirmed.Id!=moved.String("id"))throw new IOException("Google Drive 파일 이동 중 충돌이 발생했습니다.");
         return confirmed;
@@ -237,8 +254,9 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     {
         bool diagnostic=Regex.IsMatch(relative,"^SafeSync-test-(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$",RegexOptions.CultureInvariant|RegexOptions.IgnoreCase);
         if(!diagnostic && !relative.StartsWith(".safesync-trash/",StringComparison.Ordinal) && !relative.StartsWith(".safesync-staging/",StringComparison.Ordinal))throw new InvalidDataException("휴지통/검증용 임시 파일만 삭제할 수 있습니다.");
-        var item=await StatAsync(relative,token);if(item==null)return;
+        var metadata=await Find(relative,token,true);if(metadata==null)return;var item=Parse(metadata.Value);
         using var response=await http.SendAsync(()=>new HttpRequestMessage(HttpMethod.Delete,Api+"files/"+Id(item.Id)+"?supportsAllDrives=true"),token);
+        if(item.Folder)InvalidateFolders(relative);
     }
     private static RemoteItem Parse(JsonElement metadata)
     {

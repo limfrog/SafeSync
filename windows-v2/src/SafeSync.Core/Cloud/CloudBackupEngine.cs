@@ -52,6 +52,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             // missing/expired cursor or changed identity. Manual full compare
             // still explicitly refreshes both endpoints.
             await catalog.RefreshAsync(forceFull,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);
+            if(remote is IRemoteFolderIndex folderIndex)folderIndex.SeedFolders(tree,catalog.State.Ambiguous);
             foreach(var path in catalog.State.Pending)if(!PathPolicy.Internal(path))pending.Add(path);
             ChangePlanner.Add(job.Source,changes ?? [],entries,pending,token,pause.ThrowIfStopRequested);
             if(resolutions!=null)foreach(var relative in resolutions.Keys)pending.Add(PathPolicy.Relative(relative));

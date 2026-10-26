@@ -144,7 +144,7 @@ public actor CloudBackupEngine {
     }
     private struct PreparedUpload: Sendable {
         var file: URL; var path: String; var stamp: FileStamp; var parent: String
-        var staging: String; var snapshot: URL; var digest: String; var jobID: UUID
+        var staging: String; var snapshot: URL; var digest: String; var jobID: UUID; var root: String
         var sourceGuard: LocalRootGuard; var sourceIdentity: String
     }
     private func prepare(file: URL, path: String, stamp: FileStamp, job: BackupJob, storage: any RemoteStorage) async throws -> PreparedUpload {
@@ -152,7 +152,7 @@ public actor CloudBackupEngine {
         let sourceGuard = try LocalRootGuard(job.source, expected: loaded(job).sourceIdentity)
         let root = job.cloudFolderID!, parentPath = (path as NSString).deletingLastPathComponent
         let parent = try await storage.folder(path: parentPath, root: root)
-        let staging = try await storage.ensureFolder(name: ".safesync-staging", parent: root)
+        let staging = try await storage.folder(path: ".safesync-staging", root: root)
         let sourceLock = try FileAccess.readLock(file); defer { FileAccess.unlock(sourceLock) }
         let sourceIdentity = try FileComparisons.identity(file)
         let digest = try BackupEngine.hash(file)
@@ -164,10 +164,13 @@ public actor CloudBackupEngine {
         guard try FileStamp(file) == stamp, try FileComparisons.identity(file) == sourceIdentity else { throw BackupError.fileBusy("전송 사본 준비 중 원본이 변경되어 사용 중 대기합니다.") }
         guard try BackupEngine.hash(snapshot) == digest else { throw BackupError.unsafe("전송 사본의 체크섬이 일치하지 않습니다. 기존 백업을 보존합니다.") }
         try sourceGuard.verify()
-        return PreparedUpload(file: file, path: path, stamp: stamp, parent: parent, staging: staging.locator, snapshot: snapshot, digest: digest, jobID: job.id, sourceGuard: sourceGuard, sourceIdentity: sourceIdentity)
+        return PreparedUpload(file: file, path: path, stamp: stamp, parent: parent, staging: staging, snapshot: snapshot, digest: digest, jobID: job.id, root: root, sourceGuard: sourceGuard, sourceIdentity: sourceIdentity)
     }
     private nonisolated static func upload(_ prepared: PreparedUpload, storage: any RemoteStorage, progress: @Sendable (String, Int64?) -> Void) async throws -> RemoteItem {
         progress("임시 업로드", 0)
+        if let google = storage as? GoogleDriveStorage {
+            guard try await google.folder(path: ".safesync-staging", root: prepared.root) == prepared.staging else { throw BackupError.unsafe("전송 준비 후 임시 폴더가 변경되었습니다. 기존 사본을 보존합니다.") }
+        }
         let pathKey = SHA256.hash(data: Data(prepared.path.utf8)).map { String(format: "%02x", $0) }.joined()
         return try await storage.upload(file: prepared.snapshot,
             name: storage.provider == .googleDrive ? "part-\(pathKey)-\(prepared.digest)" : "part-\(prepared.digest)-\(UUID())",
@@ -196,6 +199,9 @@ public actor CloudBackupEngine {
         }
         let tx = Transaction(path: path, parent: parent, name: name, staged: verified, previous: previous, archiveParent: archiveParent, archiveName: archiveName)
         _ = try await verifyRemoteRoot(job, storage: storage, expected: loaded(job).remoteRootIdentity)
+        if let google = storage as? GoogleDriveStorage {
+            guard try await google.folder(path: (path as NSString).deletingLastPathComponent, root: root) == parent else { throw BackupError.unsafe("전송 준비 후 백업 폴더가 변경되었습니다. 기존 사본을 보존합니다.") }
+        }
         try prepared.sourceGuard.verify()
         let journal = transactionDirectory(job).appendingPathComponent("\(UUID()).json")
         try Storage.save(tx, to: journal)

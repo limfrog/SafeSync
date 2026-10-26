@@ -124,6 +124,8 @@ public protocol RemoteStorage: Sendable {
     func children(_ parent: String) async throws -> [RemoteItem]
     func metadata(_ id: String) async throws -> RemoteItem?
     func createFolder(name: String, parent: String) async throws -> RemoteItem
+    func ensureFolder(name: String, parent: String) async throws -> RemoteItem
+    func folder(path: String, root: String) async throws -> String
     func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String, progress: @Sendable (Int64, Int64) -> Void) async throws -> RemoteItem
     func move(_ item: RemoteItem, name: String, parent: String) async throws -> RemoteItem
     func remove(_ item: RemoteItem) async throws

@@ -9,6 +9,7 @@ internal static class GoogleUploadPerformanceTests
 {
     public static async Task RunAsync(string root,Action<bool,string> check)
     {
+        await GoogleFolderIndexTests.RunAsync(check);
         var file=Path.Combine(root,"small-drive-upload");await File.WriteAllTextAsync(file,"한글 small upload");
         var bytes=await File.ReadAllBytesAsync(file);var info=new FileInfo(file);
         var snapshot=new UploadSnapshot(file,bytes.Length,info.LastWriteTimeUtc,info.CreationTimeUtc,Convert.ToHexStringLower(MD5.HashData(bytes)),Convert.ToHexStringLower(SHA256.HashData(bytes)));
