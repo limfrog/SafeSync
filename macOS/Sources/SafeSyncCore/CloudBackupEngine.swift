@@ -62,8 +62,10 @@ public actor CloudBackupEngine {
         guard let item = try await storage.metadata(previous.id), item.revision == previous.revision, item.parent == previous.parent, item.name == previous.name else { throw BackupError.unsafe("백업 파일이 검사 후 변경되었습니다. 현재 파일을 보존하고 다시 검사합니다.") }; return item
     }
     private func verifyRemoteRoot(_ job: BackupJob, storage: any RemoteStorage, expected: String?) async throws -> String {
-        if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
-        guard let folder = try await storage.metadata(job.cloudFolderID!), folder.folder,
+        let current: RemoteItem?
+        if let google = storage as? GoogleDriveStorage { current = try await google.validatedJobFolder(job) }
+        else { current = try await storage.metadata(job.cloudFolderID!) }
+        guard let folder = current, folder.folder,
               expected == nil || folder.id == expected else {
             throw BackupError.unsafe("클라우드 폴더가 이전 백업과 다르거나 연결할 수 없습니다. 기존 파일을 보존합니다.")
         }

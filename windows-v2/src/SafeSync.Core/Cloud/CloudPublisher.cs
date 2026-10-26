@@ -90,7 +90,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
     {
         Validate(record);await pause.WaitAsync(token);
         var destination=await remote.StatAsync(record.Relative,token);
-        var prior=await remote.StatAsync(record.PreviousPath,token);
+        var prior=record.Previous==null ? null : await remote.StatAsync(record.PreviousPath,token);
         if(record.DeleteOnly)
         {
             if(record.Previous==null)throw new InvalidDataException("삭제 전 백업 정보가 없습니다.");
@@ -123,7 +123,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
             throw new IOException("임시 업로드의 서비스 체크섬이 다릅니다. 기존 백업을 유지하고 다음 실행에서 새 세션으로 재시도합니다.");
         }
         record.StagedId=staged.Id;JsonFile.Save(journal,record);
-        await pause.WaitAsync(token);destination=await remote.StatAsync(record.Relative,token);prior=await remote.StatAsync(record.PreviousPath,token);
+        await pause.WaitAsync(token);destination=await remote.StatAsync(record.Relative,token);prior=record.Previous==null ? null : await remote.StatAsync(record.PreviousPath,token);
         if(destination!=null)
         {
             if(record.Previous==null || !RemotePath.Same(record.Previous,destination) || prior!=null)

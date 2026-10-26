@@ -60,7 +60,10 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             IReadOnlyDictionary<string,RemoteItem?>? metadata=null;
             if(remote is IRemoteBatch batchStore)
             {
-                try{metadata=await batchStore.StatManyAsync(tree,work.Where(p=>!catalog.IsAmbiguous(p) && !CanReuse(p)),token);}
+                // Batch only known IDs. Looking up every missing path here delays
+                // the first upload by hours on a new, large backup. Unknown paths
+                // are checked freshly by ProcessAsync and again before publishing.
+                try{metadata=await batchStore.StatManyAsync(tree,work.Where(p=>tree.ContainsKey(p) && !catalog.IsAmbiguous(p) && !CanReuse(p)),token);}
                 catch(CloudDuplicateNameException){await catalog.RefreshAsync(true,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);}
             }
             try
@@ -99,7 +102,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                             }
                             throw new CloudDuplicateNameException(relative);
                         }
-                        target=metadata!=null ? metadata.GetValueOrDefault(relative) : tree!=null ? tree.GetValueOrDefault(relative) : await remote.StatAsync(relative,token);
+                        target=metadata!=null && metadata.TryGetValue(relative,out var batched) ? batched : await remote.StatAsync(relative,token);
                         await FileComparisons.VerifyAsync(job,relative,remote,resolutions,token);
                         if(action==ConflictAction.UseBackup)
                         {

@@ -2,6 +2,19 @@ import XCTest
 @testable import SafeSyncCore
 
 final class GoogleFileAccessTests: XCTestCase {
+    func testValidatedFolderReturnsSingleFreshResponse() async throws {
+        let account = CloudAccount(provider: .googleDrive, name: "test", clientID: "client")
+        let storage = GoogleDriveStorage(account: account, transport: { request, _ in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url!.path, "/drive/v3/files/managed")
+            let body: [String: Any] = ["id": "managed", "name": "Backup", "mimeType": "application/vnd.google-apps.folder", "parents": ["parent"], "appProperties": [GoogleFileAccess.folderKey: GoogleFileAccess.mode]]
+            return (try HTTP.json(body), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        var job = BackupJob(); job.cloudProvider = .googleDrive; job.cloudFolderID = "managed"; job.cloudAccessMode = GoogleFileAccess.mode
+        let folder = try await storage.validatedJobFolder(job)
+        XCTAssertEqual(folder.id, "managed")
+        XCTAssertEqual(folder.appAccessMode, GoogleFileAccess.mode)
+    }
     func testScopeAndNativeFolderPicker() throws {
         let account = CloudAccount(provider: .googleDrive, name: "test", clientID: "client")
         let url = OAuthPKCE.authorizationURL(account: account, redirect: "http://127.0.0.1:12345/", pkce: try OAuthPKCE(), pickFolder: true)

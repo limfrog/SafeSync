@@ -14,6 +14,24 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     public string AccountId=>accountId;
     private string rootId="";
     private readonly SemaphoreSlim folderCreation=new(1,1);
+    private readonly SemaphoreSlim idGate=new(1,1);
+    private readonly Queue<string> uploadIds=new();
+    private async Task<string> NewUploadId(CancellationToken token)
+    {
+        await idGate.WaitAsync(token);
+        try
+        {
+            if(uploadIds.Count==0)
+            {
+                var response=await http.JsonAsync(HttpMethod.Get,Api+"files/generateIds?count=32&space=drive&type=files",null,token);
+                var ids=response.GetProperty("ids").EnumerateArray().Select(v=>Id(v.GetString()!)).ToArray();
+                if(ids.Length==0 || ids.Distinct(StringComparer.Ordinal).Count()!=ids.Length)throw new IOException("Google Drive 파일 ID 발급 응답이 잘못되었습니다.");
+                foreach(var id in ids)uploadIds.Enqueue(id);
+            }
+            return uploadIds.Dequeue();
+        }
+        finally{idGate.Release();}
+    }
     private static string Id(string value)=>Regex.IsMatch(value,"^[a-zA-Z0-9_-]{1,200}$") ? value : throw new InvalidDataException("Google Drive 폴더 ID가 잘못되었습니다.");
     private async Task<JsonElement?> Metadata(string id,CancellationToken token)
     {
@@ -35,12 +53,12 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     {
         var item=await Find(relative,token);return item!=null && Parse(item.Value).Folder && Managed(item.Value);
     }
-    private async Task<List<JsonElement>> Children(string parent,CancellationToken token)
+    private async Task<List<JsonElement>> Children(string parent,CancellationToken token,bool pathOnly=false)
     {
         Id(parent);var result=new List<JsonElement>();string next="";
         do
         {
-            var query=CloudJson.Query(("q",$"'{parent}' in parents and trashed = false"),("pageSize","1000"),("fields","nextPageToken,files("+Fields+")"),("supportsAllDrives","true"),("includeItemsFromAllDrives","true"),("pageToken",next));
+            var query=CloudJson.Query(("q",$"'{parent}' in parents and trashed = false"),("pageSize","1000"),("fields","nextPageToken,files("+(pathOnly ? "id,name,mimeType" : Fields)+")"),("supportsAllDrives","true"),("includeItemsFromAllDrives","true"),("pageToken",next));
             var page=await http.JsonAsync(HttpMethod.Get,Api+"files?"+query,null,token);
             foreach(var file in page.GetProperty("files").EnumerateArray())result.Add(file.Clone());next=page.String("nextPageToken");
         }while(next.Length>0);
@@ -64,7 +82,7 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         foreach(var part in directory.Split('/',StringSplitOptions.RemoveEmptyEntries))
         {
             relative=relative.Length==0 ? part : relative+"/"+part;
-            var matches=(await Children(current,token)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
+            var matches=(await Children(current,token,true)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
             if(matches.Length>1)throw new CloudDuplicateNameException(relative);
             if(matches.Length==1)
             {
@@ -73,7 +91,7 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
             }
             if(!create)return null;
             var folder=await http.JsonAsync(HttpMethod.Post,Api+"files?fields="+Uri.EscapeDataString(Fields)+"&supportsAllDrives=true",new{name=part,mimeType="application/vnd.google-apps.folder",parents=new[]{current},appProperties=new Dictionary<string,string>{{GoogleFileAccess.FolderKey,GoogleFileAccess.Mode}}},token);
-            var confirmed=(await Children(current,token)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
+            var confirmed=(await Children(current,token,true)).Where(f=>f.String("name").Equals(part,StringComparison.OrdinalIgnoreCase)).ToArray();
             if(confirmed.Length!=1 || confirmed[0].String("id")!=folder.String("id"))throw new IOException("Google Drive 폴더 생성 충돌이 발생했습니다.");
             current=folder.String("id");
         }
@@ -147,10 +165,32 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         if(!resumed)
         {
             var parent=await Folder(RemotePath.Parent(relative),true,token) ?? throw new IOException("업로드 폴더를 만들지 못했습니다.");
-            if(session.FileId.Length==0)
+            bool allocated=session.FileId.Length==0;
+            if(allocated)
             {
-                var ids=await http.JsonAsync(HttpMethod.Get,Api+"files/generateIds?count=1&space=drive&type=files",null,token);
-                session.FileId=Id(ids.GetProperty("ids")[0].GetString()!);save();
+                session.FileId=await NewUploadId(token);save();
+            }
+            // Small files use one request. The persisted pre-generated ID makes
+            // an accepted-but-lost response recoverable without duplicate copies.
+            if(snapshot.Length<=5L*1024*1024 && session.SessionProtected.Length==0)
+            {
+                var recovered=allocated ? null : await Metadata(session.FileId,token);
+                if(recovered!=null)
+                {
+                    var item=Parse(recovered.Value);
+                    if(!RemotePath.Content(item,snapshot) || item.Name!=RemotePath.Name(relative) || recovered.Value.True("trashed") ||
+                        !recovered.Value.GetProperty("parents").EnumerateArray().Any(p=>p.GetString()==parent))throw new IOException("이전 소형 파일 전송의 내용 또는 위치가 다릅니다. 기존 사본을 보존합니다.");
+                    session.Offset=snapshot.Length;save();return item;
+                }
+                var bytes=await File.ReadAllBytesAsync(snapshot.Path,token);await pause.WaitAsync(token);
+                using var uploaded=await http.SendAsync(()=>
+                {
+                    var content=new MultipartContent("related","safesync_"+Guid.NewGuid().ToString("N"));
+                    content.Add(CloudJson.Body(new{id=session.FileId,name=RemotePath.Name(relative),parents=new[]{parent},modifiedTime=snapshot.ModifiedUtc.ToString("O"),createdTime=snapshot.CreatedUtc.ToString("O")}));
+                    var media=new ByteArrayContent(bytes);media.Headers.ContentType=new("application/octet-stream");content.Add(media);
+                    return new HttpRequestMessage(HttpMethod.Post,"https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields="+Uri.EscapeDataString(Fields)){Content=content};
+                },token);
+                session.Offset=snapshot.Length;save();return Parse(await CloudJson.ReadAsync(uploaded,token));
             }
             using var started=await http.SendAsync(()=>
             {
@@ -178,8 +218,8 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     public async Task<RemoteItem> MoveAsync(string from,string to,CancellationToken token)
     {
         var source=await Find(from,token) ?? throw new FileNotFoundException("이동할 클라우드 파일이 없습니다.");
-        if(await StatAsync(to,token)!=null)throw new IOException("이동 대상에 이미 파일이 있습니다.");
         var parent=await Folder(RemotePath.Parent(to),true,token) ?? throw new IOException("클라우드 대상 폴더가 없습니다.");
+        if((await Children(parent,token)).Any(f=>f.String("name").Equals(RemotePath.Name(to),StringComparison.OrdinalIgnoreCase)))throw new IOException("이동 대상에 이미 파일이 있습니다.");
         var oldParents=source.GetProperty("parents").EnumerateArray().Select(v=>v.GetString()).Where(v=>!string.IsNullOrEmpty(v)).ToArray();
         var query=CloudJson.Query(("addParents",oldParents.Contains(parent) ? "" : parent),("removeParents",string.Join(',',oldParents.Where(p=>p!=parent))),("supportsAllDrives","true"),("fields",Fields));
         var moved=await http.JsonAsync(HttpMethod.Patch,Api+"files/"+Id(source.String("id"))+"?"+query,new{name=RemotePath.Name(to),modifiedTime=source.String("modifiedTime")},token);

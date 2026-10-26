@@ -27,6 +27,13 @@ string Write(string root,string relative,string text,int age=0)
 }
 try
 {
+    if(args.Contains("--cloud-performance"))
+    {
+        await CloudProtocolTests.RunAsync(testRoot,Check);
+        await GoogleUploadPerformanceTests.RunAsync(testRoot,Check);
+        JsonFile.Save(Path.Combine(testRoot,"result.json"),new {Status="OK",Assertions=passed});
+        Console.WriteLine($"PASS: {passed} cloud protocol/performance assertions. {testRoot}");return;
+    }
     var driveFileTrial=Array.IndexOf(args,"--drive-file-trial");
     if(driveFileTrial>=0){await LiveGoogleFileTrial.RunAsync(testRoot,args[driveFileTrial+1],args.Contains("--pick-parent"));return;}
     if(args.Contains("--updates"))

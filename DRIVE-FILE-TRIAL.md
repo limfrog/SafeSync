@@ -1,5 +1,14 @@
 # Google Drive 제한 권한 시험본
 
+최신 성능 개선 시험본은 Windows **1.0.0-preview.23**, macOS **0.3.19(28)**입니다. 프리뷰 22의 새 위치·작업·체크포인트를 그대로 이어 사용합니다. 재연결이나 새 백업 폴더 생성은 필요하지 않습니다. 일반 자동 업데이트 대상은 아직 이전 공개 버전이므로 아래 시험본을 직접 설치하세요.
+
+- [Windows 프리뷰 23 설치본](dist/SafeSync-Setup-1.0.0-preview.23.exe)
+- [Windows 프리뷰 23 ZIP](dist/SafeSync-Windows-1.0.0-preview.23.zip)
+- [macOS 0.3.19 Universal ZIP](dist/SafeSync-macOS-0.3.19-universal.zip)
+- [성능 개선 내용](windows-v2/PREVIEW23-VALIDATION.md)
+
+아래는 최초 프리뷰 22 권한 이전 당시의 설명·검증 기록입니다. 기존 전체 권한 버전에서 처음 넘어오는 경우에만 새 계정 연결·전용 위치 이전 절차를 따릅니다.
+
 Windows `1.0.0-preview.22`, macOS `0.3.18 (27)`의 시험 변경입니다. 공개 업데이트 목록과 Google Cloud 심사 설정은 기존 상태로 유지합니다. Windows 실계정 격리 검사는 통과했으며, 사용자 환경의 동작을 확인한 뒤 공개 전환 여부를 결정합니다.
 
 ## 내려받기

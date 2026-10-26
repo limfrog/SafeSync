@@ -52,10 +52,14 @@ public struct GoogleDriveStorage: RemoteStorage {
         try parse(await api("files", method: "POST", query: ["fields": fields], body: ["name": name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent], "appProperties": [GoogleFileAccess.folderKey: GoogleFileAccess.mode]]))
     }
     public func validateJobAccess(_ job: BackupJob) async throws {
+        _ = try await validatedJobFolder(job)
+    }
+    func validatedJobFolder(_ job: BackupJob) async throws -> RemoteItem {
         try GoogleFileAccess.validateAccount(account); try GoogleFileAccess.validateJob(job)
         guard let id = job.cloudFolderID, id != "root", let folder = try await metadata(id), folder.folder, folder.appAccessMode == GoogleFileAccess.mode else {
             throw BackupError.unsafe("SafeSync 제한 권한으로 만든 전용 백업 폴더를 선택하세요. 이전 백업은 보존됩니다.")
         }
+        return folder
     }
     private struct UploadSession: Codable { var url: String; var hash: String; var size: Int64; var modified: Date?; var parent: String? }
     public func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String, progress: @Sendable (Int64, Int64) -> Void) async throws -> RemoteItem {

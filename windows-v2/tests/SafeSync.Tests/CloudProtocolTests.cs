@@ -166,7 +166,10 @@ internal static class CloudProtocolTests
                 return Json(new{files=new[]{File("staging",".safesync-staging",true)},nextPageToken="second"});
             }
             if(request.Method==HttpMethod.Post && path.Contains("/upload/"))
-            {var response=Json(new{});response.Headers.Location=new Uri("https://www.googleapis.com/upload/session?upload_id=synthetic");return response;}
+            {
+                if(uri.Query.Contains("uploadType=multipart"))return Json(File("generated","test.part"));
+                var response=Json(new{});response.Headers.Location=new Uri("https://www.googleapis.com/upload/session?upload_id=synthetic");return response;
+            }
             if(request.Method==HttpMethod.Put && path.EndsWith("/session"))
             {
                 var bytes=await request.Content!.ReadAsByteArrayAsync(ct);var range=request.Content.Headers.ContentRange!;
