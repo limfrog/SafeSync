@@ -3,6 +3,32 @@ using SafeSync.Core.Cloud;
 
 internal static class LiveGoogleFileTrial
 {
+    // Explicit opt-in regression against the existing narrow account. Read its
+    // credentials in memory only; all remote writes stay in a unique test root.
+    public static async Task RunConnectedAsync(string output,string configPath)
+    {
+        var before=System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(configPath));
+        var config=JsonFile.Read<AppConfig>(configPath);
+        using var services=new CloudServices(()=>config);
+        using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(8));
+        var parent=services.ForAccountRoot("GoogleDrive");await parent.InitializeAsync(timeout.Token);
+        var name="SafeSync-test-"+Guid.NewGuid().ToString("N");bool created=false,cleaned=false,passed=false;
+        try
+        {
+            if(await parent.StatAsync(name,timeout.Token)!=null)throw new IOException("시험 폴더 이름이 이미 존재합니다.");
+            await parent.EnsureFolderAsync(name,timeout.Token);created=true;
+            var folder=await parent.StatAsync(name,timeout.Token) ?? throw new IOException("시험 폴더를 확인할 수 없습니다.");
+            Console.WriteLine(await CloudConnectionDiagnostics.RunAsync(services.ForSelectedRoot("GoogleDrive",folder.Id,folder.Id),null,timeout.Token));
+            passed=true;
+        }
+        finally
+        {
+            if(created){using var cleanup=new CancellationTokenSource(TimeSpan.FromSeconds(90));await parent.DeleteAsync(name,cleanup.Token);cleaned=true;}
+            bool unchanged=before.SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(configPath)));
+            JsonFile.Save(Path.Combine(output,"connected-drive-result.json"),new{Status=passed && cleaned && unchanged ? "OK" : "FAILED",Cleanup=cleaned,ConfigUnchanged=unchanged});
+            Console.WriteLine($"Connected Drive check: passed={passed}, cleanup={cleaned}, config unchanged={unchanged}.");
+        }
+    }
     // Copies client registration only. Existing refresh tokens, jobs, snapshots
     // and configuration are never modified by this opt-in real-account test.
     public static async Task RunAsync(string root,string existingConfig,bool picker)

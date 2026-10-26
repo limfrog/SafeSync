@@ -35,6 +35,8 @@ try
         Console.WriteLine($"PASS: {passed} cloud protocol/performance assertions. {testRoot}");return;
     }
     var driveFileTrial=Array.IndexOf(args,"--drive-file-trial");
+    var connectedDriveCheck=Array.IndexOf(args,"--connected-drive-check");
+    if(connectedDriveCheck>=0){await LiveGoogleFileTrial.RunConnectedAsync(testRoot,args[connectedDriveCheck+1]);return;}
     if(driveFileTrial>=0){await LiveGoogleFileTrial.RunAsync(testRoot,args[driveFileTrial+1],args.Contains("--pick-parent"));return;}
     if(args.Contains("--updates"))
     {
