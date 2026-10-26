@@ -13,7 +13,10 @@ actor GoogleFolderIndex {
     func remember(root: String, path: String, chain: [RemoteItem]) { chains[Key(root: root, path: path)] = chain }
     func seed(_ index: RemoteIndex) throws {
         clear(root: index.root)
-        let groups = try index.groupsByAllPaths()
+        // A name that cannot be represented as a relative path disables this
+        // optimization. The existing comparison policy still decides how to
+        // report it; an unrelated empty folder must not add a new failure.
+        guard let groups = try? index.groupsByAllPaths() else { return }
         let ambiguous = groups.filter { $0.value.count != 1 }.map(\.key)
         for (path, items) in groups where items.count == 1 && items[0].folder {
             guard !ambiguous.contains(where: { path == $0 || path.hasPrefix($0 + "/") }) else { continue }

@@ -89,6 +89,23 @@ final class GoogleFolderIndexTests: XCTestCase {
         XCTAssertEqual(nodes.nodes.values.filter { $0.parent == "managed" && $0.name == "new" }.count, 1)
         XCTAssertEqual(creates, 3)
     }
+    func testAmbiguousCatalogAndUnusableHintFallback() async throws {
+        let drive = Drive(), google = storage(drive)
+        await drive.add(RemoteItem(id: "duplicate", name: "c", parent: "b", folder: true))
+        try await google.folderIndex.seed(drive.index())
+        let ambiguous = await google.folderIndex.chain(root: "managed", path: "a/b/c/d")
+        XCTAssertNil(ambiguous)
+        do { _ = try await google.folder(path: "a/b/c/d", root: "managed"); XCTFail("Ambiguous catalog authorized a folder") } catch { }
+        await drive.remove("duplicate")
+        await drive.add(RemoteItem(id: "unusable", name: "literal/slash", parent: "managed", folder: true))
+        try await google.folderIndex.seed(drive.index())
+        let folder = try await google.folder(path: "a/b/c/d", root: "managed")
+        XCTAssertEqual(folder, "d")
+        await drive.remove("managed")
+        do { _ = try await google.folder(path: "a/b/c/d", root: "managed"); XCTFail("Missing root authorized a cached path") } catch { }
+        let creates = await drive.creates
+        XCTAssertEqual(creates, 0)
+    }
     private func storage(_ drive: Drive) -> GoogleDriveStorage {
         GoogleDriveStorage(account: CloudAccount(provider: .googleDrive, name: "synthetic", clientID: "test"), transport: { request, _ in try await drive.handle(request) })
     }

@@ -65,7 +65,11 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                 // the first upload by hours on a new, large backup. Unknown paths
                 // are checked freshly by ProcessAsync and again before publishing.
                 try{metadata=await batchStore.StatManyAsync(tree,work.Where(p=>tree.ContainsKey(p) && !catalog.IsAmbiguous(p) && !CanReuse(p)),token);}
-                catch(CloudDuplicateNameException){await catalog.RefreshAsync(true,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);}
+                catch(CloudDuplicateNameException)
+                {
+                    await catalog.RefreshAsync(true,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);
+                    if(remote is IRemoteFolderIndex refreshedFolders)refreshedFolders.SeedFolders(tree,catalog.State.Ambiguous);
+                }
             }
             try
             {
