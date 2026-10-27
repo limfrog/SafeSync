@@ -10,7 +10,7 @@ import statistics
 import sys
 
 def analyze(folder):
-    runs = collections.defaultdict(lambda: {"phases": collections.defaultdict(list), "http": collections.defaultdict(list), "events": collections.Counter(), "errors": 0})
+    runs = collections.defaultdict(lambda: {"phases": collections.defaultdict(list), "initialPhases": collections.defaultdict(list), "http": collections.defaultdict(list), "events": collections.Counter(), "errorEvents": 0})
     malformed = dropped = 0
     seen = set()
     for path in sorted(pathlib.Path(folder).glob("*.jsonl")):
@@ -38,12 +38,14 @@ def analyze(folder):
                     run["outcome"] = row.get("Detail")
                 if event == "run.result":
                     run["result"] = row.get("Detail")
-                if event in ("span.end", "prepare.phase") and operation.startswith(("prepare.", "application.", "state.", "storage.")):
+                if event == "span.end" and operation.startswith(("prepare.", "application.", "state.", "storage.")):
                     run["phases"][operation].append(row.get("Ms", 0))
+                if event == "prepare.phase":
+                    run["initialPhases"][operation].append(row.get("Ms", 0))
                 if event == "http.end":
                     run["http"][operation].append((row.get("Ms", 0), row.get("Status")))
                 if event in ("file.error", "run.error"):
-                    run["errors"] += 1
+                    run["errorEvents"] += 1
                 if event == "span.start" and operation == "file.upload" and "firstUpload" not in run:
                     run["firstUpload"] = row.get("Utc")
                 if event in ("prepare.ready", "transfer.first"):
@@ -51,6 +53,7 @@ def analyze(folder):
     output = {"malformedOrPartialLines": malformed, "droppedEvents": dropped, "runs": []}
     for (session, identifier), run in runs.items():
         phases = [{"phase": phase, "count": len(values), "sumMs": round(sum(values), 2), "maxMs": round(max(values), 2)} for phase, values in run.pop("phases").items()]
+        initial = [{"phase": phase, "count": len(values), "sumMs": round(sum(values), 2), "maxMs": round(max(values), 2)} for phase, values in run.pop("initialPhases").items()]
         http = [{"operation": operation, "count": len(values), "sumMs": round(sum(v[0] for v in values), 2), "medianMs": round(statistics.median(v[0] for v in values), 2), "statuses": dict(collections.Counter(str(v[1]) for v in values))} for operation, values in run.pop("http").items()]
         if run.get("start") and run.get("firstUpload"):
             try:
@@ -58,7 +61,7 @@ def analyze(folder):
                 run["untilFirstUploadMs"] = round((parse(run["firstUpload"]) - parse(run["start"])).total_seconds() * 1000, 2)
             except ValueError:
                 pass
-        output["runs"].append({"session": session, "run": identifier, **run, "phases": sorted(phases, key=lambda p: -p["sumMs"]), "http": sorted(http, key=lambda p: -p["sumMs"])})
+        output["runs"].append({"session": session, "run": identifier, **run, "initialPhases": sorted(initial, key=lambda p: -p["sumMs"]), "phases": sorted(phases, key=lambda p: -p["sumMs"]), "http": sorted(http, key=lambda p: -p["sumMs"])})
     return output
 
 if __name__ == "__main__":

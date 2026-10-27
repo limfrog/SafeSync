@@ -38,7 +38,7 @@ public sealed class OperationLog : IDisposable
         {
             if(Volatile.Read(ref disposed)!=0)return;
             var entry=new Entry(1,DateTime.UtcNow.ToString("O"),session,run?.Id,kind,operation,
-                string.IsNullOrEmpty(path) ? null : Tag(path),ms,bytes,completed,total,status,attempt,
+                string.IsNullOrEmpty(path) ? null : run?.FileTag(path) ?? Tag(path),ms,bytes,completed,total,status,attempt,
                 ErrorTypes(error),error?.HResult,detail);
             if(!queue.Writer.TryWrite(entry))Interlocked.Increment(ref dropped);
         }
@@ -53,8 +53,10 @@ public sealed class OperationLog : IDisposable
     public static Run? Begin(BackupJob job,bool full,bool reconcile)
     {
         var log=Volatile.Read(ref current);if(log==null)return null;
-        var run=new Run(log,ambient.Value);ambient.Value=run;
-        log.Write("run.start","backup",run,detail:$"job={log.Tag(job.Id)};provider={job.DestinationType};mode={job.SyncMode};full={full};reconcile={reconcile};source={(job.Source.StartsWith(@"\\") ? "network" : "local")}");return run;
+        var run=new Run(log,ambient.Value,job.Source);ambient.Value=run;
+        var provider=job.DestinationType is "Local" or "GoogleDrive" or "Dropbox" ? job.DestinationType : "unknown";
+        var mode=job.SyncMode is "OneWay" or "TwoWay" ? job.SyncMode : "unknown";
+        log.Write("run.start","backup",run,detail:$"job={log.Tag(job.Id)};provider={provider};mode={mode};full={full};reconcile={reconcile};source={(job.Source.StartsWith(@"\\") ? "network" : "local")}");return run;
     }
     public static Span Measure(string operation,string? path=null,long? bytes=null)=>new(ambient.Value,operation,path,bytes);
     public static void Event(string kind,string operation,string? path=null,long? bytes=null,int? completed=null,int? total=null,int? status=null,int? attempt=null,Exception? error=null,string? detail=null)
@@ -99,6 +101,7 @@ public sealed class OperationLog : IDisposable
         internal OperationLog Log {get;}
         internal string Id {get;}=Guid.NewGuid().ToString("N");
         private readonly Run? previous;
+        private readonly string source;
         private readonly long started=Stopwatch.GetTimestamp();
         private readonly object gate=new();
         private readonly Dictionary<string,(double Ms,int Count)> totals=[];
@@ -108,7 +111,12 @@ public sealed class OperationLog : IDisposable
         private int lastCompleted=-1;
         private long lastHeartbeat;
         private bool prepared,uploadStarted;
-        internal Run(OperationLog log,Run? previous){Log=log;this.previous=previous;}
+        internal Run(OperationLog log,Run? previous,string source){Log=log;this.previous=previous;this.source=source;}
+        internal string FileTag(string path)
+        {
+            try{if(Path.IsPathRooted(path)){var relative=Path.GetRelativePath(source,path);if(relative!=".." && !relative.StartsWith(".."+Path.DirectorySeparatorChar,StringComparison.Ordinal))path=relative;}}catch { }
+            return Log.Tag(path.Replace('\\','/').ToUpperInvariant());
+        }
         public void Progress(BackupProgress p)
         {
             lock(gate)

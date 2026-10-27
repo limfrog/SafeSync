@@ -42,7 +42,7 @@ public final class OperationLog: @unchecked Sendable {
         var entry: [String: Any] = ["Schema": 1, "Utc": HTTP.dateString(Date(), fractional: true), "Session": session,
                                     "Event": event, "Operation": operation]
         if let context { entry["Run"] = context.id }
-        if let path, !path.isEmpty { entry["File"] = tag(path) }
+        if let path, !path.isEmpty { entry["File"] = context?.fileTag(path) ?? tag(path) }
         if let bytes { entry["Bytes"] = bytes }; if let completed { entry["Completed"] = completed }
         if let total { entry["Total"] = total }; if let status { entry["Status"] = status }
         if let ms { entry["Ms"] = ms }; if let detail { entry["Detail"] = detail }
@@ -132,7 +132,12 @@ public final class OperationLog: @unchecked Sendable {
         private var totals: [String: Double] = [:]
         private var prepared = false, uploading = false
         private let started = ProcessInfo.processInfo.systemUptime
-        fileprivate init(_ log: OperationLog) { self.log = log }
+        private let source: String
+        fileprivate init(_ log: OperationLog, source: String) { self.log = log; self.source = source.hasSuffix("/") ? String(source.dropLast()) : source }
+        fileprivate func fileTag(_ path: String) -> String {
+            let relative = path.hasPrefix(source + "/") ? String(path.dropFirst(source.count + 1)) : path
+            return log.tag(relative.precomposedStringWithCanonicalMapping)
+        }
         public func progress(_ p: BackupProgress) {
             let known = Set(["이전 전송 복구 확인", "클라우드 변경 목록 확인", "양쪽 폴더 전체 목록 확인", "완료"])
             let label = p.stage ?? (known.contains(p.path) ? p.path : "file.compare")
@@ -162,7 +167,7 @@ public final class OperationLog: @unchecked Sendable {
     }
     public static func withRun(_ job: BackupJob, full: Bool, operation: () async throws -> BackupResult) async throws -> BackupResult {
         if run != nil || current == nil { return try await operation() }
-        let context = Run(current!), start = ProcessInfo.processInfo.systemUptime
+        let context = Run(current!, source: job.source), start = ProcessInfo.processInfo.systemUptime
         return try await $run.withValue(context) {
             context.log.write("run.start", "backup", context: context,
                               detail: "job=\(context.log.tag(job.id.uuidString));provider=\(job.cloudProvider?.rawValue ?? "local");mode=\(job.mode.rawValue);full=\(full)")

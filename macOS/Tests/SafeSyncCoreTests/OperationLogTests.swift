@@ -19,6 +19,7 @@ final class OperationLogTests: XCTestCase {
                 for _ in 0..<20 { group.addTask { OperationLog.event("parallel", "test", path: "private-name.txt") } }
             }
             OperationLog.event("file.error", "test", error: NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "secret-token https://secret/session"]))
+            OperationLog.event("same.absolute", "test", path: source.appendingPathComponent("private-name.txt").path)
             return result
         }
         XCTAssertEqual(first.copied, 1)
@@ -36,6 +37,7 @@ final class OperationLogTests: XCTestCase {
         XCTAssertEqual(parallel.count, 20)
         XCTAssertEqual(Set(parallel.compactMap { $0["Run"] as? String }).count, 1)
         XCTAssertEqual(Set(parallel.compactMap { $0["File"] as? String }).count, 1)
+        XCTAssertEqual(rows.first { $0["Event"] as? String == "same.absolute" }?["File"] as? String, parallel.first?["File"] as? String)
         XCTAssertTrue(rows.contains { $0["Operation"] as? String == "prepare.source_scan" })
         XCTAssertTrue(rows.contains { $0["Operation"] as? String == "prepare.state_load" })
         XCTAssertTrue(rows.compactMap { $0["Ms"] as? Double }.allSatisfy { $0 >= 0 })

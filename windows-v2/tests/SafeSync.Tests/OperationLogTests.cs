@@ -21,6 +21,7 @@ internal static class OperationLogTests
                 OperationLog.Event("file.error","test",file,error:new IOException("Bearer do-not-log-token https://secret/session",new TimeoutException("do-not-log-inner")));
                 OperationLog.Http(OperationLog.Endpoint(new Uri("https://www.googleapis.com/upload/drive/v3/files/secret-session?upload_id=secret")),System.Diagnostics.Stopwatch.GetTimestamp(),8388608,308,1);
                 await Task.WhenAll(Enumerable.Range(0,20).Select(i=>Task.Run(()=>OperationLog.Event("parallel","test",file))));
+                OperationLog.Event("same.relative","test","private-customer-name.txt");
             }
             await log.FlushAsync();
         }
@@ -36,6 +37,7 @@ internal static class OperationLogTests
         var parallel=rows.Where(r=>r.RootElement.GetProperty("Event").GetString()=="parallel").Select(r=>r.RootElement).ToArray();
         check(parallel.Length==20 && parallel.Select(r=>r.GetProperty("Run").GetString()).Distinct().Count()==1,"Lost parallel run context.");
         check(parallel.Select(r=>r.GetProperty("File").GetString()).Distinct().Count()==1,"Unstable file references.");
+        check(rows.Single(r=>r.RootElement.GetProperty("Event").GetString()=="same.relative").RootElement.GetProperty("File").GetString()==parallel[0].GetProperty("File").GetString(),"Absolute and relative file phases lost correlation.");
         check(rows.Where(r=>r.RootElement.TryGetProperty("Ms",out var ms) && ms.ValueKind==JsonValueKind.Number).All(r=>r.RootElement.GetProperty("Ms").GetDouble()>=0),"Negative timing.");
         foreach(var row in rows)row.Dispose();
         var rotation=Path.Combine(root,"rotation");var folder=Path.Combine(rotation,"logs","operations");Directory.CreateDirectory(folder);
