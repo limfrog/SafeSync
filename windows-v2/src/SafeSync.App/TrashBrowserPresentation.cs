@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
@@ -11,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using SafeSync.Core;
+using SafeSync.Core.Cloud;
 
 namespace SafeSync.App;
 
@@ -29,6 +31,8 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
     private long totalBytes;
     private TrashRowInfo[] selection=[];
     private readonly bool dropbox;
+    private bool refreshingBatches;
+    private string BatchOf(T item)=>item is TrashItem local ? local.BatchId : item is CloudTrashItem cloud ? cloud.BatchId : "";
     public TrashBrowserPresentation(Window window,ObservableCollection<T> items,Func<T,TrashRowInfo> describe,BackupJob job,int retentionDays,bool dropbox=false)
     {
         this.window=window;this.items=items;this.describe=describe;this.dropbox=dropbox;grid=window.Find<DataGrid>("TrashGrid");
@@ -49,13 +53,15 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
         window.Find<TextBox>("SearchBox").KeyDown+=(_,e)=>{if(e.Key==Key.Escape){window.Find<TextBox>("SearchBox").Clear();e.Handled=true;}};
         window.Find<Button>("ClearSearchButton").Click+=(_,_)=>window.Find<TextBox>("SearchBox").Clear();
         window.Find<Button>("ClearSelectionButton").Click+=(_,_)=>grid.UnselectAll();
+        var batches=window.Find<ComboBox>("BatchBox");batches.DisplayMemberPath="Value";batches.SelectedValuePath="Key";
+        batches.SelectionChanged+=(_,_)=>{if(!refreshingBatches)ApplyFilter();};RefreshBatches();
         grid.SelectionChanged+=SelectionChanged;items.CollectionChanged+=ItemsChanged;((INotifyCollectionChanged)view).CollectionChanged+=ViewChanged;
         window.Closed+=(_,_)=>Dispose();Update();
     }
     public void SetState(bool busy,bool canOperate)
     {
         bool changed=this.busy!=busy;this.busy=busy;this.canOperate=canOperate;
-        if(changed){view.SortDescriptions.Clear();if(!busy)view.SortDescriptions.Add(new("DeletedAt",ListSortDirection.Descending));}Update();
+        if(changed){view.SortDescriptions.Clear();if(!busy)view.SortDescriptions.Add(new("DeletedAt",ListSortDirection.Descending));}if(!busy)RefreshBatches();Update();
     }
     private void QueueUpdate(){if(!busy)Update();else if(!renderTimer.IsEnabled)renderTimer.Start();}
     private void ItemsChanged(object? sender,NotifyCollectionChangedEventArgs e)
@@ -73,8 +79,18 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
     private void ApplyFilter()
     {
         if(disposed)return;var query=window.Find<TextBox>("SearchBox").Text.Trim();grid.UnselectAll();
-        using(view.DeferRefresh())view.Filter=query.Length==0 ? null : value=>value is T item && (describe(item).Name.Contains(query,StringComparison.OrdinalIgnoreCase)||describe(item).OriginalPath.Contains(query,StringComparison.OrdinalIgnoreCase));
+        var batch=window.Find<ComboBox>("BatchBox").SelectedValue as string ?? "";
+        using(view.DeferRefresh())view.Filter=query.Length==0 && batch.Length==0 ? null : value=>value is T item && (batch.Length==0 || BatchOf(item)==batch) && (query.Length==0 || describe(item).Name.Contains(query,StringComparison.OrdinalIgnoreCase)||describe(item).OriginalPath.Contains(query,StringComparison.OrdinalIgnoreCase));
         Update();
+    }
+    private void RefreshBatches()
+    {
+        var control=window.Find<ComboBox>("BatchBox");var keys=items.Select(BatchOf).Where(s=>s.Length>0).Distinct().OrderDescending(StringComparer.Ordinal).ToArray();
+        var choices=new[]{new KeyValuePair<string,string>("","모든 백업 실행 · 이전 보관 파일 포함")}.Concat(keys.Select(key=>new KeyValuePair<string,string>(key,(TrashDates.TryParse(key,out var date) ? date.ToString("yyyy-MM-dd HH:mm:ss") : "이전 보관")+" · "+key[^Math.Min(8,key.Length)..]))).ToArray();
+        if(control.ItemsSource is KeyValuePair<string,string>[] old && old.Select(p=>p.Key).SequenceEqual(choices.Select(p=>p.Key)))return;
+        var selected=control.SelectedValue as string ?? "";refreshingBatches=true;
+        try{control.ItemsSource=choices;control.SelectedValue=choices.Any(p=>p.Key==selected) ? selected : "";}finally{refreshingBatches=false;}
+        ApplyFilter();
     }
     private void Update()
     {
@@ -93,6 +109,8 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
         window.Find<Button>("ClearSelectionButton").IsEnabled=!busy && selected.Length>0;
         window.Find<Button>("RestoreButton").IsEnabled=!busy && canOperate && selected.Length>0;
         window.Find<Button>("DeleteButton").IsEnabled=!busy && canOperate && selected.Length>0;
+        window.Find<Button>("VerifyTrashButton").IsEnabled=!busy && canOperate && selected.Length>0;
+        window.Find<ComboBox>("BatchBox").IsEnabled=!busy;
         window.Find<Button>("RestoreButton").Content=selected.Length==0 ? "선택 파일 복구" : $"선택 복구 ({selected.Length:N0})";
         window.Find<Button>("DeleteButton").Content=(dropbox ? "휴지통에서 제거" : "완전 삭제")+(selected.Length==0 ? "" : $" ({selected.Length:N0})");
         window.Find<TextBox>("SearchBox").IsEnabled=!busy;

@@ -93,6 +93,10 @@ internal sealed partial class DesktopController
         window.Find<RadioButton>(existing?.TriggerType=="Scheduled" ? "ScheduleRadio" : "RealtimeRadio").IsChecked=true;
         window.Find<TextBox>("TimeBox").Text=existing?.ScheduleTime ?? "23:00";
         window.Find<CheckBox>("MirrorCheck").IsChecked=existing?.MirrorDeletes ?? false;
+        window.Find<CheckBox>("MassProtectCheck").IsChecked=existing?.ProtectMassChanges ?? true;
+        window.Find<TextBox>("MassMinimumBox").Text=(existing?.MassChangeMinimum ?? 100).ToString();
+        window.Find<TextBox>("MassPercentBox").Text=(existing?.MassChangePercent ?? 20).ToString();
+        window.Find<CheckBox>("VssCheck").IsChecked=existing?.UseVss ?? false;
         var oneWay=window.Find<RadioButton>("OneWayRadio");var twoWay=window.Find<RadioButton>("TwoWayRadio");
         void ModeChanged()
         {
@@ -100,6 +104,8 @@ internal sealed partial class DesktopController
             twoWay.Visibility=Provider()=="GoogleDrive" ? Visibility.Collapsed : Visibility.Visible;
             if(Provider()=="GoogleDrive" && twoWay.IsChecked==true)oneWay.IsChecked=true;
             bool both=twoWay.IsChecked==true;
+            window.Find<CheckBox>("VssCheck").IsEnabled=!both;
+            if(both)window.Find<CheckBox>("VssCheck").IsChecked=false;
             window.Find<TextBlock>("ModeHintText").Text=both ? "양방향: 양쪽 변경·삭제를 서로 반영합니다. 삭제 파일은 각 위치의 휴지통에 보관하며, 양쪽이 함께 바뀌면 충돌로 남깁니다." : "단방향: 원본의 변경을 백업 위치에 반영합니다.";
             window.Find<CheckBox>("MirrorCheck").IsEnabled=!both;
             window.Find<CheckBox>("MirrorCheck").Content=both ? "양쪽 삭제 반영 · 삭제 전 각 위치의 SafeSync 휴지통에 보관" : "원본에서 사라진 파일은 백업 위치의 SafeSync 휴지통으로 이동";
@@ -123,6 +129,8 @@ internal sealed partial class DesktopController
         Click(window,"CancelButton",window.Close);
         Click(window,"SaveButton",() =>
         {
+            if(!int.TryParse(window.Find<TextBox>("MassMinimumBox").Text,out var minimum) || !int.TryParse(window.Find<TextBox>("MassPercentBox").Text,out var percent))
+            {Tell("대량 변경 보호 기준에 숫자를 입력하세요.");return;}
             var job=new BackupJob
             {
                 Name=window.Find<TextBox>("NameBox").Text.Trim(),Source=window.Find<TextBox>("SourceBox").Text.Trim(),
@@ -130,6 +138,7 @@ internal sealed partial class DesktopController
                 Destination=window.Find<TextBox>("DestinationBox").Text.Trim(),DestinationType=Provider(),CloudFolderId=cloudFolder,CloudAccountId=cloudAccount,CloudFolderIdentity=cloudIdentity,
                 TriggerType=window.Find<RadioButton>("ScheduleRadio").IsChecked==true ? "Scheduled" : "Realtime",
                 ScheduleTime=window.Find<TextBox>("TimeBox").Text.Trim(),MirrorDeletes=window.Find<CheckBox>("MirrorCheck").IsChecked==true,
+                ProtectMassChanges=window.Find<CheckBox>("MassProtectCheck").IsChecked==true,MassChangeMinimum=minimum,MassChangePercent=percent,UseVss=window.Find<CheckBox>("VssCheck").IsChecked==true,
                 Paused=existing?.Paused ?? false,Stopped=existing?.Stopped ?? false,CloudBindingReviewRequired=(existing?.CloudBindingReviewRequired ?? false) && !selectedCloudFolder
             };
             job.CloudAccessMode=Provider()=="GoogleDrive" && selectedCloudFolder ? GoogleFileAccess.Mode : existing?.CloudAccessMode ?? "";
@@ -243,6 +252,8 @@ internal sealed partial class DesktopController
         async Task OperateAsync(bool restore)
         {
             var selected=grid.SelectedItems.Cast<TrashItem>().ToArray();
+            if(restore && selected.Select(i=>i.RelativePath).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=selected.Length){status.Text="같은 경로는 한 버전만 선택하세요.";return;}
+            using var batch=new RecoveryBatch();
             if(busy || selected.Length==0)return;
             if(!jobs.Any(j=>ReferenceEquals(j,job))){status.Text="작업 설정이 변경되었습니다. 백업 작업 탭에서 휴지통을 다시 여세요.";Buttons();return;}
             if(scheduler.IsRunning(job.Id) || LegacyRunning()){status.Text="백업이 끝나고 기존 1.x 앱을 종료한 뒤 처리하세요.";return;}
@@ -274,6 +285,14 @@ internal sealed partial class DesktopController
         }
         Click(window,"CloseButton",()=>SelectWorkspace("MainTab"));Click(window,"RefreshButton",()=>TrackAuxiliary(LoadAsync()));
         Click(window,"SelectAllButton",()=>grid.SelectAll());Click(window,"RestoreButton",()=>TrackAuxiliary(OperateAsync(true)));Click(window,"DeleteButton",()=>TrackAuxiliary(OperateAsync(false)));
+        Click(window,"VerifyTrashButton",()=>TrackAuxiliary(VerifyAsync()));
+        async Task VerifyAsync()
+        {
+            var selected=grid.SelectedItems.Cast<TrashItem>().ToArray();if(busy || selected.Length==0)return;
+            busy=true;Buttons();
+            try{await VerifyTrashSelectionAsync(window,selected,(item,ct)=>Task.Run(()=>ArchiveIntegrity.VerifyLocalAsync(root,item,ct),ct),lifetime.Token);}
+            catch(OperationCanceledException){}finally{busy=false;Buttons();}
+        }
         grid.SelectionChanged+=(_,_)=>Buttons();window.Closed+=(_,_)=>lifetime.Cancel();
         ShowTrashWorkspace(window);TrackAuxiliary(LoadAsync());
     }

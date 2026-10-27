@@ -25,12 +25,7 @@
     </StackPanel>
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,8">
     <StackPanel>
-    <GroupBox Header="문제 진단" Margin="0,0,0,12" Padding="12">
-      <StackPanel>
-        <CheckBox x:Name="OperationLogCheck" Content="상세 작동 로그 기록" ToolTip="프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 문제를 재현하기 전에 켜고, 확인이 끝나면 꺼주세요."/>
-        <TextBlock Text="문제가 있어 검증이 필요할 때만 켜세요. 확인이 끝나면 꺼주세요." TextWrapping="Wrap" Margin="0,7,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/>
-      </StackPanel>
-    </GroupBox>
+
     <GroupBox Header="보호 설정" Padding="16" Margin="0,0,0,14">
       <StackPanel>
         <CheckBox x:Name="AutoStartCheck" Content="Windows 로그인 시 SafeSync 자동 시작" Margin="0,2,0,14"/>
@@ -63,6 +58,12 @@
         <StackPanel Grid.Column="1" Orientation="Horizontal"><RadioButton x:Name="ThemeLightRadio" Content="라이트 모드" GroupName="SafeSyncThemeMode"/><RadioButton x:Name="ThemeDarkRadio" Content="다크 모드" GroupName="SafeSyncThemeMode" Margin="0"/></StackPanel>
         <TextBlock Grid.Column="2" Text="저장하면 모든 SafeSync 창에 적용됩니다." TextWrapping="Wrap" Margin="10,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource SafeSyncMutedBrush}"/>
       </Grid>
+    </GroupBox>
+    <GroupBox Header="문제 진단" Margin="0,0,0,12" Padding="12">
+      <StackPanel>
+        <CheckBox x:Name="OperationLogCheck" Content="상세 작동 로그 기록" ToolTip="프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 문제를 재현하기 전에 켜고, 확인이 끝나면 꺼주세요."/>
+        <TextBlock Text="문제가 있어 검증이 필요할 때만 켜세요. 확인이 끝나면 꺼주세요." TextWrapping="Wrap" Margin="0,7,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/>
+      </StackPanel>
     </GroupBox>
     </StackPanel>
     </ScrollViewer>

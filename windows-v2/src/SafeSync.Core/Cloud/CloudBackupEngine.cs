@@ -57,6 +57,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
             foreach(var path in catalog.State.Pending)if(!PathPolicy.Internal(path))pending.Add(path);
             ChangePlanner.Add(job.Source,changes ?? [],entries,pending,token,pause.ThrowIfStopRequested);
             if(resolutions!=null)foreach(var relative in resolutions.Keys)pending.Add(PathPolicy.Relative(relative));
+            MassChanges.Check(store,job,state,pending,tree);
             if(full){state.FullScanRequired=false;state.LastFullScanUtc=DateTime.UtcNow.ToString("O");}
             state.CheckpointActive=true;Save();catalog.Acknowledge();var work=pending.Order(StringComparer.OrdinalIgnoreCase).ToArray();int completed=0;
             IReadOnlyDictionary<string,RemoteItem?>? metadata=null;
@@ -91,10 +92,12 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                         }
                         roots.Check();
                         var action=resolutions!=null && resolutions.TryGetValue(relative,out var selected) ? selected : (ConflictAction?)null;
+                        using var sourceRead=info.Exists && !Directory.Exists(path) && action is not (ConflictAction.UseBackup or ConflictAction.Ignore) ? await SourceReadScope.OpenAsync(path,token) : null;
+                        if(sourceRead!=null){path=sourceRead.Path;info=sourceRead.Info;}
                         if(action==ConflictAction.Ignore){entries[relative]=FileEntry.From(info,relative,"Conflict","이번 동기화에서 제외");lock(checkpointLock)result.Skipped++;handled=true;return;}
                         if(catalog.IsAmbiguous(relative))
                         {
-                            PathPolicy.RejectLinks(job.Source,path);
+                            PathPolicy.RejectLinks(job.Source,PathPolicy.Combine(job.Source,relative));
                             if(action==null && remote is IRemoteDuplicates duplicates)
                             {
                                 if(Directory.Exists(path) && (await duplicates.CandidatesAsync(relative,token)) is {Count:>0} folders && folders.All(i=>i.Folder))

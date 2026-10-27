@@ -81,6 +81,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                 .OrderBy(p=>left.GetValueOrDefault(p) is DirectoryInfo || right?.GetValueOrDefault(p) is DirectoryInfo || remoteItems?.GetValueOrDefault(p)?.Folder==true || entries.GetValueOrDefault(p)?.Length==-1 ? 1 : 0)
                 .ThenByDescending(p=>p.Count(c=>c=='/')).ThenBy(p=>p,StringComparer.OrdinalIgnoreCase).ToArray();
             foreach(var path in work)pending.Add(path);
+            MassChanges.Check(store,job,state,pending,remoteItems);
             state.CheckpointActive=true;Save();catalog?.Acknowledge();
             int completed=0;bool stopRemote=false;
             try
@@ -177,7 +178,7 @@ public sealed class TwoWayEngine(ConfigStore store,IRemoteStore? remote)
                                     {
                                         var folder=await CurrentRemoteAsync(relative,b!,token);
                                         if((await remote.ListAsync(relative,token)).Count>0)throw new CloudConflictException(relative,"백업 폴더에 남아 있는 항목이 있어 폴더 삭제를 보류합니다.");
-                                        var trash=".safesync-trash/"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-two-way-folder-"+Guid.NewGuid().ToString("N")+"/"+relative;
+                                        var trash=".safesync-trash/"+RecoveryBatch.Folder("two-way-folder")+"/"+relative;
                                         var moved=await remote.MoveAsync(relative,trash,token);
                                         if(moved.Id!=folder.Id)throw new IOException("휴지통 폴더 식별 정보가 다릅니다.");
                                     }

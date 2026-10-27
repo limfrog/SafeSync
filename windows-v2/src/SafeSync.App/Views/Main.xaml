@@ -78,7 +78,7 @@
         <MenuItem x:Name="EditButton" Header="작업 수정"/><MenuItem x:Name="DeleteButton" Header="작업 삭제"/><Separator/>
         <MenuItem x:Name="FullScanButton" Header="전체 검사" ToolTip="정밀 검사: 모든 파일 내용을 다시 읽어 검증합니다. 일반 비교는 성공 기록과 파일 정보를 재사용하므로 크기·시각을 유지한 내용 변경은 놓칠 수 있습니다."/>
         <MenuItem x:Name="RebindCloudJobMenuItem" Header="클라우드 위치 다시 연결..." ToolTip="계정·폴더를 확인한 뒤 이전 삭제 기준을 재사용하지 않고 다시 연결합니다."/>
-        <MenuItem x:Name="ResolveJobMenuItem" Header="실패 원인 / 해결..."/>
+        <MenuItem x:Name="ResolveJobMenuItem" Header="실패 원인 / 해결..."/><MenuItem x:Name="MassChangesMenuItem" Header="대량 변경 검토..."/><MenuItem x:Name="VerifyRestoreMenuItem" Header="백업 복원 검증..."/>
         <Separator/><MenuItem x:Name="StopJobMenuItem" Header="작업 종료" ToolTip="현재 처리 중인 파일을 안전하게 마친 뒤 남은 작업을 저장하고 대기합니다. 지금 백업 또는 다시 시작으로 재개합니다."/>
       </MenuItem>
       <MenuItem Header="보기" Style="{StaticResource MenuHeaderItem}"><MenuItem x:Name="MenuProgressItem" Header="동기화 상태 창"/><MenuItem x:Name="MenuMessagesItem" Header="확인할 메시지"/><Separator/><MenuItem x:Name="TrashButton" Header="휴지통 관리"/></MenuItem>
@@ -112,7 +112,7 @@
         <WrapPanel x:Name="JobCommandBar" Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,0,12">
           <Button x:Name="AddButton" Style="{StaticResource CommandButton}" Content="＋ 새 작업" Background="{DynamicResource SafeSyncSurfaceBrush}"/>
           <Button x:Name="JobActionsButton" Style="{StaticResource CommandButton}" Content="작업 관리 ▾" MinWidth="100" ToolTip="선택한 작업 수정, 전체 검사 및 삭제">
-            <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><MenuItem Header="클라우드 위치 다시 연결..." Tag="RebindCloudJobMenuItem"/><MenuItem Header="작업 종료" Tag="StopJobMenuItem"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
+            <Button.ContextMenu><ContextMenu Placement="Bottom"><MenuItem Header="작업 수정" Tag="EditButton"/><MenuItem Header="전체 검사" Tag="FullScanButton"/><MenuItem Header="클라우드 위치 다시 연결..." Tag="RebindCloudJobMenuItem"/><MenuItem Header="대량 변경 검토..." Tag="MassChangesMenuItem"/><MenuItem Header="백업 복원 검증..." Tag="VerifyRestoreMenuItem"/><MenuItem Header="작업 종료" Tag="StopJobMenuItem"/><Separator/><MenuItem Header="작업 삭제" Tag="DeleteButton"/></ContextMenu></Button.ContextMenu>
           </Button>
           <Border Width="1" Height="22" Background="{DynamicResource SafeSyncBorderBrush}" Margin="5,6,11,6"/>
           <Button x:Name="RunButton" Style="{StaticResource CommandButton}" Content="▶ 지금 백업" ToolTip="저장된 변경 목록만 빠르게 확인하여 백업합니다." Background="{DynamicResource SafeSyncAccentBrush}" Foreground="White" BorderBrush="{DynamicResource SafeSyncAccentBrush}"/>

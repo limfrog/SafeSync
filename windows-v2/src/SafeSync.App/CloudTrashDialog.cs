@@ -51,7 +51,9 @@ internal sealed partial class DesktopController
         }
         async Task OperateAsync(bool restore)
         {
-            var selected=grid.SelectedItems.Cast<CloudTrashItem>().ToArray();if(busy || selected.Length==0)return;
+            var selected=grid.SelectedItems.Cast<CloudTrashItem>().ToArray();
+            if(restore && selected.Select(i=>i.RelativePath).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=selected.Length){status.Text="같은 경로는 한 버전만 선택하세요.";return;}
+            using var batch=new RecoveryBatch();if(busy || selected.Length==0)return;
             if(!jobs.Any(j=>ReferenceEquals(j,job))){status.Text="작업 설정이 변경되었습니다. 백업 작업 탭에서 휴지통을 다시 여세요.";Buttons();return;}
             if(scheduler.RunningCount>0 || LegacyRunning()){status.Text="모든 백업이 끝나고 기존 앱을 종료한 뒤 처리하세요.";return;}
             var notice=job.DestinationType=="Dropbox" ? "SafeSync 휴지통에서 제거합니다. Dropbox 자체 복구 정책은 별도로 적용됩니다." : "클라우드에서 완전히 삭제합니다. 되돌릴 수 없습니다.";
@@ -78,6 +80,14 @@ internal sealed partial class DesktopController
         }
         Click(window,"CloseButton",()=>SelectWorkspace("MainTab"));Click(window,"RefreshButton",()=>TrackAuxiliary(LoadAsync()));
         Click(window,"SelectAllButton",grid.SelectAll);Click(window,"RestoreButton",()=>TrackAuxiliary(OperateAsync(true)));Click(window,"DeleteButton",()=>TrackAuxiliary(OperateAsync(false)));
+        Click(window,"VerifyTrashButton",()=>TrackAuxiliary(VerifyAsync()));
+        async Task VerifyAsync()
+        {
+            var selected=grid.SelectedItems.Cast<CloudTrashItem>().ToArray();if(busy || selected.Length==0 || !initialized)return;
+            busy=true;Buttons();var gate=CloudBackupEngine.ScopeGate(remote);bool entered=false;
+            try{await gate.WaitAsync(lifetime.Token);entered=true;await VerifyTrashSelectionAsync(window,selected,(item,ct)=>ArchiveIntegrity.VerifyRemoteAsync(store,remote,item,ct),lifetime.Token);}
+            catch(OperationCanceledException){}finally{if(entered)gate.Release();busy=false;Buttons();}
+        }
         grid.SelectionChanged+=(_,_)=>Buttons();window.Closed+=(_,_)=>lifetime.Cancel();ShowTrashWorkspace(window);TrackAuxiliary(LoadAsync());
     }
 }

@@ -117,6 +117,8 @@ internal sealed partial class DesktopController
         Click(Main,"RebindCloudJobMenuItem",()=>{if(Selected is {} job)PrepareCloudJob(job,true);});
         Click(Main,"ResolveJobMenuItem",()=>{if(Selected is {} job)ShowJobRecovery(job);});
         Click(Main,"RunAllButton",RunAll);
+        Click(Main,"MassChangesMenuItem",ShowMassChangeReview);
+        Click(Main,"VerifyRestoreMenuItem",ShowRestoreCheck);
         Click(Main,"StopJobMenuItem",()=>
         {
             if(Selected is not {} job)return;
@@ -228,11 +230,13 @@ internal sealed partial class DesktopController
         Main.Find<MenuItem>("StopJobMenuItem").IsEnabled=selected && job?.Stopped==false;
         Main.Find<MenuItem>("RebindCloudJobMenuItem").IsEnabled=selected && job!.DestinationType!="Local" && !scheduler.IsRunning(job.Id);
         Main.Find<MenuItem>("ResolveJobMenuItem").IsEnabled=selected;
+        Main.Find<MenuItem>("MassChangesMenuItem").IsEnabled=selected && !scheduler.IsRunning(job!.Id);
         foreach(var name in new[]{"JobActionsButton","PauseButton"})Main.Find<Button>(name).IsEnabled=selected;
         Main.Find<Button>("RunButton").IsEnabled=local && (job?.Paused==false || job?.Stopped==true) && !stopping;
         Main.Find<Button>("PauseButton").IsEnabled=selected && !stopping;
         Main.Find<Button>("PauseButton").Content=job?.Stopped==true ? "▶ 작업 시작" : job?.Paused==true ? "▶ 다시 시작" : "Ⅱ 일시정지";
         Main.Find<Button>("PauseButton").ToolTip=job?.Stopped==true ? "종료 대기 중인 작업을 새 실행으로 시작합니다." : "현재 실행을 일시정지하거나 이어서 진행합니다.";
+        ApplyVerificationActions();
         foreach(var item in Main.Find<Button>("JobActionsButton").ContextMenu.Items.OfType<MenuItem>())item.IsEnabled=Main.Find<MenuItem>((string)item.Tag).IsEnabled;
     }
     private void Save()
@@ -291,6 +295,7 @@ internal sealed partial class DesktopController
         RememberProblem(job,JobProblem.From(ex,job.DestinationType!="Local"));
         RecordRun(()=>sessionHistory.Fail(job,ex));
         progress.Remove(job.Id);job.Status=NetworkFailures.IsTransient(ex) ? "네트워크 재시도 대기" : "실패";Log(job.Name+": "+ex.Message);
+        if(ex is MassChangeException){scheduler.StopJob(job);job.Status="대량 변경 검토 필요";Save();}
         if(ex is CloudBindingException && job.DestinationType!="Local")
         {job.CloudBindingReviewRequired=true;scheduler.StopJob(job);job.Status="클라우드 연결 확인 필요";Save();RefreshActions();}
         bool fresh=!NetworkFailures.IsTransient(ex) && noticeLedger.Add(job.Id,ex.Message);

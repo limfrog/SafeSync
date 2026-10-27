@@ -12,6 +12,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../SafeSync.Core/SafeSync.Core.csproj" />
+    <Content Include="../../native-vss/bin/SafeSync.Vss.exe" Link="SafeSync.Vss.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../native-vss/bin/SafeSync.Vss.exe')" />
     <Resource Include="Views/*.xaml" />
     <Resource Include="../../../outputs/SafeSync/SafeSync.ico" Link="Assets/SafeSync.ico" />
     <Content Include="../../../outputs/SafeSync/SafeSync-Progress-*.ico" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

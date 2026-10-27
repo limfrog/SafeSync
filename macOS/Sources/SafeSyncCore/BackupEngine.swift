@@ -32,6 +32,7 @@ public actor BackupEngine {
     }
     public static func validate(_ job: BackupJob) throws {
         let fm = FileManager.default
+        guard (1...1_000_000).contains(job.massMinimum), (1...100).contains(job.massPercent) else { throw BackupError.unsafe("대량 변경 보호 기준을 확인하세요.") }
         let source = canonical(job.source), target = canonical(job.destination)
         guard !job.name.trimmingCharacters(in: .whitespaces).isEmpty else { throw BackupError.unsafe("작업 이름을 입력하세요.") }
         guard job.cloudProvider != nil || !overlaps(source, target) else { throw BackupError.unsafe("원본과 백업 위치는 같거나 서로의 하위 폴더일 수 없습니다.") }
@@ -77,7 +78,10 @@ public actor BackupEngine {
         return dir
     }
     private func archive(_ file: URL, path: String, root: URL) throws {
-        let item = TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(file).size, directory: (try file.resourceValues(forKeys: [.isDirectoryKey])).isDirectory)
+        let isDirectory = (try file.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true
+        let checksum: String?
+        if isDirectory { checksum = nil } else { checksum = try Self.hash(file) }
+        let item = TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(file).size, directory: isDirectory, batchID: RecoveryBatch.id, expectedHash: checksum, hashKind: isDirectory ? nil : "sha256")
         let dir = try trashDirectory(root)
         try Storage.save(item, to: dir.appendingPathComponent("\(item.id).json"))
         do { try fm.moveItem(at: file, to: dir.appendingPathComponent("\(item.id).data")) }
@@ -129,7 +133,7 @@ public actor BackupEngine {
         try Task.checkCancellation()
         try validate()
         if fm.fileExists(atPath: destination.path) {
-            let tx = Transaction(destination: path, temporary: relative, expectedHash: digest, trash: TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(destination).size))
+            let tx = Transaction(destination: path, temporary: relative, expectedHash: digest, trash: TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(destination).size, batchID: RecoveryBatch.id, expectedHash: try Self.hash(destination), hashKind: "sha256"))
             try Storage.save(tx, to: journal); journalWritten = true
             guard renameatx_np(AT_FDCWD, temp.path, AT_FDCWD, destination.path, UInt32(RENAME_SWAP)) == 0 else { throw BackupError.unsafe("이 저장장치는 안전한 원자적 교체를 지원하지 않거나 파일에 접근할 수 없습니다 (\(errno)). 기존 백업을 보존합니다.") }
             try recover(root)
@@ -141,6 +145,9 @@ public actor BackupEngine {
         return digest
     }
     public func run(_ job: BackupJob, fullScan: Bool = false, changedPaths: Set<String>? = nil, deferredPaths: Set<String> = [], progress: @Sendable (BackupProgress) -> Void = { _ in }) throws -> BackupResult {
+        return try RecoveryBatch.withRun { try runCore(job, fullScan: fullScan, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: progress) }
+    }
+    private func runCore(_ job: BackupJob, fullScan: Bool = false, changedPaths: Set<String>? = nil, deferredPaths: Set<String> = [], progress: @Sendable (BackupProgress) -> Void = { _ in }) throws -> BackupResult {
         try Self.validate(job)
         let root = Self.canonical(job.destination), source = Self.canonical(job.source)
         var manifest = try loadManifest(job), result = BackupResult()
@@ -156,8 +163,11 @@ public actor BackupEngine {
         manifest.sourceRoot = source.path; manifest.destinationRoot = root.path
         manifest.sourceIdentity = sourceGuard.identity; manifest.destinationIdentity = targetGuard.identity
         let files: [String: FileStamp]
-        if let changedPaths, !fullScan, !legacy, !manifest.files.isEmpty { files = try SourceScanner.reconcile(root: source, known: manifest.files.mapValues(\.source), changed: changedPaths) }
+        if let changedPaths, !fullScan, !legacy, !MassChanges.blocked(directory: dataDirectory, job: job), !manifest.files.isEmpty { files = try SourceScanner.reconcile(root: source, known: manifest.files.mapValues(\.source), changed: changedPaths) }
         else { files = try scan(source) }
+        let massPrior = manifest.files.filter { $0.value.verificationVersion == 1 }.mapValues(\.source)
+        try MassChanges.check(directory: dataDirectory, job: job, baseline: massPrior.count,
+                              changes: MassChanges.differences(prior: massPrior, current: files, side: "원본", deletion: job.mirrorDeletes).filter { !deferredPaths.contains($0.path) }, roots: sourceGuard.identity + "|" + targetGuard.identity)
         // Include removed paths that never had a successful manifest entry (for stale conflict/wait cleanup).
         result.evaluatedPaths.formUnion((changedPaths ?? []).filter { !deferredPaths.contains($0) })
         let paths = files.keys.filter { path in
@@ -338,7 +348,35 @@ public actor BackupEngine {
         guard fm.fileExists(atPath: dir.path) else { return [] }
         return try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }.map { try Storage.load(TrashItem.self, from: $0) }.filter { fm.fileExists(atPath: dir.appendingPathComponent("\($0.id).data").path) }.sorted { $0.deletedAt > $1.deletedAt }
     }
+    public func verifyTrash(_ item: TrashItem, job: BackupJob) throws -> Bool {
+        let root = Self.canonical(job.destination)
+        let metadata = try child(root, ".safesync-trash/\(item.id).json")
+        let saved = try Storage.load(TrashItem.self, from: metadata)
+        guard saved.id == item.id, saved.path == item.path, saved.size == item.size, saved.expectedHash == item.expectedHash else { throw BackupError.unsafe("휴지통 기록이 변경되었습니다. 다시 불러오세요.") }
+        let stored = try child(root, ".safesync-trash/\(item.id).data")
+        if saved.directory == true { _ = try fm.contentsOfDirectory(atPath: stored.path); return false }
+        let digest = try Self.hash(stored)
+        guard try FileStamp(stored).size == saved.size else { throw BackupError.unsafe("보관 파일 크기가 달라 복원을 중단했습니다.") }
+        guard let expected = saved.expectedHash else { return false }
+        guard saved.hashKind == "sha256", expected == digest else { throw BackupError.unsafe("보관 당시 체크섬과 다릅니다. 손상 가능성이 있어 복원을 중단했습니다.") }
+        return true
+    }
+    public func verifyBackup(_ job: BackupJob, progress: @Sendable (RestoreCheckRow) -> Void = { _ in }) throws -> [RestoreCheckRow] {
+        let manifest = try loadManifest(job), root = Self.canonical(job.destination)
+        if let source = manifest.sourceRoot, source != Self.canonical(job.source).path { throw BackupError.unsafe("검증 작업이 성공 백업의 위치와 다릅니다.") }
+        if let target = manifest.destinationRoot, target != root.path { throw BackupError.unsafe("백업 위치가 변경되었습니다.") }
+        let guardRoot = try LocalRootGuard(job.destination, expected: manifest.destinationIdentity); var rows: [RestoreCheckRow] = []
+        for (path,record) in manifest.files.sorted(by: { $0.key < $1.key }) {
+            try Task.checkCancellation(); try guardRoot.verify(); let row: RestoreCheckRow
+            do { row = try RestoreVerifier.local(child(root,path), path: path, expected: record.hash) }
+            catch is CancellationError { throw CancellationError() }
+            catch { row = RestoreCheckRow(path: path, length: record.backup.size, status: "실패", detail: error.localizedDescription) }
+            rows.append(row); progress(row)
+        }
+        try guardRoot.verify(); return rows
+    }
     public func restore(_ item: TrashItem, job: BackupJob) throws {
+        _ = try verifyTrash(item, job: job)
         guard item.path.split(separator: "/").first?.hasPrefix(".safesync-") != true else { throw BackupError.unsafe("SafeSync 내부 경로에는 복구할 수 없습니다.") }
         let root = Self.canonical(job.destination)
         let fd = try lock(root); defer { flock(fd, LOCK_UN); Darwin.close(fd) }

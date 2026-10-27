@@ -19,6 +19,10 @@ public sealed class BackupJob
     public string TriggerType { get; set; } = "Realtime";
     public string ScheduleTime { get; set; } = "23:00";
     public bool MirrorDeletes { get; set; }
+    public bool ProtectMassChanges {get;set;}=true;
+    public int MassChangeMinimum {get;set;}=100;
+    public int MassChangePercent {get;set;}=20;
+    public bool UseVss {get;set;}
     public bool Paused { get; set; }
     public bool Stopped { get; set; }
     public string LastScheduledRun { get; set; } = "";
@@ -72,6 +76,7 @@ public sealed class FileEntry
     public string RemoteId { get; set; } = "";
     // Only populated after verified content equality or a verified upload.
     public Cloud.RemoteItem? VerifiedRemote { get; set; }
+    public string VerifiedBackupSha256 {get;set;}="";
     public string RemoteParentId { get; set; } = "";
     // Older snapshots must not authorize deletion until this source was observed
     // under a verified root. Missing legacy files remain reviewable conflicts.
@@ -141,6 +146,8 @@ public sealed class BackupResult
 public sealed record TrashItem(string StoragePath, string Name, DateTime DeletedAt, string OriginalPath,
     string RelativePath, long Length)
 {
+    public string BatchId=>RecoveryBatch.FromPath(StoragePath);
+    [JsonIgnore] public string VerificationStatus {get;set;}="미검증";
     public string DeletedAtText => DeletedAt.ToString("yyyy-MM-dd HH:mm:ss");
     public string SizeText => Length < 1024 ? $"{Length} B" : $"{Length / 1024d:N1} KB";
 }

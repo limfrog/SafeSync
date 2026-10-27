@@ -85,7 +85,7 @@ public actor CloudBackupEngine {
     }
     private func archiveLocation(_ previous: RemoteItem, path: String, root: String, storage: any RemoteStorage) async throws -> String {
         let trash = try await storage.ensureFolder(name: ".safesync-trash", parent: root)
-        let item = TrashItem(id: UUID(), path: path, deletedAt: Date(), size: previous.size, directory: previous.folder)
+        let item = TrashItem(id: UUID(), path: path, deletedAt: Date(), size: previous.size, directory: previous.folder, batchID: RecoveryBatch.id, expectedHash: previous.hash, hashKind: previous.hashKind)
         let directory = try await storage.ensureFolder(name: item.id.uuidString, parent: trash.locator)
         try await writeTrashMetadata(item, folder: directory.locator, storage: storage)
         return directory.locator
@@ -226,6 +226,11 @@ public actor CloudBackupEngine {
     public func run(_ job: BackupJob, storage: any RemoteStorage, fullScan: Bool = false,
                     forceContentVerification: Bool = false, changedPaths: Set<String>? = nil,
                     deferredPaths: Set<String> = [], progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }) async throws -> BackupResult {
+        return try await RecoveryBatch.withRun { try await runCore(job, storage: storage, fullScan: fullScan, forceContentVerification: forceContentVerification, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: progress) }
+    }
+    private func runCore(_ job: BackupJob, storage: any RemoteStorage, fullScan: Bool = false,
+                    forceContentVerification: Bool = false, changedPaths: Set<String>? = nil,
+                    deferredPaths: Set<String> = [], progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }) async throws -> BackupResult {
         try BackupEngine.validate(job)
         let token = try lease(job); defer { release(token) }
         var state = try loaded(job), result = BackupResult()
@@ -280,12 +285,15 @@ public actor CloudBackupEngine {
             return current.hashKind == verified.hashKind && current.hash != nil && current.hash?.isEmpty == false && current.hash == verified.hash
         }
         let scannedFiles: [String: FileStamp]
-        if let changedPaths, !fullScan, !legacy, !state.files.isEmpty { scannedFiles = try SourceScanner.reconcile(root: source, known: state.files.mapValues(\.source), changed: changedPaths) }
+        if let changedPaths, !fullScan, !legacy, !MassChanges.blocked(directory: dataDirectory, job: job), !state.files.isEmpty { scannedFiles = try SourceScanner.reconcile(root: source, known: state.files.mapValues(\.source), changed: changedPaths) }
         else { scannedFiles = try SourceScanner.files(source) }
         let excluded = Set(scannedFiles.keys).union(state.files.keys).filter { CloudPathPolicy.isExcluded($0, provider: storage.provider) }
         result.evaluatedPaths.formUnion(excluded); result.skipped += excluded.count
         let files = scannedFiles.filter { !CloudPathPolicy.isExcluded($0.key, provider: storage.provider) }
         if storage.provider == .dropbox, Set(files.keys.map { $0.lowercased() }).count != files.count { throw BackupError.unsafe("원본에 대소문자만 다른 파일이 있습니다. Dropbox는 두 파일을 구분할 수 없습니다.") }
+        let massPrior = state.files.filter { $0.value.verificationVersion == 1 }.mapValues(\.source)
+        try MassChanges.check(directory: dataDirectory, job: job, baseline: massPrior.count,
+                              changes: MassChanges.differences(prior: massPrior, current: files, side: "원본", deletion: job.mirrorDeletes).filter { !deferredPaths.contains($0.path) }, roots: sourceGuard.identity + "|" + remoteRoot)
         // Include removed paths that never had a successful manifest entry (for stale conflict/wait cleanup).
         result.evaluatedPaths.formUnion((changedPaths ?? []).filter { !deferredPaths.contains($0) })
         let paths = try files.keys.filter { path in
@@ -510,6 +518,51 @@ public actor CloudBackupEngine {
         return result.sorted { $0.0.deletedAt > $1.0.deletedAt }
     }
     public func listTrash(_ job: BackupJob, storage: any RemoteStorage) async throws -> [TrashItem] { try await trashEntries(job, storage: storage).map { $0.0 } }
+    public func verifyBackup(_ job: BackupJob, storage: any RemoteStorage, progress: @Sendable (RestoreCheckRow) -> Void = { _ in }) async throws -> [RestoreCheckRow] {
+        let token = try lease(job); defer { release(token) }
+        let state = try loaded(job); _ = try await verifyRemoteRoot(job, storage: storage, expected: state.remoteRootIdentity)
+        let index = try await storage.inventory(root: job.cloudFolderID!, previous: state.inventory), raw = try index.groupsByPath()
+        var groups: [String:[RemoteItem]] = [:]
+        for (path,items) in raw { groups[storage.provider == .dropbox ? path.lowercased() : path, default: []] += items }
+        var rows: [RestoreCheckRow] = []
+        for (path,record) in state.files.sorted(by: { $0.key < $1.key }) {
+            try Task.checkCancellation(); let row: RestoreCheckRow
+            do {
+                let candidates = groups[storage.provider == .dropbox ? path.lowercased() : path] ?? []
+                guard candidates.count == 1, let current = candidates.first, !current.folder else { throw BackupError.unsafe("백업 파일이 없거나 같은 이름의 사본이 여러 개입니다.") }
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("SafeSync-restore-check-\(UUID())")
+                try fm.createDirectory(at: folder, withIntermediateDirectories: false); defer { try? fm.removeItem(at: folder) }
+                let local = folder.appendingPathComponent("payload"); try await storage.download(current, to: local); try ContentHash.verify(current, file: local); _ = try await fresh(current, storage: storage)
+                let expected = record.sourceSHA256 ?? record.verifiedRemote?.hash
+                let kind = record.sourceSHA256 != nil ? "sha256" : record.verifiedRemote?.hashKind
+                if let expected, let kind { let digest = try ContentHash.compute(local, kind: kind); row = RestoreCheckRow(path: path, length: current.size, status: digest == expected ? "정상" : "실패", detail: digest == expected ? "임시 복원 내용이 성공 백업 체크섬과 일치합니다." : "마지막 성공 백업과 내용이 다릅니다.") }
+                else { row = RestoreCheckRow(path: path, length: current.size, status: "기준 없음", detail: "임시 복원은 가능하지만 이전 성공 체크섬 기준이 없습니다.") }
+            } catch is CancellationError { throw CancellationError() }
+            catch { if NetworkFailurePolicy.isTransient(error) || error is APIError { throw error }; row = RestoreCheckRow(path: path, length: record.source.size, status: "실패", detail: error.localizedDescription) }
+            rows.append(row); progress(row)
+        }
+        _ = try await verifyRemoteRoot(job, storage: storage, expected: state.remoteRootIdentity); return rows
+    }
+    private func verifyEntry(_ saved: TrashItem, payload: RemoteItem, selected: TrashItem, storage: any RemoteStorage) async throws -> Bool {
+        try FileComparisons.validatePath(saved.path)
+        guard saved.id == selected.id, saved.path == selected.path, saved.size == selected.size, saved.expectedHash == selected.expectedHash else { throw BackupError.unsafe("휴지통 기록이 바뀌었습니다. 다시 불러오세요.") }
+        _ = try await fresh(payload, storage: storage)
+        if payload.folder { return false }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("SafeSync-restore-check-\(UUID())")
+        try fm.createDirectory(at: folder, withIntermediateDirectories: false); defer { try? fm.removeItem(at: folder) }
+        let local = folder.appendingPathComponent("payload")
+        try await storage.download(payload, to: local); try ContentHash.verify(payload, file: local)
+        guard try FileStamp(local).size == saved.size else { throw BackupError.unsafe("보관 파일 크기가 다릅니다. 복원을 중단했습니다.") }
+        _ = try await fresh(payload, storage: storage)
+        guard let expected = saved.expectedHash, let kind = saved.hashKind else { return false }
+        guard ["sha256", "md5", "dropbox"].contains(kind), try ContentHash.compute(local, kind: kind) == expected else { throw BackupError.unsafe("보관 당시 체크섬과 다릅니다. 복원을 중단했습니다.") }
+        return true
+    }
+    public func verifyTrash(_ item: TrashItem, job: BackupJob, storage: any RemoteStorage) async throws -> Bool {
+        let token = try lease(job); defer { release(token) }
+        guard let (saved,payload,_) = try await trashEntries(job, storage: storage).first(where: { $0.0.id == item.id }) else { throw BackupError.unsafe("검증할 파일을 찾을 수 없습니다.") }
+        return try await verifyEntry(saved, payload: payload, selected: item, storage: storage)
+    }
     public func restore(_ items: [TrashItem], job: BackupJob, storage: any RemoteStorage) async throws {
         if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
         let token = try lease(job); defer { release(token) }
@@ -518,7 +571,8 @@ public actor CloudBackupEngine {
         let entries = try await trashEntries(job, storage: storage)
         for item in items {
             guard !item.path.hasPrefix("/"), !item.path.split(separator: "/").contains(".."), item.path.split(separator: "/").first?.hasPrefix(".safesync-") != true else { throw BackupError.unsafe("안전하지 않은 휴지통 복구 경로입니다.") }
-            guard let (_, payload, originalFolder) = entries.first(where: { $0.0.id == item.id }) else { throw BackupError.unsafe("복구 파일을 찾을 수 없습니다.") }
+            guard let (saved, payload, originalFolder) = entries.first(where: { $0.0.id == item.id }) else { throw BackupError.unsafe("복구 파일을 찾을 수 없습니다.") }
+            _ = try await verifyEntry(saved, payload: payload, selected: item, storage: storage)
             let parent = try await storage.folder(path: (item.path as NSString).deletingLastPathComponent, root: job.cloudFolderID!), name = (item.path as NSString).lastPathComponent
             let matches = try await storage.children(parent).filter { $0.name == name }
             guard matches.count <= 1 else { throw BackupError.unsafe("복구 위치에 파일 이름이 중복되었습니다.") }

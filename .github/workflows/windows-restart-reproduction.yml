@@ -2,7 +2,7 @@ name: Windows restart reproduction
 
 on:
   push:
-    branches: [main, 'codex/windows-restart-reproduction-*', 'codex/fix-restart-index-*', 'codex/drive-file-*']
+    branches: [main, 'codex/windows-restart-reproduction-*', 'codex/fix-restart-index-*', 'codex/drive-file-*', 'codex/recovery-vss-*']
     paths:
       - '.github/workflows/windows-restart-reproduction.yml'
       - 'windows-v2/tests/SafeSync.RestartProbe/**'
@@ -15,6 +15,8 @@ on:
       - 'windows-v2/PREVIEW16-VALIDATION.md'
       - 'windows-v2/PREVIEW17-VALIDATION.md'
       - 'windows-v2/scripts/Build.ps1'
+      - 'windows-v2/scripts/Build-Vss.ps1'
+      - 'windows-v2/native-vss/**'
   workflow_dispatch:
   workflow_call:
 
@@ -66,6 +68,8 @@ jobs:
           Get-ChildItem windows-v2/src/SafeSync.Core -File -Recurse | Get-FileHash -Algorithm SHA256 | Select-Object Path,Hash | ConvertTo-Json | Set-Content (Join-Path $report 'production-core-hashes.json')
       - name: Build restart test harness
         run: dotnet build windows-v2/tests/SafeSync.RestartProbe -c Release
+      - name: Build native VSS requester
+        run: ./windows-v2/scripts/Build-Vss.ps1
       - name: Reproduce scheduler startup in fresh processes
         run: |
           dotnet windows-v2/tests/SafeSync.RestartProbe/bin/Release/net10.0-windows/SafeSync.RestartProbe.dll $env:SAFESYNC_PROBE_LOCAL $env:SAFESYNC_PROBE_UNC $env:SAFESYNC_PROBE_REPORT
@@ -77,6 +81,10 @@ jobs:
         run: |
           dotnet run --project windows-v2/tests/SafeSync.Tests -c Release -- $env:RUNNER_TEMP | Tee-Object -FilePath (Join-Path $env:SAFESYNC_PROBE_REPORT 'regression.txt')
           if ($LASTEXITCODE -ne 0) { throw 'Existing regression suite failed.' }
+      - name: Verify locked-file VSS read and snapshot cleanup on isolated NTFS
+        run: |
+          dotnet windows-v2/tests/SafeSync.Tests/bin/Release/net10.0-windows/SafeSync.Tests.dll $env:RUNNER_TEMP --real-vss (Join-Path $env:SAFESYNC_PROBE_LOCAL 'vss-only') (Join-Path $env:GITHUB_WORKSPACE 'windows-v2/native-vss/bin/SafeSync.Vss.exe') | Tee-Object -FilePath (Join-Path $env:SAFESYNC_PROBE_REPORT 'vss.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Isolated native VSS read or cleanup failed.' }
       - name: Upload isolated Google Drive trial utility
         if: success() && matrix.os == 'windows-2022' && startsWith(github.ref, 'refs/heads/codex/drive-file-')
         uses: actions/upload-artifact@v4
@@ -94,10 +102,10 @@ jobs:
         if: success() && matrix.os == 'windows-2022'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-preview26-package
+          name: windows-preview27-package
           path: |
-            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.26.exe
-            windows-v2/artifacts/SafeSync-1.0.0-preview.26-Windows-x64.zip
+            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.27.exe
+            windows-v2/artifacts/SafeSync-1.0.0-preview.27-Windows-x64.zip
           if-no-files-found: error
           retention-days: 7
       - name: Upload synthetic test reports even on failure

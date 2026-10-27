@@ -32,3 +32,4 @@ work/safesync-tray-*.png
 windows-v2/**/bin/
 windows-v2/**/obj/
 windows-v2/artifacts/
+windows-v2/native-vss/bin/

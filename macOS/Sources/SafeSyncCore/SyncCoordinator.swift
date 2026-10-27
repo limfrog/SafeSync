@@ -26,6 +26,35 @@ public actor SyncCoordinator {
     public init(dataDirectory: URL = Storage.applicationDirectory) {
         directory = dataDirectory; local = BackupEngine(dataDirectory: dataDirectory); cloud = CloudBackupEngine(dataDirectory: dataDirectory)
     }
+    public func verifyBackup(_ job: BackupJob, storage: (any RemoteStorage)? = nil, progress: @Sendable (RestoreCheckRow) -> Void = { _ in }) async throws -> [RestoreCheckRow] {
+        let fd = try lease(job.id); defer { flock(fd,LOCK_UN); Darwin.close(fd) }
+        let file = directory.appendingPathComponent("two-way/\(job.id).json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
+        let state = try Storage.load(Baseline.self, from: file)
+        guard FileComparisons.sameEndpoints(state.endpoint, job) else { throw BackupError.unsafe("검증할 백업의 위치 또는 계정이 바뀌었습니다.") }
+        var groups: [String:[RemoteItem]] = [:]
+        if let storage {
+            if let google = storage as? GoogleDriveStorage { try await google.validateJobAccess(job) }
+            guard let root = try await storage.metadata(job.cloudFolderID!), root.id == state.backupRoot else { throw BackupError.unsafe("클라우드 백업 루트가 바뀌었습니다.") }
+            let index = try await storage.inventory(root: job.cloudFolderID!, previous: state.remoteInventory)
+            for (path,items) in try index.groupsByPath() { groups[storage.provider == .dropbox ? path.lowercased() : path, default: []] += items }
+        }
+        let guardRoot = storage == nil ? try LocalRootGuard(job.destination, expected: state.backupRoot) : nil
+        var rows: [RestoreCheckRow] = []
+        for (path,pair) in state.files.sorted(by: { $0.key < $1.key }) where pair.backup?.folder == false {
+            try Task.checkCancellation(); let row: RestoreCheckRow
+            do {
+                if let storage {
+                    let found = groups[storage.provider == .dropbox ? path.lowercased() : path] ?? []
+                    guard found.count == 1, let item = found.first else { throw BackupError.unsafe("백업이 없거나 같은 이름의 사본이 여러 개입니다.") }
+                    row = try await RestoreVerifier.cloud(item, path: path, expected: pair.verifiedRemote?.hash, kind: pair.verifiedRemote?.hashKind, storage: storage)
+                } else { try guardRoot?.verify(); row = try RestoreVerifier.local(SourceScanner.file(BackupEngine.canonical(job.destination),path:path), path: path, expected: pair.backup?.hash) }
+            } catch is CancellationError { throw CancellationError() }
+            catch { if NetworkFailurePolicy.isTransient(error) || error is APIError { throw error }; row = RestoreCheckRow(path:path,length:pair.backup?.stamp.size ?? 0,status:"실패",detail:error.localizedDescription) }
+            rows.append(row);progress(row)
+        }
+        try guardRoot?.verify(); return rows
+    }
     private func lease(_ id: UUID) throws -> Int32 {
         let folder = directory.appendingPathComponent("two-way/locks")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -84,6 +113,11 @@ public actor SyncCoordinator {
         try await visit(root, prefix: ""); return paths
     }
     public func run(_ job: BackupJob, storage: (any RemoteStorage)? = nil, fullScan: Bool = false,
+                    forceContentVerification: Bool = false, changedPaths: Set<String>? = nil,
+                    deferredPaths: Set<String> = [], progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }) async throws -> BackupResult {
+        return try await RecoveryBatch.withRun { try await runCore(job, storage: storage, fullScan: fullScan, forceContentVerification: forceContentVerification, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: progress) }
+    }
+    private func runCore(_ job: BackupJob, storage: (any RemoteStorage)? = nil, fullScan: Bool = false,
                     forceContentVerification: Bool = false, changedPaths: Set<String>? = nil,
                     deferredPaths: Set<String> = [], progress: @escaping @Sendable (BackupProgress) -> Void = { _ in }) async throws -> BackupResult {
         try BackupEngine.validate(job)
@@ -162,6 +196,25 @@ public actor SyncCoordinator {
                                   source: source, backup: backup)
         }
         var snapshots: [String: FileComparison] = [:], fastPaths: Set<String> = []
+        if job.protectMassChanges, state.files.count >= job.massMinimum {
+            let priorLeft = state.files.compactMapValues { $0.source?.folder == false ? $0.source?.stamp : nil }
+            let currentLeft = try MassChanges.localStamps(root: BackupEngine.canonical(job.source), paths: Set(priorLeft.keys))
+            var mass = MassChanges.differences(prior: priorLeft, current: currentLeft, side: "원본", deletion: true)
+            if storage != nil {
+                for (path,pair) in state.files where pair.backup?.folder == false && !deferredPaths.contains(path) {
+                    guard let old = pair.verifiedRemote else { continue }
+                    let current = remoteGroup(path).first
+                    if current?.id != old.id || current?.size != old.size || current?.modified != old.modified || current?.hash != old.hash {
+                        mass.append(MassChange(path: path, side: "백업", action: current == nil ? "삭제" : "변경", before: old.id + "|" + (old.hash ?? ""), after: (current?.id ?? "missing") + "|" + (current?.hash ?? "")))
+                    }
+                }
+            } else {
+                let priorRight = state.files.compactMapValues { $0.backup?.folder == false ? $0.backup?.stamp : nil }
+                let currentRight = try MassChanges.localStamps(root: BackupEngine.canonical(job.destination), paths: Set(priorRight.keys))
+                mass += MassChanges.differences(prior: priorRight, current: currentRight, side: "백업", deletion: true)
+            }
+            try MassChanges.check(directory: directory, job: job, baseline: priorLeft.count, changes: mass.filter { !deferredPaths.contains($0.path) }, roots: sourceRoot + "|" + backupRoot)
+        }
         for path in all.sorted() {
             if let comparison = try cached(path) { snapshots[path] = comparison; fastPaths.insert(path) }
             else { snapshots[path] = try await FileComparisons.read(job: job, path: path, storage: storage) }

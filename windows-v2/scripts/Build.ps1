@@ -2,6 +2,7 @@
 param([string]$DotnetPath='dotnet',[switch]$RunTests,[switch]$BundleRuntime,[string]$DropboxAppKey='')
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
+if($BundleRuntime){& (Join-Path $PSScriptRoot 'Build-Vss.ps1')}
 $workspace=Split-Path $root -Parent
 $version=[string]([xml](Get-Content -LiteralPath (Join-Path $root 'Directory.Build.props') -Raw)).Project.PropertyGroup.Version
 $cache=Join-Path $workspace 'work/native-v2-build-cache'

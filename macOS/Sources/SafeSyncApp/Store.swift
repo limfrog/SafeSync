@@ -59,6 +59,15 @@ import CoreServices
     @Published var isImportingJobList = false
     @Published var editing: BackupJob?
     @Published var trash: [TrashItem] = []
+    @Published var massProposal: MassChangeProposal?
+    @Published var trashVerification: [UUID: String] = [:]
+    @Published var trashCheckSummary = ""
+    @Published var restoreCheckJob: BackupJob?
+    @Published var restoreCheckRows: [RestoreCheckRow] = []
+    @Published var restoreCheckSummary = "백업 사본을 임시 위치에 읽어 성공 기록과 비교합니다. 원본과 백업 파일은 변경하지 않습니다."
+    @Published var busyRestoreCheck = false
+    private var restoreCheckTask: Task<Void,Never>?
+    private var restoreCheckGeneration = UUID()
     @Published var trashJob: BackupJob?
     @Published var busyTrash = false
     private var trashGeneration = UUID()
@@ -77,7 +86,7 @@ import CoreServices
     private var configurationUsable = true
     var selected: BackupJob? { jobs.first { $0.id == selection } }
     var runningCount: Int { running.count }
-    var canImportJobList: Bool { configurationUsable && running.isEmpty && !busyTrash && !validatingCloud && !isImportingJobList }
+    var canImportJobList: Bool { configurationUsable && running.isEmpty && !busyTrash && !busyRestoreCheck && !validatingCloud && !isImportingJobList }
     let accountsURL = Storage.applicationDirectory.appendingPathComponent("accounts.json")
     let settingsURL = Storage.applicationDirectory.appendingPathComponent("jobs.json")
     let issuesURL = Storage.applicationDirectory.appendingPathComponent("issues.json")
@@ -124,7 +133,7 @@ import CoreServices
         guard configurationUsable, !isImportingJobList else { throw BackupError.unsafe("설정을 읽을 수 없거나 작업 목록을 가져오는 중입니다.") }
         try BackupEngine.validate(job)
         if job.cloudProvider == .googleDrive { try GoogleFileAccess.validateJob(job) }
-        guard running[job.id] == nil else { throw BackupError.unsafe("실행 중인 작업은 완료 후 수정하세요.") }
+        guard running[job.id] == nil, !(busyRestoreCheck && restoreCheckJob?.id == job.id) else { throw BackupError.unsafe("실행 또는 복원 검증을 완료한 뒤 수정하세요.") }
         for other in jobs where other.id != job.id {
             if (job.mode == .twoWay || other.mode == .twoWay), BackupEngine.overlaps(BackupEngine.canonical(job.source), BackupEngine.canonical(other.source)) { throw BackupError.unsafe("양방향 작업의 원본 위치는 다른 작업의 원본과 겹칠 수 없습니다.") }
             if job.cloudProvider == nil, BackupEngine.overlaps(BackupEngine.canonical(job.destination), BackupEngine.canonical(other.source)) { throw BackupError.unsafe("백업 위치가 다른 작업의 원본과 겹칩니다.") }
@@ -174,7 +183,7 @@ import CoreServices
         var job = requested
         if !automatic, job.stopped == true { job.stopped = false; if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].stopped = false }; save() }
         if automatic && job.stopped == true { return false }
-        guard configurationUsable, !isImportingJobList, running[job.id] == nil, !job.paused, !busyTrash else { return false }
+        guard configurationUsable, !isImportingJobList, running[job.id] == nil, !job.paused, !busyTrash, !(busyRestoreCheck && restoreCheckJob?.id == job.id) else { return false }
         if job.cloudProvider != nil, !accounts.contains(where: { $0.id == job.cloudAccountID && $0.provider == job.cloudProvider }) {
             statuses[job.id] = "계정 연결 필요"
             if !automatic { error = "클라우드 계정을 연결하고 작업 수정에서 계정과 백업 폴더를 선택하세요." }
@@ -325,6 +334,7 @@ import CoreServices
                         self.issues.append(FileAccess.issue(error, jobID: job.id, path: ""))
                         if !NetworkFailurePolicy.isTransient(error) { self.error = error.localizedDescription }
                     }
+                    if error is MassChangeBlocked, let index = self.jobs.firstIndex(where: { $0.id == job.id }) { self.jobs[index].stopped = true; self.statuses[job.id] = "대량 변경 검토 필요" }
                     self.scheduleRetry(job.id); self.save()
                 }
                 return (false, NetworkFailurePolicy.isTransient(error))
@@ -506,7 +516,7 @@ import CoreServices
         if let i = jobs.firstIndex(where: { $0.id == job.id }) { jobs[i].paused = true; save() }
         busyTrash = true
         Task {
-            do { if job.cloudProvider != nil { try await cloudEngine.restore(items, job: job, storage: remote(job)) } else { for item in items { try await engine.restore(item, job: job) } }; log("휴지통 복구 완료 · 작업은 일시정지 상태입니다.") }
+            do { try await RecoveryBatch.withRun { if job.cloudProvider != nil { try await cloudEngine.restore(items, job: job, storage: remote(job)) } else { for item in items { try await engine.restore(item, job: job) } } }; log("휴지통 복구 완료 · 작업은 일시정지 상태입니다.") }
             catch { self.error = error.localizedDescription }
             busyTrash = false; refreshTrash(job)
         }
@@ -516,6 +526,55 @@ import CoreServices
         guard running[job.id] == nil else { error = "백업 완료 또는 일시정지 후 휴지통을 정리하세요."; return }
         busyTrash = true
         Task { do { if job.cloudProvider != nil { try await cloudEngine.deleteTrash(items, job: job, storage: remote(job)) } else { try await engine.deleteTrash(items, job: job) } } catch { self.error = error.localizedDescription }; busyTrash = false; refreshTrash(job) }
+    }
+    func verifyTrash(_ items: [TrashItem]) {
+        guard let job = trashJob, !busyTrash, running[job.id] == nil, !items.isEmpty else { return }
+        busyTrash = true; trashCheckSummary = "선택한 사본을 읽어 검증합니다. 원래 위치는 변경하지 않습니다."
+        Task {
+            var okay = 0, legacy = 0, failed = 0
+            for item in items {
+                trashVerification[item.id] = "검증 중…"
+                do {
+                    let known = if job.cloudProvider == nil { try await engine.verifyTrash(item, job: job) } else { try await cloudEngine.verifyTrash(item, job: job, storage: remote(job)) }
+                    if known { okay += 1; trashVerification[item.id] = "정상" } else { legacy += 1; trashVerification[item.id] = "기준 없음" }
+                } catch { failed += 1; trashVerification[item.id] = "실패: \(error.localizedDescription)" }
+                trashCheckSummary = "검증 \(okay+legacy+failed)/\(items.count) · 정상 \(okay) · 기준 없음 \(legacy) · 실패 \(failed)"
+            }
+            busyTrash = false
+        }
+    }
+    func showRestoreCheck() {
+        guard !busyRestoreCheck, let job = selected, running[job.id] == nil else { return }
+        restoreCheckJob = job; restoreCheckRows = []
+        restoreCheckSummary = "백업을 임시 위치에 읽어 마지막 성공 체크섬과 비교합니다. 검증하는 동안 이 작업의 자동 실행만 대기합니다."
+        openAppWindow?("restore-check")
+    }
+    func cancelRestoreCheck() { restoreCheckTask?.cancel() }
+    func startRestoreCheck() {
+        guard !busyRestoreCheck, let job = restoreCheckJob, running[job.id] == nil,
+              jobs.contains(where: { FileComparisons.sameEndpoints($0,job) }) else { return }
+        let token = UUID(); restoreCheckGeneration = token; busyRestoreCheck = true; restoreCheckRows = []
+        restoreCheckSummary = "백업 파일을 읽어 검증하는 중…"
+        let engine = self.engine, cloudEngine = self.cloudEngine, coordinator = self.coordinator
+        restoreCheckTask = Task {
+            do {
+                let storage = job.cloudProvider == nil ? nil : try remote(job)
+                let update: @Sendable (RestoreCheckRow) -> Void = { [weak self] row in
+                    Task { @MainActor in
+                        guard let self, self.restoreCheckGeneration == token, self.busyRestoreCheck else { return }
+                        self.restoreCheckSummary = "검증 중 · 현재 파일: \(row.path) · \(row.status)"
+                    }
+                }
+                let rows: [RestoreCheckRow]
+                if job.mode == .twoWay { rows = try await coordinator.verifyBackup(job,storage:storage,progress:update) }
+                else if let storage { rows = try await cloudEngine.verifyBackup(job,storage:storage,progress:update) }
+                else { rows = try await engine.verifyBackup(job,progress:update) }
+                restoreCheckRows = rows
+                restoreCheckSummary = rows.isEmpty ? "성공 백업 기록이 없습니다. 먼저 백업을 실행하세요." : "검증 완료 · 정상 \(rows.filter{$0.status == "정상"}.count) · 기준 없음 \(rows.filter{$0.status == "기준 없음"}.count) · 실패 \(rows.filter{$0.status == "실패"}.count)"
+            } catch is CancellationError { restoreCheckSummary = "검증을 취소했습니다. 백업 파일은 변경하지 않았습니다." }
+            catch { restoreCheckSummary = "검증 중단: \(error.localizedDescription)" }
+            busyRestoreCheck = false; restoreCheckTask = nil
+        }
     }
     private func installWindowPolicy() {
         for name in [NSWindow.willCloseNotification, NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification, NSWindow.didBecomeKeyNotification] {

@@ -22,6 +22,12 @@ public struct BackupJob: Codable, Identifiable, Hashable, Sendable {
     public var cloudAccountID: UUID?
     public var cloudFolderID: String?
     public var cloudAccessMode: String?
+    public var massProtectionEnabled: Bool?
+    public var massChangeMinimum: Int?
+    public var massChangePercent: Int?
+    public var protectMassChanges: Bool { get { massProtectionEnabled ?? true } set { massProtectionEnabled = newValue } }
+    public var massMinimum: Int { get { massChangeMinimum ?? 100 } set { massChangeMinimum = newValue } }
+    public var massPercent: Int { get { massChangePercent ?? 20 } set { massChangePercent = newValue } }
     public var destinationTypeText: String { cloudProvider?.title ?? "로컬 / 네트워크 / 동기화 폴더" }
     public init() {}
     public var triggerText: String { scheduled ? "매일 \(scheduleTime)" : "파일 변경 시" }
@@ -96,6 +102,9 @@ public struct TrashItem: Identifiable, Codable, Sendable {
     public var deletedAt: Date
     public var size: Int64
     public var directory: Bool? = nil
+    public var batchID: String? = nil
+    public var expectedHash: String? = nil
+    public var hashKind: String? = nil
 }
 public enum ConflictAction: String, Codable, CaseIterable, Sendable {
     case overwrite, useBackup, keepBoth, ignore, normalizeDuplicates

@@ -27,6 +27,9 @@ string Write(string root,string relative,string text,int age=0)
 }
 try
 {
+    if(args.Contains("--recovery")){await RecoveryProtectionTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} recovery/protection/VSS assertions. {testRoot}");return;}
+    var realVss=Array.IndexOf(args,"--real-vss");
+    if(realVss>=0){await RecoveryProtectionTests.RealVssAsync(args[realVss+1],args[realVss+2],Check);Console.WriteLine($"PASS: {passed} native VSS assertions.");return;}
     if(args.Contains("--operation-logs"))
     {await OperationLogTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} operation log assertions. {testRoot}");return;}
     if(args.Contains("--google-inventory"))
@@ -216,6 +219,7 @@ try
     Check(automaticHistory.Runs.Any(r=>r.EndedUtc!=null && r.Outcome==SyncRunOutcome.Completed),"Scheduler history did not finalize completed run.");
     SessionHistoryTests.Run(Check);
     await OperationLogTests.RunAsync(testRoot,Check);
+    await RecoveryProtectionTests.RunAsync(testRoot,Check);
     await GoogleInventoryTests.RunAsync(testRoot,Check);
     await CloudTests.RunAsync(testRoot,Check);
     await TwoWayTests.RunAsync(testRoot,Check);

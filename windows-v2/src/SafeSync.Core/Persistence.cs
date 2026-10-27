@@ -117,6 +117,8 @@ public sealed class ConfigStore(string dataRoot)
     {
         ValidateId(job.Id);
         if(job.SyncMode is not ("OneWay" or "TwoWay"))throw new InvalidDataException("동기화 방향을 확인하세요.");
+        if(job.MassChangeMinimum<1 || job.MassChangeMinimum>1000000 || job.MassChangePercent is <1 or >100)throw new InvalidDataException("대량 변경 보호 기준은 1~1,000,000개, 1~100%입니다.");
+        if(job.UseVss && (job.SyncMode!="OneWay" || job.Source.StartsWith(@"\\")))throw new InvalidDataException("VSS는 로컬 NTFS 원본의 단방향 작업에서 사용할 수 있습니다.");
         if (string.IsNullOrWhiteSpace(job.Name) || job.Name.Length > 200) throw new InvalidDataException("작업 이름을 확인하세요.");
         if (!Path.IsPathFullyQualified(job.Source)) throw new InvalidDataException("원본은 절대 경로여야 합니다.");
         if (job.TriggerType is not ("Realtime" or "Scheduled") || !TimeOnly.TryParseExact(job.ScheduleTime,"HH:mm", out _))
@@ -172,5 +174,5 @@ public static class PathPolicy
         }
     }
     public static bool Internal(string relative) => relative.Split('/', '\\').Any(p => p.Equals(".safesync-trash",StringComparison.OrdinalIgnoreCase) ||
-        p.Equals(".safesync-staging",StringComparison.OrdinalIgnoreCase) || p.Contains(".safesync-part-",StringComparison.OrdinalIgnoreCase) || p.Contains(".safesync-txn-",StringComparison.OrdinalIgnoreCase));
+        p.Equals(".safesync-staging",StringComparison.OrdinalIgnoreCase) || p.Equals(".safesync-integrity",StringComparison.OrdinalIgnoreCase) || p.Contains(".safesync-part-",StringComparison.OrdinalIgnoreCase) || p.Contains(".safesync-txn-",StringComparison.OrdinalIgnoreCase));
 }

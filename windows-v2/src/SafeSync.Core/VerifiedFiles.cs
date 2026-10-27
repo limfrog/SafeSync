@@ -39,7 +39,7 @@ public sealed class VerifiedFiles
     public static async Task<bool> MatchesAsync(string path, long length, string hash, CancellationToken token)
         => File.Exists(path) && new FileInfo(path).Length == length && await HashAsync(path, token) == hash;
 
-    public async Task CopyAsync(string source, string root, string relative, CancellationToken token,
+    public async Task<string> CopyAsync(string source, string root, string relative, CancellationToken token,
         IProgress<(long Done, long Total)>? progress = null, string? expectedDestinationHash = null)
     {
         IDisposable lease;
@@ -89,7 +89,7 @@ public sealed class VerifiedFiles
             File.SetCreationTimeUtc(staged, created);
             File.SetLastWriteTimeUtc(staged, modified);
             // Two-way transfers must not overwrite an edit made after comparison.
-            using var destinationGuard=File.Exists(destination) && expectedDestinationHash!=null
+            using var destinationGuard=File.Exists(destination)
                 ? new FileStream(destination,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete) : null;
             if(expectedDestinationHash!=null && (expectedDestinationHash.Length==0 ? File.Exists(destination) :
                 !File.Exists(destination) || await HashAsync(destination,token)!=expectedDestinationHash))
@@ -124,8 +124,11 @@ public sealed class VerifiedFiles
                 else if(previous.Length==0 && File.Exists(destination))File.Move(destination,rejected);
                 throw new IOException("교체 후 검증에 실패하여 기존 백업을 복구했습니다.");
             }
+            if(previous.Length>0)ArchiveIntegrity.RecordLocal(root,previous,record.PreviousHash);
+            ArchiveIntegrity.RecordLocal(root,destination,hash);
             File.Delete(journal);
             recorded = false;
+            return hash;
         }
         finally
         {
@@ -150,6 +153,8 @@ public sealed class VerifiedFiles
                 throw new InvalidDataException("잘못된 파일 교체 복구 기록입니다.");
             if (await MatchesAsync(destination, record.Length, record.ExpectedHash, token))
             {
+                if(previous.Length>0)ArchiveIntegrity.RecordLocal(root,previous,record.PreviousHash);
+                ArchiveIntegrity.RecordLocal(root,destination,record.ExpectedHash);
                 if (File.Exists(staged)) File.Delete(staged);
                 File.Delete(journal);
                 continue;
@@ -180,7 +185,7 @@ public sealed class TrashService
 {
     public static string NewPath(string root, string relative, string reason)
     {
-        var folder = DateTime.Now.ToString("yyyyMMdd-HHmmssfff") + "-" + reason + "-" + Guid.NewGuid().ToString("N")[..8];
+        var folder = RecoveryBatch.Folder(reason);
         return PathPolicy.Combine(root, ".safesync-trash/" + folder + "/" + PathPolicy.Relative(relative));
     }
     public static string Move(string root, string relative, string reason)
@@ -189,7 +194,12 @@ public sealed class TrashService
         var source = PathPolicy.Combine(root, relative);
         var target = NewPath(root, relative, reason);
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        using(var guard=new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete))
+        {
+        var hash=Convert.ToHexStringLower(SHA256.HashData(guard));
         File.Move(source, target);
+        ArchiveIntegrity.RecordLocal(root,target,hash);
+        }
         return target;
     }
     public IEnumerable<TrashItem> List(string root, CancellationToken token,Action? boundary=null)
@@ -214,14 +224,21 @@ public sealed class TrashService
     public async Task RestoreAsync(string root, TrashItem item, CancellationToken token)
     {
         ValidateItem(root, item);
-        await new VerifiedFiles().CopyAsync(item.StoragePath, root, item.RelativePath, token);
+        using(var guard=new FileStream(item.StoragePath,FileMode.Open,FileAccess.Read,FileShare.Read))
+        {
+        await ArchiveIntegrity.VerifyLocalAsync(root,item,token);
+        var expected=File.Exists(item.OriginalPath) ? await VerifiedFiles.HashAsync(item.OriginalPath,token) : "";
+        await new VerifiedFiles().CopyAsync(item.StoragePath, root, item.RelativePath, token,expectedDestinationHash:expected);
+        }
         File.Delete(item.StoragePath);
+        ArchiveIntegrity.ForgetLocal(root,item.StoragePath);
     }
     public void Delete(string root, TrashItem item)
     {
         using var mutation=FileMutationGate.Enter();
         ValidateItem(root, item);
         File.Delete(item.StoragePath);
+        ArchiveIntegrity.ForgetLocal(root,item.StoragePath);
     }
     public int RemoveExpired(string root, int days, CancellationToken token,Action? boundary=null)
     {

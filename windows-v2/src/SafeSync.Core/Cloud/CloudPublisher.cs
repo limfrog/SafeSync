@@ -29,7 +29,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
     // Also applied to interrupted deletion journals immediately before mutation.
     public Action<string>? ValidateDeletion {get;set;}
     private string JournalRoot=>Path.Combine(store.Root,"cloud-transactions-v2");
-    private static string TrashPath(string relative,string reason)=>".safesync-trash/"+DateTime.Now.ToString("yyyyMMdd-HHmmssfff")+"-"+reason+"-"+Guid.NewGuid().ToString("N")+"/"+RemotePath.Normalize(relative);
+    private static string TrashPath(string relative,string reason)=>".safesync-trash/"+RecoveryBatch.Folder(reason)+"/"+RemotePath.Normalize(relative);
     private CloudTransaction Record(string relative,RemoteItem? previous,bool keepBoth=false)=>new()
     {
         JobId=job.Id,SourceRoot=job.Source,Provider=remote.Provider,Root=remote.Root,AccountId=remote.AccountId,
@@ -91,6 +91,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
     private async Task<RemoteItem?> ContinueAsync(string journal,CloudTransaction record,PauseGate pause,CancellationToken token)
     {
         Validate(record);await pause.WaitAsync(token);
+        if(record.Previous!=null)ArchiveIntegrity.RecordRemote(store,remote,record.PreviousPath,record.Previous);
         var destination=await remote.StatAsync(record.Relative,token);
         var prior=record.Previous==null ? null : await remote.StatAsync(record.PreviousPath,token);
         if(record.DeleteOnly)

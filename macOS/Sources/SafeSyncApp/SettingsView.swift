@@ -57,13 +57,7 @@ struct SettingsView: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    GroupBox {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Toggle("상세 작동 로그 기록", isOn: $operationLogEnabled)
-                                .help("프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 문제 재현 전에 켜고 확인이 끝나면 꺼주세요.")
-                            Text("프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 확인이 끝나면 꺼주세요.").font(.caption).foregroundStyle(.secondary)
-                        }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading).padding(12)
-                    } label: { Text("문제 진단").font(.headline) }
+
                     GroupBox {
                         VStack(alignment: .leading, spacing: 12) {
                             Toggle("Mac 로그인 시 SafeSync 자동 시작", isOn: $loginEnabled)
@@ -109,6 +103,13 @@ struct SettingsView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
                     } label: { Text("화면 모드").font(.headline) }
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle("상세 작동 로그 기록", isOn: $operationLogEnabled)
+                                .help("프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 문제 재현 전에 켜고 확인이 끝나면 꺼주세요.")
+                            Text("프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 확인이 끝나면 꺼주세요.").font(.caption).foregroundStyle(.secondary)
+                        }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    } label: { Text("문제 진단").font(.headline) }
                 }.padding(.trailing, 4)
             }
             if let error { Text(error).foregroundStyle(.red).font(.caption).fixedSize(horizontal: false, vertical: true) }

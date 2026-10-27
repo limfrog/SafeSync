@@ -214,13 +214,16 @@ struct ProblemWorkspace: View {
     }
 }
 
+private struct TrashBatchChoice: Identifiable { var id: String; var label: String; var date: Date }
 struct TrashView: View {
     @EnvironmentObject var store: Store
     @ViewState private var selection: Set<UUID> = []
     @ViewState private var search = ""
     @ViewState private var sourceTrash = false
     @ViewState private var confirmDelete = false
-    var visible: [TrashItem] { store.trash.filter { search.isEmpty || $0.path.localizedCaseInsensitiveContains(search) } }
+    @ViewState private var batch = ""
+    @ViewState private var batches: [TrashBatchChoice] = []
+    var visible: [TrashItem] { store.trash.filter { (batch.isEmpty || ($0.batchID ?? "legacy") == batch) && (search.isEmpty || $0.path.localizedCaseInsensitiveContains(search)) } }
     var chosen: [TrashItem] { visible.filter { selection.contains($0.id) } }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -229,6 +232,10 @@ struct TrashView: View {
                 Picker("휴지통 위치", selection: $sourceTrash) { Text("백업 휴지통").tag(false); Text("원본 휴지통").tag(true) }.pickerStyle(.segmented).frame(width: 240)
                 Spacer(); if store.busyTrash { ProgressView().controlSize(.small) }
             }.disabled(store.busyTrash)
+            Picker("백업 실행", selection: $batch) {
+                Text("모든 실행 · 이전 파일 포함").tag("")
+                ForEach(batches) { Text($0.label).tag($0.id) }
+            }.frame(maxWidth: 520).disabled(store.busyTrash)
             HStack {
                 TextField("파일 이름 또는 원래 경로 검색", text: $search)
                 Button("새로고침") { refresh() }; Button("모두 선택") { selection = Set(visible.map(\.id)) }; Button("선택 해제") { selection = [] }
@@ -241,18 +248,31 @@ struct TrashView: View {
                 TableColumn("파일 이름") { Text(URL(fileURLWithPath: $0.path).lastPathComponent) }
                 TableColumn("삭제된 날짜와 시간") { Text($0.deletedAt.formatted()) }
                 TableColumn("원래 경로", value: \.path)
+                TableColumn("복원 검증") { Text(store.trashVerification[$0.id] ?? "미검증").lineLimit(1).help(store.trashVerification[$0.id] ?? "미검증") }.width(150)
                 TableColumn("크기") { Text(ByteCountFormatter.string(fromByteCount: $0.size, countStyle: .file)) }.width(95)
             }.overlay { if store.trashJob == nil { Text("작업을 선택하세요.").foregroundStyle(.secondary) } }
             if let item = chosen.first { Text("\(item.path) · \(item.deletedAt.formatted())").font(.caption).textSelection(.enabled) }
+            if !store.trashCheckSummary.isEmpty { Text(store.trashCheckSummary).font(.caption).foregroundStyle(.secondary) }
             Text("복구하면 작업은 일시정지됩니다. 파일을 확인한 뒤 다시 시작하세요.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("선택 파일 완전 삭제", role: .destructive) { confirmDelete = true }.disabled(chosen.isEmpty)
                 Spacer(); Button("백업 작업으로") { store.navigate(.jobs) }
+                Button("선택 복원 검증") { store.verifyTrash(chosen) }.disabled(chosen.isEmpty)
                 Button("선택 파일 복구") { store.restore(chosen) }.buttonStyle(.borderedProminent).disabled(chosen.isEmpty)
             }.disabled(store.busyTrash)
         }.onChange(of: store.selection) { _, _ in refresh() }.onChange(of: sourceTrash) { _, _ in refresh() }
-        .onAppear { refresh() }
+        .onAppear { refresh(); refreshBatches() }
+        .onChange(of: batch) { _, _ in selection = [] }
+        .onChange(of: store.trash.map(\.id)) { _, _ in refreshBatches() }
         .confirmationDialog("선택한 \(chosen.count)개 파일을 완전히 삭제할까요?", isPresented: $confirmDelete, titleVisibility: .visible) { Button("완전 삭제", role: .destructive) { store.deleteTrash(chosen) }; Button("취소", role: .cancel) {} } message: { Text("이 작업은 되돌릴 수 없습니다.") }
+    }
+    func refreshBatches() {
+        let groups = Dictionary(grouping: store.trash, by: { $0.batchID ?? "legacy" })
+        batches = groups.map { key, values in
+            let date = values.map(\.deletedAt).max() ?? .distantPast
+            return TrashBatchChoice(id: key, label: key == "legacy" ? "이전 버전 · 실행 정보 없음" : date.formatted() + " · \(values.count)개", date: date)
+        }.sorted { $0.date > $1.date }
+        if !batch.isEmpty && !batches.contains(where: { $0.id == batch }) { batch = "" }
     }
     func refresh() {
         selection = []

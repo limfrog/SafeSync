@@ -3,6 +3,7 @@ namespace SafeSync.Core;
 public sealed class BackupEngine(ConfigStore store)
 {
     public Func<BackupJob,Cloud.IRemoteStore>? CloudFactory {get;set;}
+    public Func<BackupJob,CancellationToken,Task<ISourceSnapshot>>? VssFactory {get;set;}
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> locks = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string,byte> observedTwoWayJobs=new();
     public async Task<BackupResult> RunAsync(BackupJob job, bool forceFull, IEnumerable<string>? changed,
@@ -11,6 +12,8 @@ public sealed class BackupEngine(ConfigStore store)
         int retentionDays = 100)
     {
         using var trace=OperationLog.Begin(job,forceFull,reconcileOffline);
+        using var recoveryBatch=new RecoveryBatch();
+        await using var sourceReads=new SourceReadScope(job,VssFactory,new DiagnosticProgress(trace,progress));
         try
         {
             var result=await RunCoreAsync(job,forceFull,changed,pause,new DiagnosticProgress(trace,progress),token,resolutions,reconcileOffline,retentionDays);
@@ -75,6 +78,7 @@ public sealed class BackupEngine(ConfigStore store)
             }
             ChangePlanner.Add(job.Source,changed ?? [],entries,pending,token,pause.ThrowIfStopRequested);
             if (resolutions != null) foreach (var key in resolutions.Keys) pending.Add(PathPolicy.Relative(key));
+            MassChanges.Check(store,job,state,pending);
             if(full){state.FullScanRequired=false;state.LastFullScanUtc=DateTime.UtcNow.ToString("O");}
             state.CheckpointActive = true;
             Save();
@@ -132,31 +136,32 @@ public sealed class BackupEngine(ConfigStore store)
                             { TrashService.Move(job.Destination,relative,"deleted"); result.Trashed++; }
                             entries.Remove(relative); handled = true; continue;
                         }
-                        using var sourceGuard = new FileStream(source,FileMode.Open,FileAccess.Read,FileShare.Read);
-                        info.Refresh();
+                        using var sourceGuard = await SourceReadScope.OpenAsync(source,token);
+                        source=sourceGuard.Path;info=sourceGuard.Info;info.Refresh();
                         var target = new FileInfo(destination);
                         bool sameModified = target.Exists && Math.Abs((info.LastWriteTimeUtc - target.LastWriteTimeUtc).TotalSeconds) <= 2;
                         bool sameSize = target.Exists && info.Length == target.Length;
                         // Creation time is not a portable content identifier:
                         // NAS/Samba and copied files may report a different birth time.
-                        bool sameContent=false;
+                        bool sameContent=false;string equalHash="";
                         if(action is null && target.Exists && sameSize)
                         {
                             progress?.Report(new(job.Id,job.Name,"파일 내용 동일 여부 검증",relative,completed,work.Length));
                             PathPolicy.RejectLinks(job.Destination,destination);
                             using var targetGuard=new FileStream(destination,FileMode.Open,FileAccess.Read,FileShare.Read);
                             target.Refresh();
-                            sameContent=info.Length==target.Length && await VerifiedFiles.HashAsync(source,token)==await VerifiedFiles.HashAsync(destination,token);
+                            equalHash=await VerifiedFiles.HashAsync(destination,token);
+                            sameContent=info.Length==target.Length && await VerifiedFiles.HashAsync(source,token)==equalHash;
                         }
                         if (action is null && target.Exists && sameSize && sameContent)
-                        { entries[relative] = FileEntry.From(info,relative);entries[relative].BackupFileId=OfflineJournal.FileIdentity(destination); result.Skipped++; handled=true; continue; }
+                        { entries[relative] = FileEntry.From(info,relative);entries[relative].BackupFileId=OfflineJournal.FileIdentity(destination);entries[relative].VerifiedBackupSha256=equalHash; result.Skipped++; handled=true; continue; }
                         if (action is null && target.Exists && info.LastWriteTimeUtc <= target.LastWriteTimeUtc.AddSeconds(2))
                         {
                             var reason = sameModified && !sameSize ? "수정 시간은 같지만 크기가 다릅니다." : "백업이 더 최신이거나 파일 정보가 서로 다릅니다.";
                             result.Conflicts.Add(Issue(relative,reason,info,target));
                             entries[relative] = FileEntry.From(info,relative,"Conflict",reason); continue;
                         }
-                        string? sibling = null;
+                        string? sibling = null;string copiedHash="";
                         string? expectedTarget=action!=null ? target.Exists ? await VerifiedFiles.HashAsync(destination,token) : "" : null;
                         await FileComparisons.VerifyAsync(job,relative,null,resolutions,token);
                         try
@@ -176,7 +181,7 @@ public sealed class BackupEngine(ConfigStore store)
                                 await publisher.CopyAsync(source,job.Destination,Path.GetRelativePath(job.Destination,trash),token);
                                 result.Trashed++;
                             }
-                            await publisher.CopyAsync(source,job.Destination,relative,token,expectedDestinationHash:sibling!=null ? "" : expectedTarget);
+                            copiedHash=await publisher.CopyAsync(source,job.Destination,relative,token,expectedDestinationHash:sibling!=null ? "" : expectedTarget);
                         }
                         catch
                         {
@@ -184,6 +189,7 @@ public sealed class BackupEngine(ConfigStore store)
                             throw;
                         }
                         entries[relative] = FileEntry.From(info,relative);
+                        entries[relative].VerifiedBackupSha256=copiedHash;
                         entries[relative].BackupFileId=OfflineJournal.FileIdentity(destination);
                         result.Copied++; handled = true;
                     }

@@ -54,6 +54,7 @@ typealias ViewState<Value> = SwiftUI.State<Value>
             MessagesView().environmentObject(store).preferredColorScheme(colorScheme)
         }.defaultSize(width: 980, height: 580).defaultPosition(.center)
         Settings { SettingsView().environmentObject(store).preferredColorScheme(colorScheme) }
+        Window("SafeSync 백업 복원 검증", id: "restore-check") { RestoreCheckView().environmentObject(store).preferredColorScheme(colorScheme) }.defaultSize(width: 920,height: 540)
         Window("SafeSync 업데이트", id: "updates") { AppUpdateView().preferredColorScheme(colorScheme) }
             .windowResizability(.contentSize).defaultPosition(.center)
 
@@ -91,7 +92,8 @@ struct MainView: View {
             }
             HStack { Text("macOS \(AppInformation.version) · 로컬 · Dropbox · Google Drive"); Spacer(); Text("작업 \(store.jobs.count)개") }.font(.caption).foregroundStyle(.secondary)
         }.padding(16).frame(minWidth: 1060, minHeight: 680)
-        .onAppear { store.openAppWindow = { id in AppPresentation.showInDock(); if id == "progress" { store.navigate(.sync) } else if id == "trash" { store.navigate(.trash) }; openWindow(id: id == "about" || id == "messages" || id == "updates" ? id : "main") } }
+        .onAppear { store.openAppWindow = { id in AppPresentation.showInDock(); if id == "progress" { store.navigate(.sync) } else if id == "trash" { store.navigate(.trash) }; openWindow(id: ["about","messages","updates","restore-check"].contains(id) ? id : "main") } }
+        .sheet(item: $store.massProposal) { MassChangeReview(proposal: $0).environmentObject(store) }
         .sheet(item: $store.editing) { JobEditor(job: $0).environmentObject(store) }
         .confirmationDialog("‘\(store.deleteRequest?.name ?? "")’ 작업을 삭제할까요?", isPresented: Binding(get: { store.deleteRequest != nil }, set: { if !$0 { store.deleteRequest = nil } }), titleVisibility: .visible) {
             Button("작업 삭제", role: .destructive) { store.confirmDelete() }; Button("취소", role: .cancel) { store.deleteRequest = nil }
@@ -105,6 +107,8 @@ struct MainView: View {
                 Menu("작업 관리") {
                     Button("작업 수정") { store.editing = store.selected }
                     Button("클라우드 연결 위치 다시 지정") { store.editing = store.selected }.disabled(store.selected?.cloudProvider == nil)
+                    Button("대량 변경 검토") { store.reviewMassChanges() }
+                    Button("백업 복원 검증") { store.showRestoreCheck() }.disabled(store.busyRestoreCheck || store.selected.map { store.isRunning($0.id) } == true)
                     Button("전체 검사") { store.runSelected(full: true); store.navigate(.sync) }
                     Button("작업 종료 · 자동 실행 대기") { store.stopSelected() }
                     Divider(); Button("작업 목록 내보내기") { store.exportJobList() }; Button("작업 목록 가져오기") { store.importJobList() }.disabled(!store.canImportJobList)
@@ -174,6 +178,11 @@ struct JobEditor: View {
                 Picker("실행 방식", selection: $job.scheduled) { Text("파일 변경 시").tag(false); Text("매일 정해진 시간").tag(true) }
                 if job.scheduled { TextField("예약 시간 (HH:mm)", text: $job.scheduleTime) }
                 if job.mode == .oneWay { Toggle("원본에서 사라진 파일은 SafeSync 휴지통으로 이동", isOn: $job.mirrorDeletes) }
+                Toggle("대량 변경·삭제 보호", isOn: $job.protectMassChanges)
+                    .help("기존에 검증한 파일의 대량 변경·삭제를 실행 전에 보류합니다. 처음 백업과 새 파일 추가는 제외합니다.")
+                Stepper("기존 파일 \(job.massMinimum)개 이상", value: $job.massMinimum, in: 1...1_000_000)
+                Stepper("전체의 \(job.massPercent)% 이상", value: $job.massPercent, in: 1...100)
+
             }.formStyle(.grouped)
             if let error { Text(error).foregroundStyle(.red) }
             HStack { Spacer(); Button("취소") { dismiss() }.keyboardShortcut(.cancelAction); Button("저장") { if let original = store.jobs.first(where: { $0.id == job.id }), !FileComparisons.sameEndpoints(original, job) { confirmEndpointChange = true } else { save() } }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction) }

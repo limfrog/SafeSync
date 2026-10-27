@@ -4,6 +4,8 @@ namespace SafeSync.Core.Cloud;
 
 public sealed record CloudTrashItem(string StoragePath,string RelativePath,DateTime DeletedAt,RemoteItem Item,string OriginalPath)
 {
+    public string BatchId=>RecoveryBatch.FromPath(StoragePath);
+    [System.Text.Json.Serialization.JsonIgnore] public string VerificationStatus {get;set;}="미검증";
     public string Name=>RemotePath.Name(RelativePath);
     public string DeletedAtText=>DeletedAt.ToString("yyyy-MM-dd HH:mm:ss");
     public string SizeText=>Item.Length.ToString("N0")+" B";
@@ -49,7 +51,7 @@ public sealed class CloudTrash(IRemoteStore remote,CloudPublisher publisher,Conf
         if(publisher.ProtectedTrashBatches().Contains(parts[1]))throw new IOException("미완료 전송이 보존 중인 사본입니다. 전송 복구 후 처리하세요.");
         var current=await remote.StatAsync(item.StoragePath,token);
         if(current==null || current.Folder || !RemotePath.Same(current,item.Item))throw new IOException("휴지통 항목이 변경되었습니다. 새로고침하세요.");
-        if(restore)await publisher.RestoreAsync(item.StoragePath,item.RelativePath,token);
+        if(restore){await ArchiveIntegrity.VerifyRemoteAsync(store,remote,item,token);await publisher.RestoreAsync(item.StoragePath,item.RelativePath,token);}
         else await remote.DeleteAsync(item.StoragePath,token);
     }
 }
