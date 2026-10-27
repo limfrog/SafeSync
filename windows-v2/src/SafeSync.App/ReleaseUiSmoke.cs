@@ -45,6 +45,17 @@ internal sealed partial class DesktopController
                 Check(button.ActualWidth>60 && button.IsVisible,"Settings buttons are unusable");
             }
             window.Close();
+            foreach(string view in new[]{"MassChangeReview","RestoreCheck"})
+            {
+                var dialog=NewDialog(view,false);Theme.Apply(dialog,mode);dialog.Width=dialog.MinWidth;dialog.Height=dialog.MinHeight;dialog.Show();dialog.UpdateLayout();
+                await dialog.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                foreach(string key in view=="MassChangeReview" ? new[]{"ApproveButton","CancelButton"} : new[]{"StartButton","CancelButton","CloseButton"})
+                {
+                    var action=dialog.Find<Button>(key);var position=action.TranslatePoint(new Point(),dialog);
+                    Check(position.X>=0 && position.Y>=0 && position.X+action.ActualWidth<=dialog.ActualWidth && position.Y+action.ActualHeight<=dialog.ActualHeight,"Recovery action clipped: "+view+key+mode);
+                }
+                dialog.Close();
+            }
         }
         return assertions;
     }

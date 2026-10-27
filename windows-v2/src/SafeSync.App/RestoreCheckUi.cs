@@ -14,13 +14,13 @@ internal sealed partial class DesktopController
     private readonly HashSet<string> verifyingJobs=new();
     private void ShowRestoreCheck()
     {
-        if(Selected is not {} job || scheduler.IsRunning(job.Id) || verifyingJobs.Contains(job.Id))return;
+        if(Selected is not {} job || scheduler.IsRunning(job.Id) || verifyingJobs.Contains(job.Id) || trashWorkspaceOperating)return;
         var window=NewDialog("RestoreCheck",false);var rows=new ObservableCollection<RestoreCheckRow>();window.Find<DataGrid>("ResultsGrid").ItemsSource=rows;
         var lifetime=new CancellationTokenSource();auxiliaryTokens.Add(lifetime);bool busy=false;
         window.Find<TextBlock>("LocationText").Text=job.Name+"\n백업: "+job.Destination;
         async Task Start()
         {
-            if(busy || scheduler.IsRunning(job.Id) || verifyingJobs.Contains(job.Id))return;
+            if(busy || scheduler.IsRunning(job.Id) || verifyingJobs.Contains(job.Id) || trashWorkspaceOperating || !jobs.Any(j=>ReferenceEquals(j,job)))return;
             bool paused=job.Paused;busy=true;verifyingJobs.Add(job.Id);scheduler.SetPaused(job,true);Save();RefreshActions();rows.Clear();
             window.Find<Button>("StartButton").IsEnabled=false;window.Find<Button>("CancelButton").IsEnabled=true;window.Find<ProgressBar>("WorkProgress").Visibility=Visibility.Visible;
             int okay=0,unknown=0,failed=0;

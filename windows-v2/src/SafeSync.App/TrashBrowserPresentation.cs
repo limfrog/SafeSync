@@ -32,6 +32,7 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
     private TrashRowInfo[] selection=[];
     private readonly bool dropbox;
     private bool refreshingBatches;
+    private int batchItemCount=-1;
     private string BatchOf(T item)=>item is TrashItem local ? local.BatchId : item is CloudTrashItem cloud ? cloud.BatchId : "";
     public TrashBrowserPresentation(Window window,ObservableCollection<T> items,Func<T,TrashRowInfo> describe,BackupJob job,int retentionDays,bool dropbox=false)
     {
@@ -61,7 +62,7 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
     public void SetState(bool busy,bool canOperate)
     {
         bool changed=this.busy!=busy;this.busy=busy;this.canOperate=canOperate;
-        if(changed){view.SortDescriptions.Clear();if(!busy)view.SortDescriptions.Add(new("DeletedAt",ListSortDirection.Descending));}if(!busy)RefreshBatches();Update();
+        if(changed){view.SortDescriptions.Clear();if(!busy)view.SortDescriptions.Add(new("DeletedAt",ListSortDirection.Descending));}if(!busy && (changed || batchItemCount!=items.Count)){RefreshBatches();batchItemCount=items.Count;}Update();
     }
     private void QueueUpdate(){if(!busy)Update();else if(!renderTimer.IsEnabled)renderTimer.Start();}
     private void ItemsChanged(object? sender,NotifyCollectionChangedEventArgs e)

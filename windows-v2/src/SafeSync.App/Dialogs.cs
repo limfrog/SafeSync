@@ -218,7 +218,7 @@ internal sealed partial class DesktopController
         auxiliaryTokens.Add(lifetime);
         void Buttons()
         {
-            presentation.SetState(busy,jobs.Any(j=>ReferenceEquals(j,job)) && !scheduler.IsRunning(job.Id));
+            presentation.SetState(busy,jobs.Any(j=>ReferenceEquals(j,job)) && !scheduler.IsRunning(job.Id) && !verifyingJobs.Contains(job.Id));
         }
         async Task LoadAsync()
         {
@@ -256,7 +256,7 @@ internal sealed partial class DesktopController
             using var batch=new RecoveryBatch();
             if(busy || selected.Length==0)return;
             if(!jobs.Any(j=>ReferenceEquals(j,job))){status.Text="작업 설정이 변경되었습니다. 백업 작업 탭에서 휴지통을 다시 여세요.";Buttons();return;}
-            if(scheduler.IsRunning(job.Id) || LegacyRunning()){status.Text="백업이 끝나고 기존 1.x 앱을 종료한 뒤 처리하세요.";return;}
+            if(scheduler.IsRunning(job.Id) || verifyingJobs.Contains(job.Id) || LegacyRunning()){status.Text="백업·복원 검증이 끝나고 기존 1.x 앱을 종료한 뒤 처리하세요.";return;}
             if(!restore && !Confirm($"선택한 {selected.Length}개 파일을 완전히 삭제할까요? 되돌릴 수 없습니다."))return;
             scheduler.SetPaused(job,true);Save();RefreshActions();Jobs.Items.Refresh();
             busy=true;trashWorkspaceOperating=true;Buttons();int done=0,failed=0;

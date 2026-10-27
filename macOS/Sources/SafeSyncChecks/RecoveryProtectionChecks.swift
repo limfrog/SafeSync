@@ -23,5 +23,19 @@ enum RecoveryProtectionChecks {
             checkEqual(await cloud.bytes(name: "0.txt", parent: job.cloudFolderID!), Data("new 0".utf8))
             print("PASS \(provider.title): mass change blocked before writes, exact approval, grouped archive, streamed restore verification and corrupt-copy refusal")
         }
+        let fixture = BackupTests()
+        let (root,original,_) = try fixture.fixture(); defer { try? FileManager.default.removeItem(at:root) }
+        var job = original;job.syncMode = .twoWay;job.massMinimum = 3;job.massPercent = 30
+        let state = root.appendingPathComponent("state"), left = URL(fileURLWithPath:job.source), right = URL(fileURLWithPath:job.destination)
+        for i in 0..<8 { try fixture.write("old \(i)",left.appendingPathComponent("\(i).txt")) }
+        let sync = SyncCoordinator(dataDirectory:state); _ = try await sync.run(job)
+        let verified = try await sync.verifyBackup(job);checkEqual(verified.count,8);check(verified.allSatisfy{$0.status == "정상"})
+        for i in 0..<4 { try FileManager.default.removeItem(at:right.appendingPathComponent("\(i).txt")) }
+        do { _ = try await sync.run(job);check(false) } catch is MassChangeBlocked { }
+        for i in 0..<8 { check(FileManager.default.fileExists(atPath:left.appendingPathComponent("\(i).txt").path)) }
+        guard let proposal = try MassChanges.pending(directory:state,job:job) else { throw BackupError.unsafe("Missing reverse delete review") }
+        try MassChanges.approve(directory:state,job:job,fingerprint:proposal.fingerprint)
+        let result = try await sync.run(job);checkEqual(result.removed,4);check(result.issues.isEmpty)
+        print("PASS two-way mass reverse deletion blocks before mutations and current backup verifies without replacing originals")
     }
 }
