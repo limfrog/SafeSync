@@ -31,6 +31,8 @@ try
     {await OperationLogTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} operation log assertions. {testRoot}");return;}
     if(args.Contains("--google-inventory"))
     {await GoogleInventoryTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} ID inventory assertions. {testRoot}");return;}
+    if(args.Contains("--duplicates"))
+    {await DuplicateResolutionTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} duplicate resolution assertions. {testRoot}");return;}
     if(args.Contains("--cloud-performance"))
     {
         await CloudProtocolTests.RunAsync(testRoot,Check);

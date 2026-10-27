@@ -38,9 +38,10 @@ internal static class GoogleDuplicateProtocolTests
         server.Nodes["stable-b"]=server.Nodes["stable-b"] with{Hash="changed",Version="2"};server.ChangedIds.Add("stable-b");
         await catalog.RefreshAsync(false,new(),default);
         check(!catalog.IsStableAmbiguous("stable.txt") && catalog.State.Pending.Contains("stable.txt",StringComparer.OrdinalIgnoreCase),"A changed duplicate file reused stale verification.");
+        var beforeChangedChild=server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b");
         server.Nodes["unique-b"]=server.Nodes["unique-b"] with{Hash="changed",Version="2"};server.ChangedIds.Add("unique-b");
         await catalog.RefreshAsync(false,new(),default);
-        check(catalog.State.Items["Project/unique.txt"].Hash=="changed" && server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b")==childRequests*2,"Change feed did not update the duplicate subtree directly by ID.");
+        check(catalog.State.Items["Project/unique.txt"].Hash=="changed" && server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b")==beforeChangedChild,"Change feed did not update the duplicate subtree directly by ID.");
         var forged=plan with{Groups=[plan.Groups[0] with{ParentId="outside"}]};
         bool rejected=false;try{await remote.PreserveDuplicatesAsync(forged,default);}catch(CloudConflictException){rejected=true;}
         check(rejected && server.Renamed.Count==0,"Forged duplicate parent escaped the job root.");
