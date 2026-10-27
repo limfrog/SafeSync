@@ -77,6 +77,8 @@ public struct DropboxStorage: RemoteStorage {
         let (data, _) = try await CloudAuthorization.shared.request(account, url: URL(string: "https://content.dropboxapi.com/2/files/download")!, method: "POST", headers: ["Dropbox-API-Arg": arg]); return data
     }
     public func inventory(root: String, previous: RemoteIndex?) async throws -> RemoteIndex {
+        let timing = OperationLog.measure("prepare.remote_catalog_refresh"); defer { timing.end() }
+        OperationLog.event("catalog.plan", "remote", total: previous?.nodes.count ?? 0, detail: "full=\(previous?.cursor == nil)")
         var index = previous ?? RemoteIndex(); index.root = root.lowercased()
         var page: [String: Any]
         if let cursor = previous?.cursor {

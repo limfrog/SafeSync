@@ -177,6 +177,7 @@ public actor SyncCoordinator {
         var result = BackupResult()
         result.evaluatedPaths.formUnion(excluded); result.skipped += excluded.count
         for (offset, path) in paths.enumerated() {
+            let timing = OperationLog.measure("file.total", path: path); defer { timing.end() }
             try Task.checkCancellation(); result.evaluatedPaths.insert(path)
             progress(BackupProgress(path: path, completed: offset, total: paths.count,
                                     stage: fastPaths.contains(path) ? "저장된 검증 기록으로 빠른 비교" : "양방향 비교·반영"))

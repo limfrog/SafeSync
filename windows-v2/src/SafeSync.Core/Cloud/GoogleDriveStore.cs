@@ -70,7 +70,8 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
     {
         directory=RemotePath.Normalize(directory);
         if(rootId.Length==0)throw new InvalidOperationException("Cloud store is not initialized.");
-        if(await CachedFolder(directory,create || mutation,token) is {} cached)return cached;
+        if(await CachedFolder(directory,create || mutation,token) is {} cached){OperationLog.Event("folder.cache_hit","drive",directory,detail:create || mutation ? "fresh_mutation_validation" : "fresh_read_validation");return cached;}
+        OperationLog.Event("folder.cache_miss","drive",directory);
         if(rootId!="root")
         {
             var rootMetadata=await Metadata(rootId,token);
@@ -241,7 +242,7 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         var moved=await http.JsonAsync(HttpMethod.Patch,Api+"files/"+Id(source.String("id"))+"?"+query,new{name=RemotePath.Name(to),modifiedTime=source.String("modifiedTime")},token);
         if(Parse(source).Folder){InvalidateFolders(from);InvalidateFolders(to);}
         var confirmed=await StatAsync(to,token);
-        if(confirmed==null || confirmed.Id!=moved.String("id"))throw new IOException("Google Drive 파일 이동 중 충돌이 발생했습니다.");
+        if(confirmed==null || confirmed.Id!=moved.String("id")){OperationLog.Event("move.confirmation_mismatch","drive",to,detail:$"missing={confirmed==null}");throw new IOException("Google Drive 파일 이동 중 충돌이 발생했습니다.");}
         return confirmed;
     }
     public async Task DownloadAsync(string relative,string localPath,CancellationToken token)

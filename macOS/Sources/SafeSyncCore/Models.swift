@@ -124,11 +124,13 @@ public enum Storage {
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("SafeSync")
     }
     public static func save<T: Encodable>(_ value: T, to url: URL) throws {
+        let timing = OperationLog.measure("storage.save"); defer { timing.end() }
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(value).write(to: url, options: .atomic)
     }
     public static func load<T: Decodable>(_ type: T.Type, from url: URL) throws -> T {
-        try JSONDecoder().decode(type, from: Data(contentsOf: url))
+        let timing = OperationLog.measure("storage.load"); defer { timing.end() }
+        return try JSONDecoder().decode(type, from: Data(contentsOf: url))
     }
 }

@@ -10,8 +10,8 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
     {
         if(!Directory.Exists(job.Source))throw new DirectoryNotFoundException("원본 폴더에 접근할 수 없습니다.");
         if(job.CloudAccountId.Length==0 || job.CloudAccountId!=remote.AccountId)throw new InvalidOperationException("클라우드 계정을 확인하고 작업의 백업 폴더를 다시 선택하세요.");
-        if(!remoteInitialized){Report("클라우드 계정 및 백업 폴더 확인","",0,0);await remote.InitializeAsync(token);}
-        var gate=ScopeGate(remote);await pause.WaitForBoundaryAsync(gate,token);
+        if(!remoteInitialized){using var timing=OperationLog.Measure("prepare.remote_initialize");Report("클라우드 계정 및 백업 폴더 확인","",0,0);await remote.InitializeAsync(token);}
+        var gate=ScopeGate(remote);using(OperationLog.Measure("prepare.account_gate"))await pause.WaitForBoundaryAsync(gate,token);
         try
         {
             var state=store.LoadState(job);var result=new BackupResult();
@@ -37,6 +37,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                 if(failure.Error is CloudConflictException)result.Conflicts.Add(issue);else result.Errors.Add(issue);
             }
             bool full=forceFull || journalInvalid || (reconcileOffline && offline.RequiresScan) || state.FullScanRequired || !DateTime.TryParse(state.LastFullScanUtc,out _);
+            OperationLog.Event("prepare.plan","cloud",completed:pending.Count,total:entries.Count,detail:$"full={full};manual={forceFull};journalInvalid={journalInvalid};reconcile={reconcileOffline};sourceScan={offline.RequiresScan};required={state.FullScanRequired}");
             Dictionary<string,RemoteItem>? tree=null;
             var catalog=new RemoteCatalog(store,remote);
             if(full)
@@ -64,7 +65,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                 // Batch only known IDs. Looking up every missing path here delays
                 // the first upload by hours on a new, large backup. Unknown paths
                 // are checked freshly by ProcessAsync and again before publishing.
-                try{metadata=await batchStore.StatManyAsync(tree,work.Where(p=>tree.ContainsKey(p) && !catalog.IsAmbiguous(p) && !CanReuse(p)),token);}
+                try{using var timing=OperationLog.Measure("prepare.remote_metadata_batch");metadata=await batchStore.StatManyAsync(tree,work.Where(p=>tree.ContainsKey(p) && !catalog.IsAmbiguous(p) && !CanReuse(p)),token);}
                 catch(CloudDuplicateNameException)
                 {
                     await catalog.RefreshAsync(true,pause,token);tree=new(catalog.State.Items,StringComparer.OrdinalIgnoreCase);
@@ -76,6 +77,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                 var checkpointLock=new object();bool stopWork=false;
                 async Task ProcessAsync(string relative)
                 {
+                    using var fileTiming=OperationLog.Measure("file.cloud",relative);
                     await pause.WaitAsync(token);pause.ThrowIfStopRequested();token.ThrowIfCancellationRequested();if(blocked.Contains(relative)){Interlocked.Increment(ref completed);return;}
                     var path=PathPolicy.Combine(job.Source,relative);var info=new FileInfo(path);bool handled=false;RemoteItem? target=null;
                     try
@@ -83,6 +85,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                         Report("변경 파일의 클라우드 정보 확인",relative,completed,work.Length);
                         if(CanReuse(relative))
                         {
+                            OperationLog.Event("file.skip_verified","cloud",relative);
                             Report("저장된 검증 기록으로 빠른 비교",relative,completed,work.Length);
                             lock(checkpointLock)result.Skipped++;handled=true;return;
                         }
@@ -173,6 +176,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                     {
                         bool locked=ex is IOException && (ex.HResult&0xFFFF) is 32 or 33;
                         var issue=Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,target) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(ex)};
+                        OperationLog.Event("file.error","cloud",relative,error:ex,detail:locked ? "locked" : NetworkFailures.IsTransient(ex) ? "network_retry" : "review_or_retry");
                         string status=locked ? "Locked" : ex is CloudConflictException ? "Conflict" : "Failed";
                         var oldEntry=entries.GetValueOrDefault(relative);
                         if((!info.Exists || ex is BackupRootUnavailableException) && oldEntry!=null){oldEntry.Status=status;oldEntry.LastError=issue.Reason;entries[relative]=oldEntry;}
@@ -183,6 +187,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                     }
                     finally
                     {
+                        OperationLog.Event(handled ? "file.handled" : "file.pending","cloud",relative);
                         lock(checkpointLock){if(handled){pending.Remove(relative);if(!entries.TryGetValue(relative,out var resolved) || resolved.Status=="BackedUp")result.ResolvedPaths.Add(relative);}completed++;store.SaveCheckpoint(state,entries,pending,new[]{relative});Report("파일 비교 및 클라우드 백업",relative,completed,work.Length);}
                     }
                 }

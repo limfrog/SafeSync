@@ -173,6 +173,7 @@ public enum ContentHash {
 }
 public enum SourceScanner {
     public static func files(_ source: URL) throws -> [String: FileStamp] {
+        let timing = OperationLog.measure("prepare.source_scan"); defer { timing.end() }
         let fm = FileManager.default, root = source.standardizedFileURL.resolvingSymlinksInPath()
         var error: Error?, result: [String: FileStamp] = [:]
         guard let scan = fm.enumerator(at: root, includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey], errorHandler: { _, failure in error = failure; return false }) else { throw BackupError.unsafe("원본을 읽을 수 없습니다.") }

@@ -39,6 +39,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
     private string NewJournal()=>Path.Combine(JournalRoot,job.Id+"."+Guid.NewGuid().ToString("N")+".json");
     public async Task<UploadSnapshot> StageAsync(string source,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("file.stable_copy_and_hash",source);
         var directory=Path.Combine(store.Root,"cloud-upload-v2",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
         await new VerifiedFiles().CopyAsync(source,directory,"payload",token);
         var path=Path.Combine(directory,"payload");var info=new FileInfo(path);
@@ -47,6 +48,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
     }
     public async Task<RemoteItem> PublishAsync(string relative,UploadSnapshot snapshot,RemoteItem? previous,bool keepBoth,PauseGate pause,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("file.upload_verify_publish",relative,snapshot.Length);
         var record=Record(relative,previous,keepBoth);record.Snapshot=snapshot;record.Staged=".safesync-staging/"+Guid.NewGuid().ToString("N")+".part";
         var journal=NewJournal();JsonFile.Save(journal,record);
         return (await ContinueAsync(journal,record,pause,token))!;
@@ -115,6 +117,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
             if(!File.Exists(snapshot.Path) || new FileInfo(snapshot.Path).Length!=snapshot.Length || await RemotePath.HashAsync(remote.Provider,snapshot.Path,token)!=snapshot.Hash)
                 throw new CloudConflictException(record.Relative,"로컬 전송 사본의 검증에 실패했습니다. 기존 백업을 유지합니다.");
             if(record.StagedId.Length>0){ResetStage(journal,record);}
+            using var uploadTiming=OperationLog.Measure("file.upload",record.Relative,snapshot.Length);
             staged=await remote.UploadAsync(snapshot,record.Staged,record.Session,()=>JsonFile.Save(journal,record),pause,token);
         }
         if(!RemotePath.Content(staged,snapshot))
@@ -139,13 +142,15 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
             throw new CloudConflictException(record.Relative,"이전 백업 사본을 확인하지 못해 교체를 중단했습니다.");
         // Cancellation is allowed here: the journal and retained old copy make
         // a restart deterministic even after a lost server response.
-        var final=await remote.MoveAsync(record.Staged,record.Relative,token);
+        RemoteItem final;
+        using(OperationLog.Measure("file.publish_move",record.Relative,snapshot.Length))final=await remote.MoveAsync(record.Staged,record.Relative,token);
         if(!RemotePath.Content(final,snapshot))
         {
             await RollbackAsync(journal,record,final,token);
             throw new IOException("교체 후 검증에 실패하여 이전 백업을 복구했습니다.");
         }
-        var confirmed=await remote.StatAsync(record.Relative,token);
+        RemoteItem? confirmed;
+        using(OperationLog.Measure("file.final_verify",record.Relative,snapshot.Length))confirmed=await remote.StatAsync(record.Relative,token);
         if(confirmed==null || confirmed.Id!=final.Id || !RemotePath.Content(confirmed,snapshot))throw new CloudConflictException(record.Relative,"최종 백업 확인 중 파일이 변경되었습니다.");
         await FinishAsync(journal,record,token);return confirmed;
     }
@@ -190,6 +195,7 @@ public sealed class CloudPublisher(ConfigStore store,BackupJob job,IRemoteStore 
     }
     public async Task<IReadOnlyList<(string Relative,Exception Error)>> RecoverAsync(IReadOnlyDictionary<string,ConflictAction>? resolutions,PauseGate pause,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("prepare.cloud_transaction_recovery");
         var failures=new List<(string,Exception)>();if(!Directory.Exists(JournalRoot))return failures;
         foreach(var journal in Directory.EnumerateFiles(JournalRoot,job.Id+".*.json"))
         {

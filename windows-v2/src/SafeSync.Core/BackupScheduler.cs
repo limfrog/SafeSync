@@ -99,7 +99,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     }
     public bool IsStopping => stop.IsCancellationRequested;
     private void ScheduleNetworkRetry(BackupJob job)
-    {int attempt=networkAttempts.AddOrUpdate(job.Id,1,(_,n)=>Math.Min(n+1,5));retries[job.Id]=DateTime.UtcNow+TimeSpan.FromSeconds(Math.Min(300,30*Math.Pow(2,attempt-1)));}
+    {int attempt=networkAttempts.AddOrUpdate(job.Id,1,(_,n)=>Math.Min(n+1,5));var delay=TimeSpan.FromSeconds(Math.Min(300,30*Math.Pow(2,attempt-1)));retries[job.Id]=DateTime.UtcNow+delay;OperationLog.Event("retry.scheduled","scheduler",attempt:attempt,detail:$"delayMs={delay.TotalMilliseconds:F0}");}
     private string QueuePath => Path.Combine(store.Root,"pending-changes-v2.json");
 
     public void SetJobs(IEnumerable<BackupJob> source)
@@ -158,6 +158,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     }
     public void SetPaused(BackupJob job,bool paused)
     {
+        OperationLog.Event(paused ? "job.pause" : "job.resume","scheduler",job.Id);
         job.Paused=paused;
         if (running.TryGetValue(job.Id,out var current))
         {
@@ -166,6 +167,7 @@ public sealed class BackupScheduler(ConfigStore store) : IAsyncDisposable
     }
     public void StopJob(BackupJob job)
     {
+        OperationLog.Event("job.stop_requested","scheduler",job.Id);
         lock(launchLock)
         {
             // Ending a run is distinct from pausing its transfer gate.

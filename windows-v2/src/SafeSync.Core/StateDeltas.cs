@@ -15,6 +15,7 @@ public static class StateDeltas
     }
     public static JobState Load(string path)
     {
+        using var timing=OperationLog.Measure("prepare.state_deltas");int deltaCount=0;
         lock(Gate(path))
         {
         var state=JsonFile.Read<JobState>(path);var folder=path+".native-deltas";
@@ -25,11 +26,13 @@ public static class StateDeltas
         {
             PathPolicy.RejectLinks(Path.GetDirectoryName(path)!,file);
             var delta=JsonFile.Read<Delta>(file);if(delta.Generation!=state.Generation)continue;
+            deltaCount++;
             foreach(var entry in delta.Entries)entries[PathPolicy.Relative(entry.RelativePath)]=entry;
             foreach(var removed in delta.Removed)entries.Remove(PathPolicy.Relative(removed));
             foreach(var completed in delta.Completed)pending.Remove(PathPolicy.Relative(completed));
         }
-        state.Files=entries.Values.ToList();state.PendingPaths=pending.ToList();state.CheckpointActive=pending.Count>0;return state;
+        state.Files=entries.Values.ToList();state.PendingPaths=pending.ToList();state.CheckpointActive=pending.Count>0;
+        OperationLog.Event("state.loaded","prepare",completed:deltaCount,total:state.Files.Count,detail:$"pending={pending.Count}");return state;
         }
     }
     public static void Append(string path,JobState state,IReadOnlyDictionary<string,FileEntry> entries,ISet<string> pending,IEnumerable<string> paths)

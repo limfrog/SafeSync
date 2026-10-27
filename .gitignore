@@ -1,6 +1,7 @@
 # User-specific runtime data, credentials, snapshots, logs and test output
 error.log
 *.log
+*.jsonl
 *.tmp
 *.safesync-test-sandbox
 secrets.key

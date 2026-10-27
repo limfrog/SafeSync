@@ -39,6 +39,7 @@ public sealed class RemoteCatalog
     public Data State {get;private set;}=new();
     public RemoteCatalog(ConfigStore store,IRemoteStore remote,string scope="")
     {
+        using var timing=OperationLog.Measure("prepare.remote_catalog_load");
         this.remote=remote;this.scope=scope;identity=remote.Provider+"|"+remote.AccountId+"|"+remote.Root+"|"+scope;
         var key=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));path=Path.Combine(store.Root,"remote-catalogs",key+".json");
         if(File.Exists(path)){var saved=JsonFile.Read<Data>(path);if(saved.Identity==identity){saved.Items=new(saved.Items,StringComparer.OrdinalIgnoreCase);saved.DuplicateFolderIds=new(saved.DuplicateFolderIds,StringComparer.OrdinalIgnoreCase);saved.StableAmbiguous=new(saved.StableAmbiguous,StringComparer.OrdinalIgnoreCase);State=saved;}}
@@ -81,9 +82,11 @@ public sealed class RemoteCatalog
     }
     public async Task RefreshAsync(bool force,PauseGate pause,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("prepare.remote_catalog_refresh");
         pause.ThrowIfStopRequested();
         var feed=remote as IRemoteChanges;
         bool full=force || State.Identity!=identity || State.Cursor.Length==0 || feed==null;
+        OperationLog.Event("catalog.plan","remote",total:State.Items.Count,detail:$"full={full};manual={force};identityChanged={State.Identity!=identity};missingCursor={State.Cursor.Length==0};supportsFeed={feed!=null}");
         RemoteChanges? delta=null;
         if(!full)
         {

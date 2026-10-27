@@ -27,6 +27,8 @@ string Write(string root,string relative,string text,int age=0)
 }
 try
 {
+    if(args.Contains("--operation-logs"))
+    {await OperationLogTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} operation log assertions. {testRoot}");return;}
     if(args.Contains("--cloud-performance"))
     {
         await CloudProtocolTests.RunAsync(testRoot,Check);
@@ -209,6 +211,7 @@ try
     Check(automaticHistory.Runs.Count(r=>r.Copied==1)>=2,"Automatic run results replaced an earlier completion.");
     Check(automaticHistory.Runs.Any(r=>r.EndedUtc!=null && r.Outcome==SyncRunOutcome.Completed),"Scheduler history did not finalize completed run.");
     SessionHistoryTests.Run(Check);
+    await OperationLogTests.RunAsync(testRoot,Check);
     await CloudTests.RunAsync(testRoot,Check);
     await TwoWayTests.RunAsync(testRoot,Check);
     await DropboxScopeTests.RunAsync(testRoot,Check);

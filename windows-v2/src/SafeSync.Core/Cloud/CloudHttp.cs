@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace SafeSync.Core.Cloud;
 
@@ -52,14 +53,17 @@ public sealed class CloudHttp(HttpClient client,Func<bool,CancellationToken,Task
             token.ThrowIfCancellationRequested();
             var remaining=retryState?.Remaining ?? TimeSpan.Zero;
             if(remaining>TimeSpan.FromMinutes(2))throw new CloudApiException(HttpStatusCode.TooManyRequests,"클라우드 서버가 지정한 대기 시간",retryAfter:remaining);
-            if(remaining>TimeSpan.Zero)await DelayAsync(remaining,token);
+            if(remaining>TimeSpan.Zero){OperationLog.Event("retry.wait","http",bytes:(long)remaining.TotalMilliseconds);await DelayAsync(remaining,token);}
             using var message=request();ValidateUri(message.RequestUri!);
             bool readOnly=ReadOnly(message);
+            var started=Stopwatch.GetTimestamp();var operation=OperationLog.Endpoint(message.RequestUri!);var authStarted=started;
             message.Headers.Authorization=new AuthenticationHeaderValue("Bearer",await accessToken(forceRefresh,token));forceRefresh=false;
+            var authMs=Stopwatch.GetElapsedTime(authStarted).TotalMilliseconds;
             HttpResponseMessage response;
-            try{response=await client.SendAsync(message,HttpCompletionOption.ResponseHeadersRead,token);}
+            try{response=await client.SendAsync(message,HttpCompletionOption.ResponseHeadersRead,token);OperationLog.Http(message.Method+" "+operation,started,message.Content?.Headers.ContentLength,(int)response.StatusCode,retries,null,authMs);}
             catch(Exception ex) when(readOnly && retries<4 && !token.IsCancellationRequested && ex is HttpRequestException or TaskCanceledException)
-            {await DelayAsync(Backoff(retries++),token);continue;}
+            {OperationLog.Http(message.Method+" "+operation,started,message.Content?.Headers.ContentLength,null,retries,ex,authMs);await DelayAsync(Backoff(retries++),token);continue;}
+            catch(Exception ex){OperationLog.Http(message.Method+" "+operation,started,message.Content?.Headers.ContentLength,null,retries,ex,authMs);throw;}
             if(response.StatusCode==HttpStatusCode.Unauthorized && !refreshed){response.Dispose();refreshed=true;forceRefresh=true;continue;}
             if(!response.IsSuccessStatusCode && !(allowResumeIncomplete && (int)response.StatusCode==308))
             {
@@ -97,7 +101,8 @@ public sealed class CloudHttp(HttpClient client,Func<bool,CancellationToken,Task
             return response;
         }
     }
-    private Task DelayAsync(TimeSpan delay,CancellationToken token)=>(retryDelay ?? Task.Delay)(delay,token);
+    private async Task DelayAsync(TimeSpan delay,CancellationToken token)
+    {OperationLog.Event("retry.wait","http",detail:$"delayMs={delay.TotalMilliseconds:F0}");using var timing=OperationLog.Measure("http.retry_delay");await (retryDelay ?? Task.Delay)(delay,token);}
     private static TimeSpan Backoff(int attempt)=>TimeSpan.FromMilliseconds(1000*(1<<attempt)+Random.Shared.Next(0,401));
     private static bool ReadOnly(HttpRequestMessage message)
     {

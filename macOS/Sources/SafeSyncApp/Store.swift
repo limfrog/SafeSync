@@ -82,6 +82,9 @@ import CoreServices
     let settingsURL = Storage.applicationDirectory.appendingPathComponent("jobs.json")
     let issuesURL = Storage.applicationDirectory.appendingPathComponent("issues.json")
     init() {
+        _ = OperationLog.start(directory: Storage.applicationDirectory, version: AppInformation.version)
+        let preparation = OperationLog.measure("application.initialize")
+        defer { preparation.end() }
         do {
             if FileManager.default.fileExists(atPath: accountsURL.path) { accounts = try Storage.load([CloudAccount].self, from: accountsURL) }
             if FileManager.default.fileExists(atPath: settingsURL.path) { jobs = try Storage.load([BackupJob].self, from: settingsURL) }
@@ -237,6 +240,7 @@ import CoreServices
         let session = SyncSession(job: job), runID = session.id
         sessions.insert(session, at: 0); if followLatest { sessionSelection = runID }
         let updateProgress: @Sendable (BackupProgress) -> Void = { [weak self] p in
+            OperationLog.run?.progress(p)
             gate.wait()
             Task { @MainActor in
                 guard let self, let i = self.sessions.firstIndex(where: { $0.id == runID && $0.active }) else { return }
@@ -249,7 +253,9 @@ import CoreServices
                     self.sessions[i].issues = self.issues.filter { $0.jobID == job.id }
                 }
             }
+            let watcherTiming = OperationLog.measure("prepare.watcher_flush")
             let watcherReady = await self.watchers[job.id]?.flushPendingEvents() ?? false
+            watcherTiming.end()
             guard !Task.isCancelled else { return (false, false) }
             let journal = self.journals[job.id] ?? ChangeJournal(), checkpoint = journal.sequence
             let doFull = BackupScanPolicy.requiresFullScan(explicit: full, watcherReady: watcherReady, journal: journal,
@@ -260,11 +266,15 @@ import CoreServices
             let changedPaths = Set(journal.pending.keys)
             let deferredPaths = automatic ? Set(self.waitingIssues.filter { $0.jobID == job.id && ($0.waiting?.nextAttempt ?? .distantPast) > Date() }.map(\.path)) : []
             self.statuses[job.id] = doFull ? "전체 검사 중" : "변경 파일 검사 중"
+            let networkForDiagnostics = self.isNetwork(job.source) || (job.cloudProvider == nil && self.isNetwork(job.destination))
             let worker = Task.detached {
+                return try await OperationLog.withRun(runJob, full: doFull) {
+                OperationLog.event("prepare.plan", "backup", completed: changedPaths.count, detail: "full=\(doFull);manual=\(full);watcherReady=\(watcherReady);network=\(networkForDiagnostics)")
                 if let decisions { return try await coordinator.apply(decisions, job: runJob, storage: remoteStorage, progress: updateProgress) }
                 if runJob.mode == .twoWay { return try await coordinator.run(runJob, storage: remoteStorage, fullScan: doFull, forceContentVerification: full, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress) }
                 if let remoteStorage { return try await cloudEngine.run(job, storage: remoteStorage, fullScan: doFull, forceContentVerification: full, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress) }
                 return try await engine.run(job, fullScan: doFull, changedPaths: changedPaths, deferredPaths: deferredPaths, progress: updateProgress)
+                }
             }
             do {
                 let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })

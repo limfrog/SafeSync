@@ -14,6 +14,7 @@ public actor BackupEngine {
     }
     public init(dataDirectory: URL = Storage.applicationDirectory) { self.dataDirectory = dataDirectory }
     public static func hash(_ url: URL) throws -> String {
+        let timing = OperationLog.measure("file.sha256", path: url.path); defer { timing.end() }
         let handle = try FileHandle(forReadingFrom: url); defer { try? handle.close() }
         var digest = SHA256()
         while let bytes = try handle.read(upToCount: 1024 * 1024), !bytes.isEmpty {
@@ -59,6 +60,7 @@ public actor BackupEngine {
     private func scan(_ root: URL) throws -> [String: FileStamp] { try SourceScanner.files(root) }
     private func manifestURL(_ job: BackupJob) -> URL { dataDirectory.appendingPathComponent("manifests/\(job.id).json") }
     private func loadManifest(_ job: BackupJob) throws -> Manifest {
+        let timing = OperationLog.measure("prepare.state_load"); defer { timing.end() }
         let path = manifestURL(job)
         return fm.fileExists(atPath: path.path) ? try Storage.load(Manifest.self, from: path) : Manifest()
     }
@@ -82,6 +84,7 @@ public actor BackupEngine {
         catch { try? fm.removeItem(at: dir.appendingPathComponent("\(item.id).json")); throw error }
     }
     private func recover(_ root: URL) throws {
+        let timing = OperationLog.measure("prepare.local_transaction_recovery"); defer { timing.end() }
         let staging = try child(root, ".safesync-staging")
         guard fm.fileExists(atPath: staging.path) else { return }
         for journal in try fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil) where journal.pathExtension == "json" {
@@ -163,6 +166,7 @@ public actor BackupEngine {
             return manifest.files[path]?.verificationVersion != 1 || changedPaths.contains { path == $0 || path.hasPrefix($0 + "/") || $0.isEmpty }
         }.sorted()
         for (index, path) in paths.enumerated() {
+            let timing = OperationLog.measure("file.total", path: path); defer { timing.end() }
             result.evaluatedPaths.insert(path)
             try Task.checkCancellation()
             progress(BackupProgress(path: path, completed: index, total: paths.count, size: files[path]?.size, stage: "파일 비교·검증"))
@@ -206,7 +210,7 @@ public actor BackupEngine {
                 result.copied += 1
                 try Storage.save(manifest, to: manifestURL(job))
             } catch is CancellationError { throw CancellationError() }
-            catch { result.issues.append(FileAccess.issue(error, jobID: job.id, path: path)) }
+            catch { OperationLog.event("file.error", "local", path: path, error: error); result.issues.append(FileAccess.issue(error, jobID: job.id, path: path)) }
         }
         if job.mirrorDeletes {
             for path in manifest.files.keys.sorted() where files[path] == nil && !deferredPaths.contains(path) {

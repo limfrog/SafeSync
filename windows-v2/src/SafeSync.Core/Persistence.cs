@@ -13,6 +13,7 @@ public static class JsonFile
     };
     public static T Read<T>(string path)
     {
+        using var timing=OperationLog.Measure("storage.json_read");
         using var input=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read|FileShare.Delete);
         using var reader = new StreamReader(input, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
         return JsonSerializer.Deserialize<T>(reader.ReadToEnd(), Options) ?? throw new InvalidDataException("비어 있는 JSON 파일입니다.");
@@ -72,6 +73,7 @@ public sealed class ConfigStore(string dataRoot)
     }
     public JobState LoadState(BackupJob job)
     {
+        using var timing=OperationLog.Measure("prepare.state_load");
         var path = StatePath(job.Id);
         if (!File.Exists(path)) return NewState(job);
         var state = StateDeltas.Load(path);
@@ -84,8 +86,9 @@ public sealed class ConfigStore(string dataRoot)
         foreach (var pending in state.PendingPaths) PathPolicy.Relative(pending);
         return state;
     }
-    public void SaveState(JobState state) => StateDeltas.Save(StatePath(state.JobId), state);
-    public void SaveCheckpoint(JobState state,IReadOnlyDictionary<string,FileEntry> entries,ISet<string> pending,IEnumerable<string> paths)=>StateDeltas.Append(StatePath(state.JobId),state,entries,pending,paths);
+    public void SaveState(JobState state) {using var timing=OperationLog.Measure("state.save");StateDeltas.Save(StatePath(state.JobId),state);}
+    public void SaveCheckpoint(JobState state,IReadOnlyDictionary<string,FileEntry> entries,ISet<string> pending,IEnumerable<string> paths)
+    {using var timing=OperationLog.Measure("state.checkpoint");StateDeltas.Append(StatePath(state.JobId),state,entries,pending,paths);}
     public static JobState NewState(BackupJob job)=>new(){JobId=job.Id,SyncMode=job.SyncMode,Source=job.Source,Destination=job.Destination,DestinationType=job.DestinationType,CloudFolderId=job.CloudFolderId,CloudFolderIdentity=job.CloudFolderIdentity,CloudAccountId=job.CloudAccountId};
     public AppConfig ImportLegacy(string configPath)
     {

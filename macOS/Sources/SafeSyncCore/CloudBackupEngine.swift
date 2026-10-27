@@ -54,6 +54,7 @@ public actor CloudBackupEngine {
     }
     private func release(_ lease: (String, Int32)) { active.remove(lease.0); flock(lease.1, LOCK_UN); Darwin.close(lease.1) }
     private func loaded(_ job: BackupJob) throws -> State {
+        let timing = OperationLog.measure("prepare.state_load"); defer { timing.end() }
         let url = stateURL(job)
         let state = fm.fileExists(atPath: url.path) ? try Storage.load(State.self, from: url) : State(source: BackupEngine.canonical(job.source).path, root: job.cloudFolderID!, account: job.cloudAccountID!)
         guard state.source == BackupEngine.canonical(job.source).path, state.root == job.cloudFolderID!, state.account == job.cloudAccountID! else { throw BackupError.unsafe("클라우드 작업 경로가 저장된 기록과 다릅니다. 새 작업을 추가하세요.") }; return state
@@ -62,6 +63,7 @@ public actor CloudBackupEngine {
         guard let item = try await storage.metadata(previous.id), item.revision == previous.revision, item.parent == previous.parent, item.name == previous.name else { throw BackupError.unsafe("백업 파일이 검사 후 변경되었습니다. 현재 파일을 보존하고 다시 검사합니다.") }; return item
     }
     private func verifyRemoteRoot(_ job: BackupJob, storage: any RemoteStorage, expected: String?) async throws -> String {
+        let timing = OperationLog.measure("prepare.remote_root_verify"); defer { timing.end() }
         let current: RemoteItem?
         if let google = storage as? GoogleDriveStorage { current = try await google.validatedJobFolder(job) }
         else { current = try await storage.metadata(job.cloudFolderID!) }
@@ -126,6 +128,7 @@ public actor CloudBackupEngine {
         return checked
     }
     private func recover(_ job: BackupJob, storage: any RemoteStorage) async throws {
+        let timing = OperationLog.measure("prepare.cloud_transaction_recovery"); defer { timing.end() }
         let directory = transactionDirectory(job)
         guard fm.fileExists(atPath: directory.path) else { return }
         for url in try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) where url.pathExtension == "json" {
@@ -148,6 +151,7 @@ public actor CloudBackupEngine {
         var sourceGuard: LocalRootGuard; var sourceIdentity: String
     }
     private func prepare(file: URL, path: String, stamp: FileStamp, job: BackupJob, storage: any RemoteStorage) async throws -> PreparedUpload {
+        let timing = OperationLog.measure("file.stable_copy_and_hash", path: path, bytes: stamp.size); defer { timing.end() }
         guard !CloudPathPolicy.isExcluded(path, provider: storage.provider) else { throw BackupError.unsafe("Dropbox가 지원하지 않는 시스템 메타데이터 파일은 전송에서 제외됩니다.") }
         let sourceGuard = try LocalRootGuard(job.source, expected: loaded(job).sourceIdentity)
         let root = job.cloudFolderID!, parentPath = (path as NSString).deletingLastPathComponent
@@ -167,6 +171,7 @@ public actor CloudBackupEngine {
         return PreparedUpload(file: file, path: path, stamp: stamp, parent: parent, staging: staging, snapshot: snapshot, digest: digest, jobID: job.id, root: root, sourceGuard: sourceGuard, sourceIdentity: sourceIdentity)
     }
     private nonisolated static func upload(_ prepared: PreparedUpload, storage: any RemoteStorage, progress: @Sendable (String, Int64?) -> Void) async throws -> RemoteItem {
+        let timing = OperationLog.measure("file.upload", path: prepared.path); defer { timing.end() }
         progress("임시 업로드", 0)
         if let google = storage as? GoogleDriveStorage {
             guard try await google.folder(path: ".safesync-staging", root: prepared.root) == prepared.staging else { throw BackupError.unsafe("전송 준비 후 임시 폴더가 변경되었습니다. 기존 사본을 보존합니다.") }
@@ -178,6 +183,7 @@ public actor CloudBackupEngine {
             resumeKey: "\(prepared.jobID)|\(prepared.path)|\(prepared.digest)", progress: { bytes, _ in progress("임시 업로드", bytes) })
     }
     private func commit(_ prepared: PreparedUpload, staged: RemoteItem, previous: RemoteItem?, job: BackupJob, storage: any RemoteStorage, keepBoth: Bool = false, comparison: FileComparison? = nil, progress: @Sendable (String, Int64?) -> Void = { _, _ in }) async throws -> RemoteItem {
+        let timing = OperationLog.measure("file.verify_publish", path: prepared.path); defer { timing.end() }
         let file = prepared.file, path = prepared.path, stamp = prepared.stamp, parent = prepared.parent
         let snapshot = prepared.snapshot, digest = prepared.digest, name = (path as NSString).lastPathComponent, root = job.cloudFolderID!
         progress("서버 체크섬 검증", nil)
@@ -288,6 +294,7 @@ public actor CloudBackupEngine {
         struct Candidate: Sendable { var file: URL; var path: String; var stamp: FileStamp; var previous: RemoteItem?; var offset: Int }
         var candidates: [Candidate] = []
         for (offset, path) in paths.enumerated() {
+            let timing = OperationLog.measure("file.total", path: path); defer { timing.end() }
             result.evaluatedPaths.insert(path)
             try Task.checkCancellation(); progress(BackupProgress(path: path, completed: offset, total: paths.count))
             do {
@@ -336,7 +343,7 @@ public actor CloudBackupEngine {
                 }
                 candidates.append(Candidate(file: file, path: path, stamp: stamp, previous: entry(path), offset: offset))
             } catch is CancellationError { throw CancellationError() }
-            catch { result.issues.append(FileAccess.issue(error, jobID: job.id, path: path)) }
+            catch { OperationLog.event("file.error", "cloud", path: path, error: error); result.issues.append(FileAccess.issue(error, jobID: job.id, path: path)) }
         }
         var next = 0
         while next < candidates.count {
@@ -350,7 +357,7 @@ public actor CloudBackupEngine {
                     let upload = try await prepare(file: candidate.file, path: candidate.path, stamp: candidate.stamp, job: job, storage: storage)
                     prepared.append((candidate, upload))
                 } catch is CancellationError { throw CancellationError() }
-                catch { result.issues.append(FileAccess.issue(error, jobID: job.id, path: candidate.path)) }
+                catch { OperationLog.event("file.error", "cloud", path: candidate.path, error: error); result.issues.append(FileAccess.issue(error, jobID: job.id, path: candidate.path)) }
             }
             next += width
             let total = paths.count
@@ -378,7 +385,7 @@ public actor CloudBackupEngine {
                         result.copied += 1
                         try Storage.save(state, to: stateURL(job))
                     } catch is CancellationError { throw CancellationError() }
-                    catch { result.issues.append(FileAccess.issue(error, jobID: job.id, path: candidate.path)) }
+                    catch { OperationLog.event("file.error", "cloud", path: candidate.path, error: error); result.issues.append(FileAccess.issue(error, jobID: job.id, path: candidate.path)) }
                 }
             }
         }

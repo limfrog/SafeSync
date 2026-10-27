@@ -31,6 +31,7 @@ public sealed class VerifiedFiles
     }
     public static async Task<string> HashAsync(string path, CancellationToken token)
     {
+        using var timing=OperationLog.Measure("file.sha256",path);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
             1024 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token));
@@ -126,6 +127,7 @@ public sealed class VerifiedFiles
 
     public async Task RecoverAsync(string root, CancellationToken token)
     {
+        using var timing=OperationLog.Measure("prepare.local_transaction_recovery");
         using var mutation=await FileMutationGate.EnterAsync(token);
         foreach (var journal in Directory.EnumerateFiles(root, ".safesync-txn-v2-*.json", SearchOption.TopDirectoryOnly))
         {
@@ -263,6 +265,7 @@ public static class FileTree
     }
     public static IEnumerable<FileInfo> Scan(string root, CancellationToken token, Action<string>? progress = null)
     {
+        using var timing=OperationLog.Measure("prepare.source_scan");
         PathPolicy.RejectLinks(root, root);
         var stack = new Stack<DirectoryInfo>();
         stack.Push(new DirectoryInfo(root));

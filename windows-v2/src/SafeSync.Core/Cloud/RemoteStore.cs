@@ -33,6 +33,7 @@ public static class RemotePath
     public static bool Content(RemoteItem item,UploadSnapshot snapshot)=>!item.Folder && item.Binary && item.Length==snapshot.Length && (item.Sha256.Length>0 && snapshot.Sha256.Length>0 ? item.Sha256.Equals(snapshot.Sha256,StringComparison.OrdinalIgnoreCase) : item.Hash.Length>0 && item.Hash.Equals(snapshot.Hash,StringComparison.OrdinalIgnoreCase));
     public static async Task<(string Md5,string Sha256)> GoogleHashesAsync(string path,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("file.md5_sha256",path);
         using var input=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read,1024*1024,FileOptions.Asynchronous|FileOptions.SequentialScan);
         using var md5=IncrementalHash.CreateHash(HashAlgorithmName.MD5);using var sha=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);var buffer=new byte[1024*1024];int count;
         while((count=await input.ReadAsync(buffer,token))>0){md5.AppendData(buffer,0,count);sha.AppendData(buffer,0,count);}
@@ -40,6 +41,7 @@ public static class RemotePath
     }
     public static async Task<string> HashAsync(string provider,string path,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("file.provider_hash",path);
         using var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read,1024*1024,FileOptions.Asynchronous|FileOptions.SequentialScan);
         if(provider=="GoogleDrive")return Convert.ToHexStringLower(await MD5.HashDataAsync(file,token));
         if(provider!="Dropbox")throw new ArgumentException("Unknown cloud provider.");

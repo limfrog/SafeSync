@@ -57,6 +57,7 @@ public sealed partial class GoogleDriveStore : IRemoteChanges,IRemoteBatch,IRemo
         foreach(var batch in paths.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(100))
         {
             var eligible=batch.Where(p=>known.TryGetValue(p,out var item) && item.Id.Length>0 && !item.Folder).ToArray();
+            OperationLog.Event("http.batch_items","drive.metadata",completed:eligible.Length);
             if(eligible.Length>0)
             {
                 string boundary="safesync_"+Guid.NewGuid().ToString("N");

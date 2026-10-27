@@ -61,6 +61,7 @@ public static class OfflineJournal
     public static IReadOnlyDictionary<long,string[]> TrackedIds(IEnumerable<FileEntry> files,bool backup=false)=>files.Where(f=>(backup ? f.BackupFileId : f.SourceFileId)!=0).GroupBy(f=>backup ? f.BackupFileId : f.SourceFileId).ToDictionary(g=>g.Key,g=>g.Select(f=>f.RelativePath).ToArray());
     public static OfflineChanges Read(string root,UsnCheckpoint? previous,CancellationToken token=default,IReadOnlyDictionary<long,string[]>? tracked=null)
     {
+        using var timing=OperationLog.Measure("prepare.offline_journal");
         root=PathPolicy.Root(root);var volumeRoot=Path.GetPathRoot(root);
         if(!OperatingSystem.IsWindows() || volumeRoot==null || volumeRoot.Length!=3 || volumeRoot[1]!=':')return new(null,true,[]);
         // A metadata-only (zero-access) handle can open successfully while NTFS

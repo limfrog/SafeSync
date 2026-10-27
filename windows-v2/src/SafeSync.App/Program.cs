@@ -26,7 +26,9 @@ internal static class Program
             if (string.Equals(PathPolicy.Root(root),PathPolicy.Root(legacy),StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("전환 검증본은 기존 1.x 데이터 폴더를 직접 사용할 수 없습니다.");
             if (smoke && Argument(args,"--data-root") == null) throw new ArgumentException("검사는 격리된 데이터 폴더가 필요합니다.");
-            var controller = new DesktopController(application,new ConfigStore(root),smoke);
+            using var operationLog=OperationLog.Start(root,System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)?.InformationalVersion ?? "unknown");
+            DesktopController controller;
+            using(OperationLog.Measure("application.initialize"))controller = new DesktopController(application,new ConfigStore(root),smoke);
             using var control=smoke ? null : new ControlChannel(()=>application.Dispatcher.InvokeAsync(controller.ExitAsync).Task.Unwrap());
             application.MainWindow = controller.Main;
             if (smoke)

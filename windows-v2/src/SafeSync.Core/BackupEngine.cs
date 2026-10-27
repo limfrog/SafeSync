@@ -10,10 +10,24 @@ public sealed class BackupEngine(ConfigStore store)
         IReadOnlyDictionary<string, ConflictAction>? resolutions = null, bool reconcileOffline = false,
         int retentionDays = 100)
     {
+        using var trace=OperationLog.Begin(job,forceFull,reconcileOffline);
+        try
+        {
+            var result=await RunCoreAsync(job,forceFull,changed,pause,new DiagnosticProgress(trace,progress),token,resolutions,reconcileOffline,retentionDays);
+            trace?.Complete(result);return result;
+        }
+        catch(Exception ex){trace?.Fail(ex);throw;}
+    }
+    private sealed class DiagnosticProgress(OperationLog.Run? trace,IProgress<BackupProgress>? next) : IProgress<BackupProgress>
+    {public void Report(BackupProgress value){trace?.Progress(value);next?.Report(value);}}
+    private async Task<BackupResult> RunCoreAsync(BackupJob job,bool forceFull,IEnumerable<string>? changed,
+        PauseGate pause,IProgress<BackupProgress>? progress,CancellationToken token,
+        IReadOnlyDictionary<string,ConflictAction>? resolutions,bool reconcileOffline,int retentionDays)
+    {
         ConfigStore.ValidateJob(job);
         if (job.DestinationType != "Local" && CloudFactory==null) throw new NotSupportedException("클라우드 공급자가 연결되지 않았습니다.");
         var gate = locks.GetOrAdd(job.Id, _ => new(1,1));
-        try{await pause.WaitForBoundaryAsync(gate,token);}catch(JobStoppedException){return new(){Canceled=true};}
+        try{using var timing=OperationLog.Measure("prepare.job_gate");await pause.WaitForBoundaryAsync(gate,token);}catch(JobStoppedException){return new(){Canceled=true};}
         try
         {
             pause.ThrowIfStopRequested();
@@ -46,6 +60,7 @@ public sealed class BackupEngine(ConfigStore store)
             foreach (var entry in entries.Values.Where(e => e.Status != "BackedUp")) pending.Add(entry.RelativePath);
             bool full = forceFull || journalInvalid || (reconcileOffline && (offline.RequiresScan || targetOffline.RequiresScan)) || state.FullScanRequired ||
                 !DateTime.TryParse(state.LastFullScanUtc,out _);
+            OperationLog.Event("prepare.plan","local",completed:pending.Count,total:entries.Count,detail:$"full={full};manual={forceFull};journalInvalid={journalInvalid};reconcile={reconcileOffline};sourceScan={offline.RequiresScan};destinationScan={targetOffline.RequiresScan};required={state.FullScanRequired}");
             if (full)
             {
                 // Enumerate completely before mutating the backup. Any access
@@ -78,6 +93,7 @@ public sealed class BackupEngine(ConfigStore store)
                     var source = PathPolicy.Combine(job.Source,relative);
                     var destination = PathPolicy.Combine(job.Destination,relative);
                     var info = new FileInfo(source);
+                    using var fileTiming=OperationLog.Measure("file.local",relative);
                     bool handled = false;
                     try
                     {
@@ -174,6 +190,7 @@ public sealed class BackupEngine(ConfigStore store)
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
+                        OperationLog.Event("file.error","local",relative,error:ex,detail:NetworkFailures.IsTransient(ex) ? "network_retry" : "review_or_retry");
                         var locked = ex is IOException && ((ex.HResult & 0xFFFF) is 32 or 33);
                         var issue = Issue(relative,locked ? "다른 프로그램에서 사용 중입니다." : ex.Message,info,new FileInfo(destination)) with{AutomaticNetworkRetry=NetworkFailures.IsTransient(ex)};
                         var oldEntry=entries.GetValueOrDefault(relative);

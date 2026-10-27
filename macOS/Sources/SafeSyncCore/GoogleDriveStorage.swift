@@ -147,6 +147,8 @@ public struct GoogleDriveStorage: RemoteStorage {
         let (data, _) = try await request(url: HTTP.url("https://www.googleapis.com/drive/v3/files/" + item.id, query: ["alt": "media", "supportsAllDrives": "true"])); return data
     }
     public func inventory(root: String, previous: RemoteIndex?) async throws -> RemoteIndex {
+        let timing = OperationLog.measure("prepare.remote_catalog_refresh"); defer { timing.end() }
+        OperationLog.event("catalog.plan", "remote", total: previous?.nodes.count ?? 0, detail: "full=\(previous?.cursor == nil)")
         await folderIndex.clear(root: root)
         guard let rootItem = try await metadata(root), rootItem.folder else { throw BackupError.unsafe("Google Drive 백업 폴더에 접근할 수 없습니다.") }
         var index = previous ?? RemoteIndex(); index.root = rootItem.id

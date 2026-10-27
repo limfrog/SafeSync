@@ -99,10 +99,13 @@ public sealed class CloudAuthentication(HttpClient client,ISecretVault vault)
     }
     private async Task<JsonElement> FormAsync(string provider,Dictionary<string,string> values,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("prepare.oauth_token_exchange");
         var endpoint=provider=="GoogleDrive" ? "https://oauth2.googleapis.com/token" : provider=="Dropbox" ? "https://api.dropboxapi.com/oauth2/token" : throw new ArgumentException("Unknown cloud provider.");
         using var request=new HttpRequestMessage(HttpMethod.Post,endpoint){Content=new FormUrlEncodedContent(values)};
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(45));
+        var started=System.Diagnostics.Stopwatch.GetTimestamp();
         using var response=await client.SendAsync(request,timeout.Token);
+        OperationLog.Http("oauth.token",started,request.Content.Headers.ContentLength,(int)response.StatusCode,0);
         if(!response.IsSuccessStatusCode)throw new CloudApiException(response.StatusCode,"OAuth token exchange");
         return await CloudJson.ReadAsync(response,token);
     }

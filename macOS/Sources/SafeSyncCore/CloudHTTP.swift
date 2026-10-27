@@ -28,14 +28,20 @@ public enum HTTP {
     }
     public static func send(_ request: URLRequest, accepted: Set<Int> = Set(200...299)) async throws -> (Data, HTTPURLResponse) {
         try Task.checkCancellation()
-        let (data, response) = try await session.data(for: request)
+        let started = ProcessInfo.processInfo.systemUptime
+        let operation = endpointForLog(request)
+        let data: Data, response: URLResponse
+        do { (data, response) = try await session.data(for: request) }
+        catch { OperationLog.event("http.end", operation, ms: (ProcessInfo.processInfo.systemUptime - started) * 1000, error: error); throw error }
         guard let http = response as? HTTPURLResponse else { throw BackupError.unsafe("HTTP 응답을 확인할 수 없습니다.") }
+        OperationLog.event("http.end", operation, bytes: Int64(request.httpBody?.count ?? 0), total: data.count, status: http.statusCode, ms: (ProcessInfo.processInfo.systemUptime - started) * 1000)
         guard accepted.contains(http.statusCode) else {
             // Never include token endpoints, Authorization headers or resumable URLs in errors.
             throw responseError(status: http.statusCode, url: request.url!, data: data)
         }
         return (data, http)
     }
+    private static func endpointForLog(_ request: URLRequest) -> String { (request.httpMethod ?? "GET") + " " + (request.url.map(OperationLog.endpoint) ?? "unknown") }
     /// Only tagged error codes are inspected. Never echo error_summary, paths or tokens.
     public static func responseError(status: Int, url: URL, data: Data) -> APIError {
         var summary = status == 401 ? "인증이 만료되었습니다. 계정을 다시 연결하세요." : status == 409 ? "원격 요청을 처리하지 못했습니다. 경로·이름·권한을 확인하세요." : status == 429 ? "요청 한도를 초과했습니다. 잠시 후 재시도합니다." : "서비스 응답을 확인하고 다시 시도하세요."
@@ -84,6 +90,7 @@ public actor CloudAuthorization {
         if !forceRefresh, secret.expiresAt.timeIntervalSinceNow > 90, !secret.accessToken.isEmpty { return secret.accessToken }
         guard !secret.refreshToken.isEmpty else { throw BackupError.unsafe("클라우드 계정을 다시 연결하세요.") }
         let task = Task<String, Error> {
+            let timing = OperationLog.measure("prepare.oauth_token_exchange"); defer { timing.end() }
             var params = ["grant_type": "refresh_token", "refresh_token": secret.refreshToken, "client_id": account.clientID]
             if account.provider == .googleDrive, !secret.clientSecret.isEmpty { params["client_secret"] = secret.clientSecret }
             var request = URLRequest(url: URL(string: account.provider == .dropbox ? "https://api.dropboxapi.com/oauth2/token" : "https://oauth2.googleapis.com/token")!)
@@ -101,6 +108,7 @@ public actor CloudAuthorization {
         return try await task.value
     }
     public func download(_ account: CloudAccount, url: URL, to destination: URL, method: String = "GET", headers: [String: String] = [:]) async throws {
+        let timing = OperationLog.measure("file.remote_download"); defer { timing.end() }
         for attempt in 0...1 {
             var request = URLRequest(url: url); request.httpMethod = method
             for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
