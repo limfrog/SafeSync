@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
   "windows": {
-    "version": "1.0.0-preview.26",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.26.exe",
-    "sha256": "c0c1a47c0fe8a5e03d0265ef1d7fa3fbeaa47cf45cd6a6789912a0a78463e93d",
-    "size": 77511680,
-    "notes": "Horizon Entertainment · 폴더 조회 개선 및 선택 진단 로그를 포함한 공개 프리뷰입니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
+    "version": "1.0.0-preview.27",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.27.exe",
+    "sha256": "ab06b74c8f782372145fc81ec7579c054a5e29d8497b015ee0db2b27a23c31be",
+    "size": 77686272,
+    "notes": "Horizon Entertainment · 대량 변경 보호·실행별 복원·복원 검증 및 Windows 선택형 VSS를 포함한 공개 프리뷰입니다. 로그 선택은 환경설정 맨 아래에 있습니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
   },
   "macOS": {
-    "version": "0.3.22",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.22-universal.zip",
-    "sha256": "1c809be6ceed09e1b0e9b5b62f0a8f9ebd433cc10a4592821e5467a6d412c42c",
-    "size": 4550956,
-    "notes": "Horizon Entertainment · 폴더 조회 개선 및 선택 진단 로그를 포함한 공개 프리뷰입니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
+    "version": "0.3.23",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.23-universal.zip",
+    "sha256": "63c76b203e8bf56b2e43e0a81a62388da047998962c85f8d7f9c1c88556b0339",
+    "size": 4885255,
+    "notes": "Horizon Entertainment · 대량 변경 보호·실행별 복원·복원 검증 및 Windows 선택형 VSS를 포함한 공개 프리뷰입니다. 로그 선택은 환경설정 맨 아래에 있습니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
   }
 }

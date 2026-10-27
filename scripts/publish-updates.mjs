@@ -21,7 +21,7 @@ function release(pattern){
   const size=existsSync(path) ? statSync(path).size : Number(/\bblob\s+[a-f0-9]+\s+(\d+)\t/.exec(tree)?.[1]);
   if(!Number.isSafeInteger(size)||size<=0||size>1024*1024*1024)throw new Error('Release file is missing or too large');
   return {version:chosen.version,url:`https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/${chosen.file}`,sha256:chosen.sha256,size,
-    notes:'Horizon Entertainment · 폴더 조회 개선 및 선택 진단 로그를 포함한 공개 프리뷰입니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요.'};
+    notes:'Horizon Entertainment · 대량 변경 보호·실행별 복원·복원 검증 및 Windows 선택형 VSS를 포함한 공개 프리뷰입니다. 로그 선택은 환경설정 맨 아래에 있습니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요.'};
 }
 const feed={schemaVersion:1,windows:release(/^SafeSync-Setup-(\d+\.\d+\.\d+(?:-preview\.\d+)?)\.exe$/),macOS:release(/^SafeSync-macOS-(\d+\.\d+\.\d+)-universal\.zip$/)};
 mkdirSync(resolve(root,'updates'),{recursive:true});

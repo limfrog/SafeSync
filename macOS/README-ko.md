@@ -1,8 +1,8 @@
-# SafeSync macOS 0.3.23(31) — 공개 프리뷰
+# SafeSync macOS 0.3.23(32) — 공개 프리뷰
 
 개발자 및 운영자: **Horizon Entertainment** · 문의: **apps@horizonent.co.kr**.
 
-현재 버전은 상세 로그를 환경설정에서 켜고 끌 수 있으며 기본으로 꺼져 있습니다. 문제가 있어 검증할 때만 켜세요. 요청별 DNS·연결·TLS·전송·서버 응답 대기·수신과 전송 진행을 기록합니다. 검증된 내용이 같고 버전 정보만 바뀌거나 업로드 후 SHA-256이 추가된 경우 재비교를 줄입니다. [이번 검증](../windows-v2/PREVIEW26-VALIDATION.md) · [로그 안내](../windows-v2/OPERATION-LOGS.md).
+현재 버전은 대량 변경 보호·실행별 휴지통 복원·복원 검증을 추가합니다. [사용법](../RECOVERY-GUIDE.md)을 확인하세요. 상세 로그를 환경설정에서 켜고 끌 수 있으며 기본으로 꺼져 있습니다. 문제가 있어 검증할 때만 켜세요. 요청별 DNS·연결·TLS·전송·서버 응답 대기·수신과 전송 진행을 기록합니다. 검증된 내용이 같고 버전 정보만 바뀌거나 업로드 후 SHA-256이 추가된 경우 재비교를 줄입니다. [이번 검증](../windows-v2/PREVIEW27-VALIDATION.md) · [로그 안내](../windows-v2/OPERATION-LOGS.md).
 
 Google Drive API는 `drive.file` 권한으로 앱 관리 폴더의 단방향 백업만 제공합니다. 이전 전체 Drive 권한 계정은 재연결하고 새 관리 폴더의 작업을 만들어야 하며, 프리뷰 22~25의 제한 권한 작업은 유지합니다. 로컬·NAS·Dropbox 양방향은 계속 지원합니다. 아래 과거 Google API 양방향 설명은 이전 버전의 기록입니다.
 
