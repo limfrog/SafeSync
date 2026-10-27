@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
   "windows": {
-    "version": "1.0.0-preview.21",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.21.exe",
-    "sha256": "164e4dcf10379b4ecd5931efaae570e70d6ffe651db5cf322b0296661cf8c800",
-    "size": 77464576,
-    "notes": "Horizon Entertainment · SafeSync 새 버전입니다. 작업과 계정 설정을 유지합니다. 자세한 변경 사항은 GitHub의 사용 안내를 확인하세요."
+    "version": "1.0.0-preview.26",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.26.exe",
+    "sha256": "c0c1a47c0fe8a5e03d0265ef1d7fa3fbeaa47cf45cd6a6789912a0a78463e93d",
+    "size": 77511680,
+    "notes": "Horizon Entertainment · 폴더 조회 개선 및 선택 진단 로그를 포함한 공개 프리뷰입니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
   },
   "macOS": {
-    "version": "0.3.17",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.17-universal.zip",
-    "sha256": "c5bc87ec6e1621d6c31444f69c166163e152f5bc5dcb8d1f99319f93be93a3b3",
-    "size": 4269668,
-    "notes": "Horizon Entertainment · SafeSync 새 버전입니다. 작업과 계정 설정을 유지합니다. 자세한 변경 사항은 GitHub의 사용 안내를 확인하세요."
+    "version": "0.3.22",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.22-universal.zip",
+    "sha256": "1c809be6ceed09e1b0e9b5b62f0a8f9ebd433cc10a4592821e5467a6d412c42c",
+    "size": 4550956,
+    "notes": "Horizon Entertainment · 폴더 조회 개선 및 선택 진단 로그를 포함한 공개 프리뷰입니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
   }
 }

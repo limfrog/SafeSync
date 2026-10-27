@@ -1,16 +1,20 @@
 # SafeSync
 
-이 브랜치의 **작동 분석 로그 시험본**은 Windows 프리뷰 25·macOS 0.3.21(30)입니다. [다운로드·이전 주의사항·검사 결과](DRIVE-FILE-TRIAL.md)와 [로그 기록 항목](windows-v2/OPERATION-LOGS.md)을 확인하세요. 초기 준비·스캔·인증·클라우드 조회·전송·검증·재시도 시간을 나누어 기록하며, 프리뷰 24의 폴더 조회 개선과 기존 작업·완료 기록을 이어 사용합니다. 일반 공개 다운로드와 자동 업데이트는 아래 기존 배포 버전으로 유지합니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.26 공개 프리뷰**, macOS는 **0.3.22 공개 프리뷰**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.21 공개 프리뷰**, macOS는 **0.3.17 공개 테스트 버전**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
-- [macOS 0.3.17 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.17-universal.zip)
+공개 프리뷰 26은 Windows의 Google Drive 초기 폴더 ID 조회를 개선하고, 두 OS의 상세 로그를 환경설정에서 선택하도록 바꿉니다. 로그는 기본으로 꺼져 있습니다. 로컬·NAS·Dropbox는 단방향/양방향, Google Drive API는 `drive.file` 권한으로 앱 관리 폴더의 단방향 백업을 제공합니다. 이전 전체 Drive 권한 계정은 재연결·새 관리 폴더 이전이 필요하며, 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다.
+
+- [이번 변경·양방향 지원 범위·최종 검증](windows-v2/PREVIEW26-VALIDATION.md)
+- [상세 로그 켜기/끄기와 분석 기준](windows-v2/OPERATION-LOGS.md)
+
+- [macOS 0.3.22 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.22-universal.zip)
 - [macOS 0.3.17 반복 검사 수정 범위](macOS/0.3.17-VALIDATION.md)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 
-- [Windows 1.0.0 Preview 21 설치 파일](dist/SafeSync-Setup-1.0.0-preview.21.exe)
-- [Windows 1.0.0 Preview 21 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.21.zip)
+- [Windows 1.0.0 Preview 26 설치 파일](dist/SafeSync-Setup-1.0.0-preview.26.exe)
+- [Windows 1.0.0 Preview 26 무설치 ZIP](dist/SafeSync-Windows-1.0.0-preview.26.zip)
 - [Preview 21·macOS 0.3.17 배포 검사 결과](windows-v2/PREVIEW21-PACKAGE-RESULT.md)
 - [프리뷰 18 빠른 클라우드 비교와 한계](windows-v2/PREVIEW18-VALIDATION.md)
 - [프리뷰 17·Mac 0.3.13 검사 범위](windows-v2/PREVIEW17-VALIDATION.md)
