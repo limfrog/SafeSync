@@ -35,6 +35,10 @@ final class RecoveryProtectionTests: XCTestCase {
     func testLegacyJobDefaultsAndMassProposalBinding() throws {
         var job = try JSONDecoder().decode(BackupJob.self, from: Data("{\"id\":\"\(UUID())\",\"name\":\"legacy\",\"source\":\"/tmp/s\",\"destination\":\"/tmp/d\",\"scheduled\":false,\"scheduleTime\":\"23:00\",\"mirrorDeletes\":true,\"paused\":false}".utf8))
         XCTAssertTrue(job.protectMassChanges); XCTAssertEqual(job.massMinimum, 100); XCTAssertEqual(job.massPercent, 20)
+        job.massMinimum = 45;job.massPercent = 35;job.protectMassChanges = false
+        let exported = try JobListCodec.decode(JobListCodec.encode([job])); let imported = try JobListCodec.plan(exported,replacing:[])
+        XCTAssertEqual(imported.jobs[0].massMinimum,45);XCTAssertEqual(imported.jobs[0].massPercent,35);XCTAssertFalse(imported.jobs[0].protectMassChanges)
+        job.protectMassChanges = true
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("SafeSync-proposal-\(UUID())"); defer { try? FileManager.default.removeItem(at: root) }
         job.massMinimum = 1; job.massPercent = 1
         let change = MassChange(path: "a", side: "원본", action: "삭제", before: "x", after: "missing")

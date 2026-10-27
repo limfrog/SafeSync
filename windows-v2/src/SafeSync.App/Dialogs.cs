@@ -167,7 +167,7 @@ internal sealed partial class DesktopController
     {
         var dialog=new Microsoft.Win32.SaveFileDialog {Filter="SafeSync 작업 목록|*.safesync-jobs.json",FileName="SafeSync-jobs-"+DateTime.Now.ToString("yyyyMMdd")+".safesync-jobs.json"};
         if(dialog.ShowDialog(Main)!=true)return;
-        var document=new JobListDocument {Jobs=jobs.Select(j=>new BackupJob {Id=j.Id,Name=j.Name,SyncMode=j.SyncMode,Source=j.Source,Destination=j.Destination,DestinationType=j.DestinationType,CloudFolderId=j.CloudFolderId,CloudFolderIdentity=j.CloudFolderIdentity,CloudAccountId=j.CloudAccountId,TriggerType=j.TriggerType,ScheduleTime=j.ScheduleTime,MirrorDeletes=j.MirrorDeletes,Paused=j.Paused,Stopped=j.Stopped,CloudBindingReviewRequired=j.CloudBindingReviewRequired}).ToList()};
+        var document=new JobListDocument {Jobs=jobs.Select(j=>new BackupJob {Id=j.Id,Name=j.Name,SyncMode=j.SyncMode,Source=j.Source,Destination=j.Destination,DestinationType=j.DestinationType,CloudFolderId=j.CloudFolderId,CloudFolderIdentity=j.CloudFolderIdentity,CloudAccountId=j.CloudAccountId,TriggerType=j.TriggerType,ScheduleTime=j.ScheduleTime,MirrorDeletes=j.MirrorDeletes,ProtectMassChanges=j.ProtectMassChanges,MassChangeMinimum=j.MassChangeMinimum,MassChangePercent=j.MassChangePercent,UseVss=j.UseVss,Paused=j.Paused,Stopped=j.Stopped,CloudBindingReviewRequired=j.CloudBindingReviewRequired}).ToList()};
         try {JsonFile.Save(dialog.FileName,document);Log("작업 목록 내보내기 완료 — 계정 정보와 스냅샷 제외");}catch(Exception ex){Tell(ex.Message);}
     }
     private void ImportJobs()

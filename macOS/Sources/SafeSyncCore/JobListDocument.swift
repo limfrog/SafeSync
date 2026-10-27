@@ -14,6 +14,9 @@ public struct PortableJob: Codable, Sendable {
     public var Paused: Bool
     public var SyncMode: String?
     public var Stopped: Bool?
+    public var ProtectMassChanges: Bool?
+    public var MassChangeMinimum: Int?
+    public var MassChangePercent: Int?
 
     public init(_ job: BackupJob) {
         Id = job.id.uuidString; Name = job.name; Source = job.source
@@ -22,6 +25,7 @@ public struct PortableJob: Codable, Sendable {
         CloudFolderId = job.cloudProvider == .dropbox && job.cloudFolderID == "" ? "/" : job.cloudFolderID ?? ""
         TriggerType = job.scheduled ? "Scheduled" : "Realtime"; ScheduleTime = job.scheduleTime
         MirrorDeletes = job.mirrorDeletes; Paused = job.paused; SyncMode = job.mode == .twoWay ? "TwoWay" : "OneWay"; Stopped = job.stopped
+        ProtectMassChanges = job.protectMassChanges; MassChangeMinimum = job.massMinimum; MassChangePercent = job.massPercent
     }
     public var provider: CloudProvider? { DestinationType == "Dropbox" ? .dropbox : DestinationType == "GoogleDrive" ? .googleDrive : nil }
     public var folderID: String? { provider == nil ? nil : provider == .dropbox && CloudFolderId == "/" ? "" : CloudFolderId }
@@ -64,6 +68,7 @@ public enum JobListCodec {
         guard document.Jobs.count <= maximumJobs else { throw BackupError.unsafe("작업은 최대 1000개까지 가져올 수 있습니다.") }
         var ids: Set<String> = []
         for job in document.Jobs {
+            guard (1...1_000_000).contains(job.MassChangeMinimum ?? 100), (1...100).contains(job.MassChangePercent ?? 20) else { throw BackupError.unsafe("대량 변경 보호 기준이 잘못되었습니다.") }
             guard job.SyncMode == nil || ["OneWay", "TwoWay"].contains(job.SyncMode!) else { throw BackupError.unsafe("지원하지 않는 동기화 방향입니다.") }
             guard job.Id.range(of: "^[a-zA-Z0-9_.-]{1,128}$", options: .regularExpression) != nil, ids.insert(job.Id.lowercased()).inserted else { throw BackupError.unsafe("작업 ID가 잘못되었거나 중복되었습니다: \(job.Id)") }
             guard !job.Name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, job.Name.utf16.count <= 200 else { throw BackupError.unsafe("작업 이름이 비어 있거나 너무 깁니다.") }
@@ -95,6 +100,7 @@ public enum JobListCodec {
             job.cloudProvider = portable.provider; job.cloudFolderID = portable.folderID
             job.scheduled = portable.TriggerType == "Scheduled"; job.scheduleTime = portable.ScheduleTime
             job.mirrorDeletes = portable.MirrorDeletes; job.paused = portable.Paused; job.syncMode = portable.SyncMode == "TwoWay" ? .twoWay : .oneWay; job.stopped = portable.Stopped
+            job.protectMassChanges = portable.ProtectMassChanges ?? true; job.massMinimum = portable.MassChangeMinimum ?? 100; job.massPercent = portable.MassChangePercent ?? 20
             if let id = UUID(uuidString: portable.Id), let old = current.first(where: { $0.id == id }), old.mode == job.mode, old.source == job.source, old.destination == job.destination, old.cloudProvider == job.cloudProvider, old.cloudFolderID == job.cloudFolderID {
                 job.id = old.id; job.cloudAccountID = old.cloudAccountID; job.lastScheduledDay = old.lastScheduledDay; reused.insert(old.id)
             }

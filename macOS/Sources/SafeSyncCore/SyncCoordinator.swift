@@ -39,7 +39,8 @@ public actor SyncCoordinator {
             let index = try await storage.inventory(root: job.cloudFolderID!, previous: state.remoteInventory)
             for (path,items) in try index.groupsByPath() { groups[storage.provider == .dropbox ? path.lowercased() : path, default: []] += items }
         }
-        let guardRoot = storage == nil ? try LocalRootGuard(job.destination, expected: state.backupRoot) : nil
+        let guardRoot = storage == nil ? try LocalRootGuard(job.destination) : nil
+        if let guardRoot { guard try FileComparisons.identity(guardRoot.root) == state.backupRoot else { throw BackupError.unsafe("백업 폴더가 성공 기록과 다릅니다.") } }
         var rows: [RestoreCheckRow] = []
         for (path,pair) in state.files.sorted(by: { $0.key < $1.key }) where pair.backup?.folder == false {
             try Task.checkCancellation(); let row: RestoreCheckRow
