@@ -37,3 +37,9 @@ Google Drive는 `drive.file` 앱 관리 폴더의 단방향 정책을 유지한�
 | `SafeSync-Setup-1.0.0-preview.27.exe` | 77,686,272 | `ab06b74c8f782372145fc81ec7579c054a5e29d8497b015ee0db2b27a23c31be` |
 | `SafeSync-Windows-1.0.0-preview.27.zip` | 77,483,453 | `c8c77e4dec4ec1accd98e7f81ef45f35b75ed9973e5c6c47e885d352f1b99d8f` |
 | `SafeSync-macOS-0.3.23-universal.zip` | 4,885,255 | `63c76b203e8bf56b2e43e0a81a62388da047998962c85f8d7f9c1c88556b0339` |
+
+## 공개 게시 확인
+
+- 공개 배포 커밋 `9ee759e`의 세 파일을 GitHub 공개 주소에서 다시 다운로드해 위 크기·SHA-256과 모두 일치함을 확인했다. 공개 업데이트 목록은 Windows preview.27 / macOS 0.3.23과 동일한 파일 해시를 제공한다. [목록 게시 검사](https://github.com/limfrog/SafeSync/actions/runs/40495794151)가 성공했다.
+- 홈페이지 `84d8c67`의 [SafeSync 페이지 배포](https://github.com/limfrog/horizonent-site/actions/runs/40495843246)가 성공했다. 실제 상세페이지·릴리스 노트·개인정보처리방침·apps 목록의 HTTP 200, 새 버전·대량 변경·환경설정 하단 로그 안내를 확인했다. 공통 페이지 디자인은 유지했다.
+- 이번 작업의 격리 검사·다운로드 임시 폴더와 UI 검사 사본을 정리한다. 최종 dist·체크섬·사용법·검증 문서는 보존하고, 실제 실행 중 앱·개인 백업·계정·토큰·스냅샷·사용자 로그는 변경하거나 삭제하지 않는다.
