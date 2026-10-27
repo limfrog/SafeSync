@@ -159,12 +159,12 @@ import CoreServices
         selection = savedID; rebuildWatchers(); log("작업 저장: \(job.name)")
     }
     func removeSelected() {
-        guard !isImportingJobList, let job = selected else { return }
+        guard !isImportingJobList, let job = selected, !(busyRestoreCheck && restoreCheckJob?.id == job.id) else { return }
         guard running[job.id] == nil else { error = "작업 관리에서 작업 종료 후 삭제하세요. 백업 파일은 보존합니다."; return }
         deleteRequest = job
     }
     func confirmDelete() {
-        guard let job = deleteRequest, running[job.id] == nil else { return }
+        guard let job = deleteRequest, running[job.id] == nil, !(busyRestoreCheck && restoreCheckJob?.id == job.id) else { return }
         jobs.removeAll { $0.id == job.id }; rebuildWatchers(); issues.removeAll { $0.jobID == job.id }; selection = nil; deleteRequest = nil; save()
     }
     func stopSelected() {
@@ -341,7 +341,7 @@ import CoreServices
             }
     }
     func applyJobList(_ plan: JobListImportPlan) throws -> URL {
-        guard configurationUsable, running.isEmpty, !busyTrash, !validatingCloud else { throw BackupError.unsafe("작업이 시작되었습니다. 완료된 뒤 다시 가져오세요.") }
+        guard configurationUsable, running.isEmpty, !busyTrash, !validatingCloud, !busyRestoreCheck else { throw BackupError.unsafe("작업 또는 검증을 완료한 뒤 다시 가져오세요.") }
         watchers.removeAll()
         let backupURL: URL
         do {
@@ -494,12 +494,12 @@ import CoreServices
         return run(runnable, decisions: decisions)
     }
     func loadTrash() {
-        guard !isImportingJobList, let job = selected, running[job.id] == nil else { return }
+        guard !isImportingJobList, let job = selected, running[job.id] == nil, !(busyRestoreCheck && restoreCheckJob?.id == job.id) else { return }
         if trashJob?.id != job.id { trash = [] }
         trashJob = job; refreshTrash(job)
     }
     func refreshTrash(_ job: BackupJob) {
-        guard running[job.id] == nil else { error = "실행을 완료하거나 작업 종료 후 휴지통을 확인하세요."; return }
+        guard running[job.id] == nil, !(busyRestoreCheck && restoreCheckJob?.id == job.id) else { error = "실행 또는 복원 검증이 끝난 뒤 휴지통을 확인하세요."; return }
         let token = UUID(); trashGeneration = token; busyTrash = true
         Task {
             do {
@@ -544,14 +544,14 @@ import CoreServices
         }
     }
     func showRestoreCheck() {
-        guard !busyRestoreCheck, let job = selected, running[job.id] == nil else { return }
+        guard !busyRestoreCheck, !busyTrash, let job = selected, running[job.id] == nil else { return }
         restoreCheckJob = job; restoreCheckRows = []
         restoreCheckSummary = "백업을 임시 위치에 읽어 마지막 성공 체크섬과 비교합니다. 검증하는 동안 이 작업의 자동 실행만 대기합니다."
         openAppWindow?("restore-check")
     }
     func cancelRestoreCheck() { restoreCheckTask?.cancel() }
     func startRestoreCheck() {
-        guard !busyRestoreCheck, let job = restoreCheckJob, running[job.id] == nil,
+        guard !busyRestoreCheck, !busyTrash, let job = restoreCheckJob, running[job.id] == nil,
               jobs.contains(where: { FileComparisons.sameEndpoints($0,job) }) else { return }
         let token = UUID(); restoreCheckGeneration = token; busyRestoreCheck = true; restoreCheckRows = []
         restoreCheckSummary = "백업 파일을 읽어 검증하는 중…"

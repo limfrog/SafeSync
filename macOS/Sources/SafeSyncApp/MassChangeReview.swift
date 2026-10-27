@@ -20,12 +20,12 @@ struct MassChangeReview: View {
 }
 extension Store {
     func reviewMassChanges() {
-        guard let job = selected, running[job.id] == nil else { return }
+        guard let job = selected, !isRunning(job.id) else { return }
         do { massProposal = try MassChanges.pending(directory: Storage.applicationDirectory, job: job); if massProposal == nil { error = "이 작업에 보류된 대량 변경이 없습니다." } }
         catch { self.error = error.localizedDescription }
     }
     func approveMassChanges(_ proposal: MassChangeProposal) {
-        guard let job = jobs.first(where: { $0.id == proposal.jobID }), running[job.id] == nil else { return }
+        guard let job = jobs.first(where: { $0.id == proposal.jobID }), !isRunning(job.id) else { return }
         do { try MassChanges.approve(directory: Storage.applicationDirectory, job: job, fingerprint: proposal.fingerprint); massProposal = nil; log("검토한 대량 변경을 다음 실행에서 1회 허용했습니다. 지금 실행을 눌러 진행하세요.") }
         catch { self.error = error.localizedDescription }
     }

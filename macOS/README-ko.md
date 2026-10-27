@@ -1,4 +1,4 @@
-# SafeSync macOS 0.3.22(31) — 공개 프리뷰
+# SafeSync macOS 0.3.23(31) — 공개 프리뷰
 
 개발자 및 운영자: **Horizon Entertainment** · 문의: **apps@horizonent.co.kr**.
 
@@ -23,6 +23,10 @@ Google Drive API는 `drive.file` 권한으로 앱 관리 폴더의 단방향 백
 Windows SafeSync 1.0.0-preview.10의 UI·동기화 기능에 preview.11의 비교·삭제 보호, preview.13의 업데이트 확인, preview.14의 이전 이력 재비교를 반영했습니다. SwiftUI/AppKit과 Swift 백업 엔진을 사용합니다. 기존 Windows 아이콘을 Dock·Finder·메인 화면에서 유지하며, 메뉴 막대에는 방패 고정·화살표 회전 및 다크 모드 아웃라인을 적용합니다.
 
 통합 시나리오 100개와 XCTest 10개, macOS Universal 빌드·서명·번들 검사를 통과한 공개 테스트 버전입니다. 실제 Mac UI 조작·Google Drive/Dropbox 계정 전송·NAS·외장 디스크·Intel 기기의 검증이 모두 끝난 완성판으로 표시하지 않습니다. 자세한 범위는 [검증 현황](STATUS.md)을 확인하세요.
+
+## 보호·복원 기능 추가
+
+대량 변경·삭제는 기본 100개/20% 기준으로 사전에 보류합니다. 작업 관리에서 목록 확인·1회 허용 및 현재 백업 복원 검증을 사용할 수 있습니다. 휴지통은 실행별 필터와 사본 검증을 제공합니다. Windows VSS는 관리자 권한·로컬 NTFS·단방향 원본에 한해 선택합니다. [자세한 사용법](../RECOVERY-GUIDE.md). 상세 로그 선택은 **환경설정 맨 아래**에 있습니다.
 
 ## 0.3.7 주요 변경
 

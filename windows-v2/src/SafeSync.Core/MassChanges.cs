@@ -15,7 +15,7 @@ public static class MassChanges
     private static string Binding(BackupJob j)=>JsonSerializer.Serialize(new{j.Id,j.Source,j.Destination,j.DestinationType,j.SyncMode,j.CloudAccountId,j.CloudFolderId,j.CloudFolderIdentity,j.MirrorDeletes,j.MassChangeMinimum,j.MassChangePercent});
     public static MassChangeProposal? Pending(ConfigStore store,BackupJob job)
     {
-        var path=PathFor(store,job,"");if(!File.Exists(path))return null;var proposal=JsonFile.Read<MassChangeProposal>(path);
+        var path=PathFor(store,job,"");if(!job.ProtectMassChanges || !File.Exists(path))return null;var proposal=JsonFile.Read<MassChangeProposal>(path);
         return proposal.JobId==job.Id && proposal.Binding==Binding(job) ? proposal : null;
     }
     public static void Approve(ConfigStore store,BackupJob job,string fingerprint)
@@ -34,7 +34,7 @@ public static class MassChanges
     private static string Stamp(long length,string modified,string created)=>$"{length}|{modified}|{created}";
     public static void Check(ConfigStore store,BackupJob job,JobState state,IEnumerable<string> paths,IReadOnlyDictionary<string,RemoteItem>? remote=null)
     {
-        if(!job.ProtectMassChanges)return;
+        if(!job.ProtectMassChanges){ClearIfSafe();return;}
         if(job.MassChangeMinimum<1 || job.MassChangePercent is <1 or >100)throw new InvalidDataException("대량 변경 보호 기준을 확인하세요.");
         var prior=state.Files.Where(f=>f.Status=="BackedUp" && f.Length>=0).ToDictionary(f=>f.RelativePath,StringComparer.OrdinalIgnoreCase);
         var candidates=paths.Where(prior.ContainsKey).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();

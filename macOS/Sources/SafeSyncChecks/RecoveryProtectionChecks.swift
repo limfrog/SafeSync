@@ -15,6 +15,7 @@ enum RecoveryProtectionChecks {
             guard let proposal = try MassChanges.pending(directory: directory, job: job) else { throw BackupError.unsafe("Missing mass proposal") }
             try MassChanges.approve(directory: directory, job: job, fingerprint: proposal.fingerprint)
             let next = try await engine.run(job, storage: cloud); checkEqual(next.copied, 4); check(next.issues.isEmpty)
+            let verified = try await engine.verifyBackup(job,storage:cloud); checkEqual(verified.count,8);check(verified.allSatisfy{$0.status == "정상"})
             let items = try await engine.listTrash(job, storage: cloud); checkEqual(items.count, 4); checkEqual(Set(items.compactMap(\.batchID)).count, 1)
             check(try await engine.verifyTrash(items[0], job: job, storage: cloud))
             await cloud.setDigest(name: "payload", kind: "sha256", hash: "corrupt")

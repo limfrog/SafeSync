@@ -28,7 +28,7 @@ public enum MassChanges {
         [job.id.uuidString, job.source, job.destination, job.mode.rawValue, job.cloudProvider?.rawValue ?? "local", job.cloudAccountID?.uuidString ?? "", job.cloudFolderID ?? "", job.cloudAccessMode ?? "", String(job.mirrorDeletes), String(job.massMinimum), String(job.massPercent)].joined(separator: "\u{1f}")
     }
     public static func pending(directory: URL, job: BackupJob) throws -> MassChangeProposal? {
-        guard FileManager.default.fileExists(atPath: url(directory,job).path) else { return nil }
+        guard job.protectMassChanges, FileManager.default.fileExists(atPath: url(directory,job).path) else { return nil }
         let proposal = try Storage.load(MassChangeProposal.self, from: url(directory,job))
         return proposal.jobID == job.id && proposal.binding == binding(job) ? proposal : nil
     }
@@ -56,7 +56,7 @@ public enum MassChanges {
         return output
     }
     public static func check(directory: URL, job: BackupJob, baseline: Int, changes: [MassChange], roots: String) throws {
-        guard job.protectMassChanges else { return }
+        if !job.protectMassChanges { for suffix in ["","-approval"] { let path = url(directory,job,suffix); if FileManager.default.fileExists(atPath:path.path) { try FileManager.default.removeItem(at:path) } }; return }
         guard (1...1_000_000).contains(job.massMinimum), (1...100).contains(job.massPercent) else { throw BackupError.unsafe("대량 변경 기준은 1~1,000,000개, 1~100%입니다.") }
         func clear() throws { for suffix in ["", "-approval"] { let path = url(directory,job,suffix); if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) } } }
         let count = Set(changes.map(\.path)).count

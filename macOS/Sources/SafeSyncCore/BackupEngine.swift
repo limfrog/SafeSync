@@ -79,6 +79,7 @@ public actor BackupEngine {
     }
     private func archive(_ file: URL, path: String, root: URL) throws {
         let isDirectory = (try file.resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true
+        let held = isDirectory ? nil : try FileAccess.readLock(file); defer { if let held { FileAccess.unlock(held) } }
         let checksum: String?
         if isDirectory { checksum = nil } else { checksum = try Self.hash(file) }
         let item = TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(file).size, directory: isDirectory, batchID: RecoveryBatch.id, expectedHash: checksum, hashKind: isDirectory ? nil : "sha256")
@@ -132,6 +133,8 @@ public actor BackupEngine {
         guard try Self.hash(temp) == digest else { throw BackupError.unsafe("복사 사본의 체크섬이 일치하지 않습니다. 기존 백업을 보존합니다.") }
         try Task.checkCancellation()
         try validate()
+        let targetLock = fm.fileExists(atPath: destination.path) ? try FileAccess.readLock(destination) : nil
+        defer { if let targetLock { FileAccess.unlock(targetLock) } }
         if fm.fileExists(atPath: destination.path) {
             let tx = Transaction(destination: path, temporary: relative, expectedHash: digest, trash: TrashItem(id: UUID(), path: path, deletedAt: Date(), size: try FileStamp(destination).size, batchID: RecoveryBatch.id, expectedHash: try Self.hash(destination), hashKind: "sha256"))
             try Storage.save(tx, to: journal); journalWritten = true
@@ -376,6 +379,8 @@ public actor BackupEngine {
         try guardRoot.verify(); return rows
     }
     public func restore(_ item: TrashItem, job: BackupJob) throws {
+        let held = item.directory == true ? nil : try FileAccess.readLock(child(Self.canonical(job.destination), ".safesync-trash/\(item.id).data"))
+        defer { if let held { FileAccess.unlock(held) } }
         _ = try verifyTrash(item, job: job)
         guard item.path.split(separator: "/").first?.hasPrefix(".safesync-") != true else { throw BackupError.unsafe("SafeSync 내부 경로에는 복구할 수 없습니다.") }
         let root = Self.canonical(job.destination)
