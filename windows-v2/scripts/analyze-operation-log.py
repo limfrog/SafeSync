@@ -38,7 +38,7 @@ def analyze(folder):
                     run["outcome"] = row.get("Detail")
                 if event == "run.result":
                     run["result"] = row.get("Detail")
-                if event == "span.end" and operation.startswith(("prepare.", "application.", "state.", "storage.")):
+                if event == "span.end":
                     run["phases"][operation].append(row.get("Ms", 0))
                 if event == "prepare.phase":
                     run["initialPhases"][operation].append(row.get("Ms", 0))
