@@ -63,12 +63,14 @@ internal sealed partial class DesktopController
             Check(window.Find<DataGrid>("HistoryGrid").Columns.All(c=>c.ActualWidth>=c.MinWidth-.5),"Compact window shrinks history columns below readable width");
             Main.Width=1180;Main.Height=900;Main.UpdateLayout();await Main.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);window.Find<RowDefinition>("ProgressHistoryRow").Height=new GridLength(190);Main.UpdateLayout();CaptureLayout();
             Check(config.WindowLayout.ProgressHistoryHeight>=90 && Math.Abs(config.WindowLayout.ProgressHistoryHeight-window.Find<RowDefinition>("ProgressHistoryRow").ActualHeight)<1,"History splitter height not saved");
+            window.Find<TabControl>("ProgressTabs").SelectedIndex=0;
             followLatest=true;OnStarted(job);OnProgress(new(job.Id,job.Name,"파일 전송","Audio/last.wav",1,3));
             Main.Find<MenuItem>("StopJobMenuItem").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Check(job.Stopped && !job.Paused && SelectedRun?.Outcome==SyncRunOutcome.Stopping,"Stop menu did not separate ending from pause");
             Check(window.Find<TextBlock>("ActiveSummaryText").Text=="종료 중…" && window.Find<Button>("ProgressPauseButton").Visibility==Visibility.Collapsed,"Progress window omitted stopping label or offered pause");
             OnProgress(new(job.Id,job.Name,"교체 후 검증","Audio/last.wav",2,3));
             Main.UpdateLayout();
+            await window.Dispatcher.InvokeAsync(()=>{},System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             Check(SelectedRun?.StatusText=="종료 중…" && VisualChildren<TextBlock>(window.Find<ItemsControl>("ProgressItems")).Any(t=>t.Text.StartsWith("종료 중…")),"Last-file progress hid finishing message");
             if(previewDirectory!=null)
             {

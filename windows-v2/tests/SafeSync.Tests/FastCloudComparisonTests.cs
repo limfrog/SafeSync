@@ -22,6 +22,14 @@ internal static class FastCloudComparisonTests
             check(store.LoadState(job).Files.Single().VerifiedRemote!=null,provider+" durable verified fingerprint");
             var repeat=await Run();
             check(repeat.Skipped==1 && repeat.Copied==0 && stages.Contains("저장된 검증 기록으로 빠른 비교") && !stages.Contains("클라우드 파일 내용 동일 여부 검증"),provider+" restart reuses verified content without hashing");
+            if(provider=="GoogleDrive")
+            {
+                var verified=remote.Files["file.txt"];
+                remote.Files["file.txt"]=verified with{Revision="metadata-only"};
+                check((await Run()).Skipped==1 && stages.Contains("저장된 검증 기록으로 빠른 비교"),"Drive metadata-only revision triggered content hashing.");
+                check(!RemotePath.VerifiedSame(verified,verified with{Hash="different"}),"Different content hash reused verification.");
+                check(!RemotePath.VerifiedSame(verified,verified with{Name="renamed.txt"}),"A renamed item reused old path verification.");
+            }
             await Run(true);
             check(stages.Contains("클라우드 파일 내용 동일 여부 검증") && !stages.Contains("저장된 검증 기록으로 빠른 비교"),provider+" explicit full inspection still hashes");
             await Run(changes:["file.txt"]);
