@@ -32,10 +32,20 @@ actor MemoryCloud: RemoteStorage {
     var corruptUpload = false
     var failPublish = false
     var mutateOnUpload = false
+    var googleHashKind = "sha256"
+    func setGoogleHashKind(_ kind: String) { googleHashKind = kind }
+    func setDigest(name: String, kind: String, hash: String) {
+        counter += 1
+        for (id, var item) in items where item.name == name { item.hashKind = kind; item.hash = hash; item.revision = String(counter); items[id] = item }
+    }
     init(_ provider: CloudProvider) { self.provider = provider }
     func setCorruption(_ value: Bool) { corruptUpload = value }
     func setPublishFailure(_ value: Bool) { failPublish = value }
     func setMutation(_ value: Bool) { mutateOnUpload = value }
+    func reviseMetadata() {
+        counter += 1
+        for (id, var item) in items where !item.folder { item.revision = String(counter); items[id] = item }
+    }
     private func location(_ name: String, parent: String, id: String) -> String { provider == .dropbox ? (parent + "/" + name).lowercased() : id }
     func children(_ parent: String) -> [RemoteItem] { items.values.filter { $0.parent == parent } }
     func metadata(_ id: String) -> RemoteItem? { if id == "" || id == "root" { return RemoteItem(id: rootIdentity ?? id, name: "root", parent: "", folder: true, locator: id) }; return items[id] ?? items.values.first { $0.locator == id } }
@@ -57,7 +67,7 @@ actor MemoryCloud: RemoteStorage {
             var changed = old; changed.revision = "external-\(counter)"; changed.hash = "external"; changed.size = 15; changed.modified = Date()
             items[old.id] = changed; data[old.id] = Data("external change".utf8)
         }
-        counter += 1; let id = "id-\(counter)", kind = provider == .dropbox ? "dropbox" : "sha256"
+        counter += 1; let id = "id-\(counter)", kind = provider == .dropbox ? "dropbox" : googleHashKind
         let item = RemoteItem(id: id, name: name, parent: parent, size: try FileStamp(file).size, modified: modified, hash: corruptUpload ? "bad" : try ContentHash.compute(file, kind: kind), hashKind: kind, revision: String(counter), locator: location(name, parent: parent, id: id))
         items[id] = item; data[id] = try Data(contentsOf: file); return item
     }
@@ -95,6 +105,21 @@ struct CloudChecks {
         try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: time)], ofItemAtPath: file.path)
     }
     static func run() async throws {
+        do {
+            let (root, job, engine, cloud) = try fixture(.googleDrive); defer { try? FileManager.default.removeItem(at: root) }
+            try write("delayed-checksum", job: job); await cloud.setGoogleHashKind("md5")
+            let first = try await engine.run(job, storage: cloud); checkEqual(first.copied, 1); check(first.issues.isEmpty)
+            let hash = try ContentHash.compute(URL(fileURLWithPath: job.source).appendingPathComponent("a.txt"), kind: "sha256")
+            await cloud.setDigest(name: "a.txt", kind: "sha256", hash: hash)
+            let stages = CloudStageRecorder()
+            let restarted = CloudBackupEngine(dataDirectory: root.appendingPathComponent("settings"))
+            let next = try await restarted.run(job, storage: cloud, fullScan: true, progress: { if let stage = $0.stage { stages.append(stage) } })
+            checkEqual(next.skipped, 1); check(next.issues.isEmpty); check(stages.contains("저장된 검증 기록으로 빠른 비교"))
+            await cloud.setDigest(name: "a.txt", kind: "sha256", hash: "different-content"); stages.reset()
+            _ = try await restarted.run(job, storage: cloud, fullScan: true, progress: { if let stage = $0.stage { stages.append(stage) } })
+            check(!stages.contains("저장된 검증 기록으로 빠른 비교"))
+            print("PASS Google Drive: delayed SHA256 reuses verified upload; changed checksum invalidates reuse")
+        }
         for provider in CloudProvider.allCases {
             let (root, job, engine, cloud) = try fixture(provider); defer { try? FileManager.default.removeItem(at: root) }
             try write("first", job: job)
@@ -111,6 +136,11 @@ struct CloudChecks {
             _ = try await restarted.run(job, storage: cloud, fullScan: true, changedPaths: ["a.txt"], progress: { if let stage = $0.stage { stages.append(stage) } })
             check(!stages.contains("저장된 검증 기록으로 빠른 비교")); check(stages.contains("클라우드 파일 내용 동일 여부 검증"))
             print("PASS \(provider.title): restart reuses verified fingerprints; full inspection and watcher changes still hash")
+            await cloud.reviseMetadata(); stages.reset()
+            let metadataOnly = try await restarted.run(job, storage: cloud, fullScan: true, progress: { if let stage = $0.stage { stages.append(stage) } })
+            checkEqual(metadataOnly.skipped, 1); check(metadataOnly.issues.isEmpty)
+            check(stages.contains("저장된 검증 기록으로 빠른 비교")); check(!stages.contains("클라우드 파일 내용 동일 여부 검증"))
+            print("PASS \(provider.title): metadata-only revision preserves verified content reuse")
             try write("second", job: job, time: 2000)
             let second = try await engine.run(job, storage: cloud); checkEqual(second.copied, 1); check(second.issues.isEmpty)
             let trash = try await engine.listTrash(job, storage: cloud); checkEqual(trash.count, 1)

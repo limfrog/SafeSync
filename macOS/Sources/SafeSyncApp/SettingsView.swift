@@ -41,6 +41,7 @@ struct SettingsView: View {
     @ViewState private var errorSound = false
     @ViewState private var windowSound = false
     @ViewState private var completionSound = false
+    @ViewState private var operationLogEnabled = false
     @ViewState private var loginEnabled = false
     @ViewState private var cloud = false
     @ViewState private var error: String?
@@ -56,6 +57,13 @@ struct SettingsView: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle("상세 작동 로그 기록", isOn: $operationLogEnabled)
+                                .help("프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 문제 재현 전에 켜고 확인이 끝나면 꺼주세요.")
+                            Text("프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 확인이 끝나면 꺼주세요.").font(.caption).foregroundStyle(.secondary)
+                        }.toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    } label: { Text("문제 진단").font(.headline) }
                     GroupBox {
                         VStack(alignment: .leading, spacing: 12) {
                             Toggle("Mac 로그인 시 SafeSync 자동 시작", isOn: $loginEnabled)
@@ -127,6 +135,7 @@ struct SettingsView: View {
         errorSound = defaults.bool(forKey: "errorSound")
         windowSound = defaults.bool(forKey: "windowSound")
         completionSound = defaults.bool(forKey: "completionSound")
+        operationLogEnabled = defaults.bool(forKey: "operationLogEnabled")
         loginEnabled = registered; error = nil
         autoUpdates = defaults.object(forKey: "automaticallyCheckUpdates") as? Bool ?? true
         autoDownloads = defaults.object(forKey: "automaticallyDownloadUpdates") as? Bool ?? true
@@ -146,6 +155,8 @@ struct SettingsView: View {
             defaults.set(windowSound, forKey: "windowSound")
             defaults.set(completionSound, forKey: "completionSound")
             defaults.set(errorSound, forKey: "errorSound")
+            defaults.set(operationLogEnabled, forKey: "operationLogEnabled")
+            OperationLog.setEnabled(operationLogEnabled)
             defaults.set(appearance, forKey: "appearance")
             defaults.set(autoUpdates, forKey: "automaticallyCheckUpdates")
             defaults.set(autoDownloads, forKey: "automaticallyDownloadUpdates")

@@ -24,7 +24,7 @@ internal static class GracefulStopTests
             bool requested=false,earlyResume=false;BackupResult? completed=null;
             scheduler.Progress+=p=>
             {
-                var fileStage=mode=="TwoWay" ? p.Stage=="원본 → 백업 검증 복사" : provider=="Local" ? p.Stage=="파일 비교 및 백업" : p.Stage=="검증 전용 임시 위치로 분할 전송";
+                var fileStage=mode=="TwoWay" ? p.Stage=="원본 → 백업 검증 복사" : provider=="Local" ? p.Stage=="파일 비교 및 백업" : p.Stage=="파일 업로드 및 안전성 확인";
                 if(!requested && p.CurrentFile=="a.txt" && fileStage)
                 {
                     requested=true;scheduler.SetPaused(job,true);scheduler.StopJob(job);earlyResume=scheduler.ResumeJob(job);

@@ -24,6 +24,7 @@ public static class CloudJson
     public static HttpContent Body(object? value)=>new StringContent(JsonSerializer.Serialize(value),Encoding.UTF8,"application/json");
     public static async Task<JsonElement> ReadAsync(HttpResponseMessage response,CancellationToken token)
     {
+        using var timing=OperationLog.Measure("http.response_body");
         await using var stream=await response.Content.ReadAsStreamAsync(token);
         using var document=await JsonDocument.ParseAsync(stream,cancellationToken:token);return document.RootElement.Clone();
     }
@@ -57,6 +58,7 @@ public sealed class CloudHttp(HttpClient client,Func<bool,CancellationToken,Task
             using var message=request();ValidateUri(message.RequestUri!);
             bool readOnly=ReadOnly(message);
             var started=Stopwatch.GetTimestamp();var operation=OperationLog.Endpoint(message.RequestUri!);var authStarted=started;
+            if(OperationLog.IsEnabled && message.Content is {} requestBody)message.Content=new DiagnosticContent(requestBody,message.Method+" "+operation);
             message.Headers.Authorization=new AuthenticationHeaderValue("Bearer",await accessToken(forceRefresh,token));forceRefresh=false;
             var authMs=Stopwatch.GetElapsedTime(authStarted).TotalMilliseconds;
             HttpResponseMessage response;

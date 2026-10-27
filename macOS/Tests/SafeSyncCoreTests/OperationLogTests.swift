@@ -2,6 +2,25 @@ import XCTest
 @testable import SafeSyncCore
 
 final class OperationLogTests: XCTestCase {
+    func testOptInAndTaskProgressWithoutSensitiveData() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SafeSync-log-option-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = OperationLog.start(directory: root, version: "test", enabled: false)
+        defer { log.close() }
+        OperationLog.event("off_before", "test"); log.flush()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("logs/operations").path))
+        OperationLog.setEnabled(true)
+        let trace = HTTPTaskTrace(operation: "POST drive.upload")
+        let session = URLSession(configuration: .ephemeral)
+        let task = session.dataTask(with: URL(string: "https://secret.invalid/private-path?token=private")!)
+        trace.urlSession(session, task: task, didSendBodyData: 128, totalBytesSent: 128, totalBytesExpectedToSend: 128)
+        trace.finish(); session.invalidateAndCancel()
+        OperationLog.setEnabled(false); OperationLog.event("off_after", "test"); log.flush()
+        let files = try FileManager.default.contentsOfDirectory(at: root.appendingPathComponent("logs/operations"), includingPropertiesForKeys: nil)
+        let text = try files.map { try String(contentsOf: $0, encoding: .utf8) }.joined()
+        XCTAssertTrue(text.contains("transfer.progress")); XCTAssertFalse(text.contains("off_before")); XCTAssertFalse(text.contains("off_after"))
+        XCTAssertFalse(text.contains("secret.invalid")); XCTAssertFalse(text.contains("private-path")); XCTAssertFalse(text.contains("token="))
+    }
     func testBackupTraceCorrelationAndPrivacy() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("SafeSync-log-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }

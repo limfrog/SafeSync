@@ -22,6 +22,12 @@
     <StackPanel Grid.Row="0" Margin="0,0,0,18">
       <TextBlock Text="환경설정" FontSize="24" FontWeight="Bold" Foreground="{DynamicResource SafeSyncTextBrush}"/>
       <TextBlock Text="자동 실행, 파일 보호 정책 및 화면 모드를 관리합니다." Foreground="{DynamicResource SafeSyncMutedBrush}" Margin="0,5,0,0"/>
+    <GroupBox Header="문제 진단" Margin="0,0,0,12" Padding="12">
+      <StackPanel>
+        <CheckBox x:Name="OperationLogCheck" Content="상세 작동 로그 기록" ToolTip="프로그램에 문제가 있어 검증이 필요할 때만 켜세요. 문제를 재현하기 전에 켜고, 확인이 끝나면 꺼주세요."/>
+        <TextBlock Text="문제가 있어 검증이 필요할 때만 켜세요. 확인이 끝나면 꺼주세요." TextWrapping="Wrap" Margin="0,7,0,0" Foreground="{DynamicResource SafeSyncMutedBrush}"/>
+      </StackPanel>
+    </GroupBox>
     </StackPanel>
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,8">
     <StackPanel>

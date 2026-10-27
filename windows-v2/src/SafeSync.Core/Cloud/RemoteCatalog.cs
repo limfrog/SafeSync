@@ -32,6 +32,7 @@ public sealed class RemoteCatalog
         // poll. The signature is invalidated by any related change-feed path
         // or an explicit full refresh.
         public Dictionary<string,string> StableAmbiguous {get;set;}=new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string,RemoteNode>? Nodes {get;set;}
     }
     private readonly string path,identity,scope;
     private readonly object stableLock=new();
@@ -83,6 +84,8 @@ public sealed class RemoteCatalog
     public async Task RefreshAsync(bool force,PauseGate pause,CancellationToken token)
     {
         using var timing=OperationLog.Measure("prepare.remote_catalog_refresh");
+        if(scope.Length==0 && remote is IRemoteInventory inventory)
+        {await RefreshInventoryAsync(inventory,force,pause,token);return;}
         pause.ThrowIfStopRequested();
         var feed=remote as IRemoteChanges;
         bool full=force || State.Identity!=identity || State.Cursor.Length==0 || feed==null;
@@ -159,6 +162,31 @@ public sealed class RemoteCatalog
         var next=new Data {Identity=identity,Cursor=cursor,Items=index,Pending=pending.ToList(),Ambiguous=ambiguous.ToList(),DuplicateFolderIds=duplicateFolders,StableAmbiguous=stableAmbiguous};JsonFile.Save(path,next);State=next;
     }
     public void Acknowledge(){if(State.Pending.Count==0)return;State.Pending.Clear();JsonFile.Save(path,State);}
+    private async Task RefreshInventoryAsync(IRemoteInventory inventory,bool force,PauseGate pause,CancellationToken token)
+    {
+        RemoteInventory next;
+        try{next=await inventory.InventoryAsync(force ? "" : State.Cursor,force ? null : State.Nodes,pause,token);}
+        catch(CloudApiException ex) when(ex.Status is System.Net.HttpStatusCode.Gone or System.Net.HttpStatusCode.Conflict)
+        {next=await inventory.InventoryAsync("",null,pause,token);}
+        var paths=GoogleDriveStore.Paths(next.Nodes,next.Root);
+        var grouped=next.Nodes.Where(p=>paths.TryGetValue(p.Key,out var relative) && relative.Length>0 && !PathPolicy.Internal(relative)).GroupBy(p=>paths[p.Key],StringComparer.OrdinalIgnoreCase).ToArray();
+        var items=new Dictionary<string,RemoteItem>(StringComparer.OrdinalIgnoreCase);var ambiguous=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var duplicateFolders=new Dictionary<string,string[]>(StringComparer.OrdinalIgnoreCase);var stable=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+        foreach(var group in grouped)
+        {
+            var copies=group.Select(p=>p.Value.Item).OrderBy(i=>i.Id,StringComparer.Ordinal).ToArray();
+            if(copies.Length==1){items[group.Key]=copies[0];continue;}
+            ambiguous.Add(group.Key);if(copies.All(i=>i.Folder))duplicateFolders[group.Key]=copies.Select(i=>i.Id).ToArray();
+            var signature=Signature(copies);
+            if(State.StableAmbiguous.GetValueOrDefault(group.Key)==signature){stable[group.Key]=signature;items[group.Key]=copies[0];}
+        }
+        var pending=State.Pending.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach(var key in State.Items.Keys.Concat(items.Keys).Distinct(StringComparer.OrdinalIgnoreCase))
+            if(!State.Items.TryGetValue(key,out var old) || !items.TryGetValue(key,out var current) || !RemotePath.Same(old,current) || old.Name!=current.Name)pending.Add(key);
+        foreach(var conflict in State.Ambiguous.Concat(ambiguous).Distinct(StringComparer.OrdinalIgnoreCase))if(!stable.ContainsKey(conflict))pending.Add(conflict);
+        var data=new Data{Identity=identity,Cursor=next.Cursor,Items=items,Pending=pending.ToList(),Ambiguous=ambiguous.ToList(),DuplicateFolderIds=duplicateFolders,StableAmbiguous=stable,Nodes=next.Nodes};
+        JsonFile.Save(path,data);State=data;
+    }
     public void Update(string relative,RemoteItem? item){if(item==null)State.Items.Remove(relative);else State.Items[relative]=item;}
     public void Save()=>JsonFile.Save(path,State);
     public void Invalidate(){State.Cursor="";Save();}

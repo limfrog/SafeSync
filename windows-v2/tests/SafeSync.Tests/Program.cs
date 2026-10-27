@@ -29,6 +29,8 @@ try
 {
     if(args.Contains("--operation-logs"))
     {await OperationLogTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} operation log assertions. {testRoot}");return;}
+    if(args.Contains("--google-inventory"))
+    {await GoogleInventoryTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} ID inventory assertions. {testRoot}");return;}
     if(args.Contains("--cloud-performance"))
     {
         await CloudProtocolTests.RunAsync(testRoot,Check);
@@ -212,6 +214,7 @@ try
     Check(automaticHistory.Runs.Any(r=>r.EndedUtc!=null && r.Outcome==SyncRunOutcome.Completed),"Scheduler history did not finalize completed run.");
     SessionHistoryTests.Run(Check);
     await OperationLogTests.RunAsync(testRoot,Check);
+    await GoogleInventoryTests.RunAsync(testRoot,Check);
     await CloudTests.RunAsync(testRoot,Check);
     await TwoWayTests.RunAsync(testRoot,Check);
     await DropboxScopeTests.RunAsync(testRoot,Check);

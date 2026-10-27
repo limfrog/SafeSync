@@ -6,6 +6,17 @@ internal static class OperationLogTests
     public static async Task RunAsync(string testRoot,Action<bool,string> check)
     {
         var root=Path.Combine(testRoot,"operation-log");Directory.CreateDirectory(root);
+        check(!new AppConfig().OperationLogEnabled,"Operational diagnostics must default off.");
+        var optionRoot=Path.Combine(root,"option");
+        using(var log=OperationLog.Start(optionRoot,"test",false))
+        {
+            OperationLog.Event("off_before","test");await log.FlushAsync();
+            check(!Directory.GetFiles(Path.Combine(optionRoot,"logs","operations"),"*.jsonl").Any(),"Disabled logger created a record file.");
+            OperationLog.SetEnabled(true);OperationLog.Event("on_marker","test");await log.FlushAsync();
+            OperationLog.SetEnabled(false);OperationLog.Event("off_after","test");await log.FlushAsync();
+        }
+        var optionText=string.Join("",Directory.GetFiles(Path.Combine(optionRoot,"logs","operations"),"Diagnostic-*.jsonl").Select(File.ReadAllText));
+        check(optionText.Contains("on_marker") && !optionText.Contains("off_before") && !optionText.Contains("off_after"),"Log option did not take effect immediately.");
         var source=Path.Combine(root,"private-source");var target=Path.Combine(root,"target");Directory.CreateDirectory(source);Directory.CreateDirectory(target);
         var file=Path.Combine(source,"private-customer-name.txt");File.WriteAllText(file,"secret-content-not-for-logs");
         var job=new BackupJob{Name="private-job",Source=source,Destination=target};

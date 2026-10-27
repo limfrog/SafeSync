@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using SafeSync.Core;
 using SafeSync.Core.Cloud;
 
@@ -39,7 +40,7 @@ internal static class GoogleDuplicateProtocolTests
         check(!catalog.IsStableAmbiguous("stable.txt") && catalog.State.Pending.Contains("stable.txt",StringComparer.OrdinalIgnoreCase),"A changed duplicate file reused stale verification.");
         server.Nodes["unique-b"]=server.Nodes["unique-b"] with{Hash="changed",Version="2"};server.ChangedIds.Add("unique-b");
         await catalog.RefreshAsync(false,new(),default);
-        check(catalog.State.Items["Project/unique.txt"].Hash=="changed" && server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b")>childRequests,"Change feed under duplicate folder reused stale subtree.");
+        check(catalog.State.Items["Project/unique.txt"].Hash=="changed" && server.ChildrenRequests.Count(p=>p=="folder-a" || p=="folder-b")==childRequests*2,"Change feed did not update the duplicate subtree directly by ID.");
         var forged=plan with{Groups=[plan.Groups[0] with{ParentId="outside"}]};
         bool rejected=false;try{await remote.PreserveDuplicatesAsync(forged,default);}catch(CloudConflictException){rejected=true;}
         check(rejected && server.Renamed.Count==0,"Forged duplicate parent escaped the job root.");
@@ -77,6 +78,17 @@ internal static class GoogleDuplicateProtocolTests
         {
             var uri=request.RequestUri!;var path=uri.AbsolutePath;
             HttpResponseMessage Json(object data)=>new(HttpStatusCode.OK){Content=CloudJson.Body(data)};
+            if(path=="/batch/drive/v3")
+            {
+                var body=await request.Content!.ReadAsStringAsync(token);var matches=Regex.Matches(body,@"GET ([^\r\n]+) HTTP/1.1");var output=new StringBuilder();
+                for(int i=0;i<matches.Count;i++)
+                {
+                    using var part=new HttpRequestMessage(HttpMethod.Get,"https://www.googleapis.com"+matches[i].Groups[1].Value);
+                    using var response=await SendAsync(part,token);
+                    output.Append($"--reply\r\nContent-Type: application/http\r\nContent-ID: <response-{i}>\r\n\r\nHTTP/1.1 {(int)response.StatusCode} response\r\nContent-Type: application/json\r\n\r\n{await response.Content.ReadAsStringAsync(token)}\r\n");
+                }
+                output.Append("--reply--\r\n");return new(HttpStatusCode.OK){Content=new StringContent(output.ToString(),Encoding.UTF8,"multipart/mixed"){Headers={ContentType=new("multipart/mixed"){Parameters={new("boundary","reply")}}}}};
+            }
             if(path.EndsWith("/about"))return Json(new{user=new{permissionId="account"}});
             if(path.EndsWith("/changes/startPageToken"))return Json(new{startPageToken="cursor"});
             if(path.EndsWith("/changes")){var changes=ChangedIds.Select(id=>new{fileId=id,removed=false,file=Metadata(Nodes[id])}).ToArray();ChangedIds.Clear();return Json(new{newStartPageToken="cursor",changes});}

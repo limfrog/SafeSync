@@ -26,6 +26,10 @@ public interface IRemoteStore
 }
 public static class RemotePath
 {
+    // Provider version counters may advance for a metadata-only operation.
+    // Reuse requires the same ID/name/type/times and verified content hashes.
+    public static bool VerifiedSame(RemoteItem a,RemoteItem b)=>Same(a,b) && a.Name==b.Name && a.CreatedUtc==b.CreatedUtc &&
+        a.Binary==b.Binary && (a.Sha256.Length>0 && b.Sha256.Length>0 || a.Hash.Length>0 && b.Hash.Length>0);
     public static string Normalize(string relative)=>relative.Length==0 ? "" : PathPolicy.Relative(relative);
     public static string Parent(string relative){relative=Normalize(relative);var slash=relative.LastIndexOf('/');return slash<0 ? "" : relative[..slash];}
     public static string Name(string relative){relative=Normalize(relative);var slash=relative.LastIndexOf('/');return relative[(slash+1)..];}

@@ -33,6 +33,8 @@ internal sealed partial class DesktopController
         foreach(string mode in new[]{"Light","Dark"})
         {
             var window=NewDialog("Settings",false);Theme.Apply(window,mode);window.Show();
+            var diagnostic=window.Find<CheckBox>("OperationLogCheck");
+            Check(diagnostic.ToolTip?.ToString()?.Contains("검증") == true,"Diagnostic option lacks guidance");
             foreach(var size in new[]{new Size(window.MinWidth,window.MinHeight),new Size(850,700)})
             {
                 window.Width=size.Width;window.Height=size.Height;window.UpdateLayout();

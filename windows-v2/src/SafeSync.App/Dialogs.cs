@@ -55,6 +55,7 @@ internal sealed partial class DesktopController
         window.Find<CheckBox>("SoundOnMinimizeCheck").IsChecked=config.SoundOnMinimize;
         window.Find<CheckBox>("SoundOnBackupCompleteCheck").IsChecked=config.SoundOnBackupComplete;
         window.Find<CheckBox>("SoundOnBackupErrorCheck").IsChecked=config.SoundOnBackupError;
+        window.Find<CheckBox>("OperationLogCheck").IsChecked=config.OperationLogEnabled;
         window.Find<RadioButton>(config.ThemeMode=="Dark" ? "ThemeDarkRadio" : "ThemeLightRadio").IsChecked=true;
         Click(window,"CloseButton",window.Close);
         Click(window,"SaveButton",() =>
@@ -64,6 +65,8 @@ internal sealed partial class DesktopController
             config.SoundOnMinimize=window.Find<CheckBox>("SoundOnMinimizeCheck").IsChecked==true;
             config.SoundOnBackupComplete=window.Find<CheckBox>("SoundOnBackupCompleteCheck").IsChecked==true;
             config.SoundOnBackupError=window.Find<CheckBox>("SoundOnBackupErrorCheck").IsChecked==true;
+            config.OperationLogEnabled=window.Find<CheckBox>("OperationLogCheck").IsChecked==true;
+            OperationLog.SetEnabled(config.OperationLogEnabled);
             config.AutomaticallyCheckUpdates=window.Find<CheckBox>("AutoUpdateCheck").IsChecked==true;
             config.AutomaticallyDownloadUpdates=window.Find<CheckBox>("AutoDownloadCheck").IsChecked==true;
             ApplyUpdatePreferences();
@@ -94,6 +97,7 @@ internal sealed partial class DesktopController
         void ModeChanged()
         {
             twoWay.IsEnabled=Provider()!="GoogleDrive";
+            twoWay.Visibility=Provider()=="GoogleDrive" ? Visibility.Collapsed : Visibility.Visible;
             if(Provider()=="GoogleDrive" && twoWay.IsChecked==true)oneWay.IsChecked=true;
             bool both=twoWay.IsChecked==true;
             window.Find<TextBlock>("ModeHintText").Text=both ? "양방향: 양쪽 변경·삭제를 서로 반영합니다. 삭제 파일은 각 위치의 휴지통에 보관하며, 양쪽이 함께 바뀌면 충돌로 남깁니다." : "단방향: 원본의 변경을 백업 위치에 반영합니다.";

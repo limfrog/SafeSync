@@ -21,22 +21,33 @@ public sealed class OperationLog : IDisposable
     private readonly Task worker;
     private long dropped;
     private int disposed;
+    private volatile bool enabled;
     private sealed record Flush(TaskCompletionSource Completion);
     private sealed record Entry(int Schema,string Utc,string Session,string? Run,string Event,string Operation,string? File,
         double? Ms,long? Bytes,int? Completed,int? Total,int? Status,int? Attempt,string? Error,int? HResult,string? Detail);
-    public static OperationLog Start(string root,string version)
+    public static OperationLog Start(string root,string version,bool enabled=true)
     {
-        var log=new OperationLog(root);Interlocked.Exchange(ref current,log);
+        var log=new OperationLog(root){enabled=enabled};Interlocked.Exchange(ref current,log);
+        NetworkTrace.Configure(enabled);
         log.Write("session.start","application",detail:version);return log;
     }
     private OperationLog(string dataRoot){root=Path.Combine(dataRoot,"logs","operations");worker=Task.Run(WriteLoop);}
+    public static bool IsEnabled=>Volatile.Read(ref current)?.enabled==true;
+    public static void SetEnabled(bool value)
+    {
+        var log=Volatile.Read(ref current);if(log==null || log.enabled==value)return;
+        if(!value)log.Write("logging.disabled","application");
+        log.enabled=value;
+        NetworkTrace.Configure(value);
+        if(value)log.Write("logging.enabled","application");
+    }
     private string Tag(string value)=>Convert.ToHexStringLower(HMACSHA256.HashData(salt,Encoding.UTF8.GetBytes(value)))[..20];
     private void Write(string kind,string operation,Run? run=null,string? path=null,double? ms=null,long? bytes=null,
         int? completed=null,int? total=null,int? status=null,int? attempt=null,Exception? error=null,string? detail=null)
     {
         try
         {
-            if(Volatile.Read(ref disposed)!=0)return;
+            if(Volatile.Read(ref disposed)!=0 || !enabled)return;
             var entry=new Entry(1,DateTime.UtcNow.ToString("O"),session,run?.Id,kind,operation,
                 string.IsNullOrEmpty(path) ? null : run?.FileTag(path) ?? Tag(path),ms,bytes,completed,total,status,attempt,
                 ErrorTypes(error),error?.HResult,detail);
@@ -52,7 +63,7 @@ public sealed class OperationLog : IDisposable
     }
     public static Run? Begin(BackupJob job,bool full,bool reconcile)
     {
-        var log=Volatile.Read(ref current);if(log==null)return null;
+        var log=Volatile.Read(ref current);if(log==null || !log.enabled)return null;
         var run=new Run(log,ambient.Value,job.Source);ambient.Value=run;
         var provider=job.DestinationType is "Local" or "GoogleDrive" or "Dropbox" ? job.DestinationType : "unknown";
         var mode=job.SyncMode is "OneWay" or "TwoWay" ? job.SyncMode : "unknown";
@@ -119,6 +130,7 @@ public sealed class OperationLog : IDisposable
         }
         public void Progress(BackupProgress p)
         {
+            if(!Log.enabled)return;
             lock(gate)
             {
                 var now=Stopwatch.GetTimestamp();
@@ -230,6 +242,6 @@ public sealed class OperationLog : IDisposable
     public void Dispose()
     {
         if(Interlocked.Exchange(ref disposed,1)!=0)return;
-        Interlocked.CompareExchange(ref current,null,this);queue.Writer.TryComplete();try{worker.Wait(TimeSpan.FromSeconds(2));}catch { }
+        if(Interlocked.CompareExchange(ref current,null,this)==this)NetworkTrace.Configure(false);queue.Writer.TryComplete();try{worker.Wait(TimeSpan.FromSeconds(2));}catch { }
     }
 }

@@ -82,7 +82,9 @@ import CoreServices
     let settingsURL = Storage.applicationDirectory.appendingPathComponent("jobs.json")
     let issuesURL = Storage.applicationDirectory.appendingPathComponent("issues.json")
     init() {
-        _ = OperationLog.start(directory: Storage.applicationDirectory, version: AppInformation.version)
+        _ = OperationLog.start(directory: Storage.applicationDirectory, version: AppInformation.version, enabled: UserDefaults.standard.bool(forKey: "operationLogEnabled"))
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: nil) { _ in OperationLog.event("system.power", "sleep") }
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: nil) { _ in OperationLog.event("system.power", "wake") }
         let preparation = OperationLog.measure("application.initialize")
         defer { preparation.end() }
         do {

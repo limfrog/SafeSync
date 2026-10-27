@@ -30,8 +30,10 @@ public enum HTTP {
         try Task.checkCancellation()
         let started = ProcessInfo.processInfo.systemUptime
         let operation = endpointForLog(request)
+        let trace = OperationLog.isEnabled ? HTTPTaskTrace(operation: operation) : nil
+        defer { trace?.finish() }
         let data: Data, response: URLResponse
-        do { (data, response) = try await session.data(for: request) }
+        do { (data, response) = try await session.data(for: request, delegate: trace) }
         catch { OperationLog.event("http.end", operation, ms: (ProcessInfo.processInfo.systemUptime - started) * 1000, error: error); throw error }
         guard let http = response as? HTTPURLResponse else { throw BackupError.unsafe("HTTP 응답을 확인할 수 없습니다.") }
         OperationLog.event("http.end", operation, bytes: Int64(request.httpBody?.count ?? 0), total: data.count, status: http.statusCode, ms: (ProcessInfo.processInfo.systemUptime - started) * 1000)
@@ -113,7 +115,9 @@ public actor CloudAuthorization {
             var request = URLRequest(url: url); request.httpMethod = method
             for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
             request.setValue("Bearer \(try await token(account, forceRefresh: attempt == 1))", forHTTPHeaderField: "Authorization")
-            let (temporary, response) = try await HTTP.session.download(for: request)
+            let trace = OperationLog.isEnabled ? HTTPTaskTrace(operation: "cloud.download") : nil
+            defer { trace?.finish() }
+            let (temporary, response) = try await HTTP.session.download(for: request, delegate: trace)
             defer { try? FileManager.default.removeItem(at: temporary) }
             guard let http = response as? HTTPURLResponse else { throw BackupError.unsafe("다운로드 응답이 없습니다.") }
             if http.statusCode == 401 && attempt == 0 { continue }

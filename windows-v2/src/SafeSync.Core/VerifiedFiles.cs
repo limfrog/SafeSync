@@ -42,7 +42,9 @@ public sealed class VerifiedFiles
     public async Task CopyAsync(string source, string root, string relative, CancellationToken token,
         IProgress<(long Done, long Total)>? progress = null, string? expectedDestinationHash = null)
     {
-        using var mutation=await FileMutationGate.EnterAsync(token);
+        IDisposable lease;
+        using(OperationLog.Measure("file.mutation_gate_wait",source))lease=await FileMutationGate.EnterAsync(token);
+        using var mutation=lease;
         var destination = PathPolicy.Combine(root, relative);
         var parent = Path.GetDirectoryName(destination)!;
         Directory.CreateDirectory(parent);
@@ -62,16 +64,23 @@ public sealed class VerifiedFiles
             {
                 var buffer = new byte[1024 * 1024];
                 long copied = 0;
+                double readMs=0,writeMs=0,digestMs=0;
                 int read;
-                while ((read = await input.ReadAsync(buffer, token)) > 0)
+                while (true)
                 {
+                    var tick=System.Diagnostics.Stopwatch.GetTimestamp();read=await input.ReadAsync(buffer,token);readMs+=System.Diagnostics.Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
+                    if(read==0)break;
                     token.ThrowIfCancellationRequested();
+                    tick=System.Diagnostics.Stopwatch.GetTimestamp();
                     await output.WriteAsync(buffer.AsMemory(0, read), token);
+                    writeMs+=System.Diagnostics.Stopwatch.GetElapsedTime(tick).TotalMilliseconds;tick=System.Diagnostics.Stopwatch.GetTimestamp();
                     digest.AppendData(buffer, 0, read);
+                    digestMs+=System.Diagnostics.Stopwatch.GetElapsedTime(tick).TotalMilliseconds;
                     copied += read;
                     progress?.Report((copied, length));
                 }
-                output.Flush(true);
+                var flushStarted=System.Diagnostics.Stopwatch.GetTimestamp();output.Flush(true);
+                OperationLog.Event("copy.io","local",source,bytes:copied,detail:$"readMs={readMs:F3};writeMs={writeMs:F3};digestMs={digestMs:F3};flushMs={System.Diagnostics.Stopwatch.GetElapsedTime(flushStarted).TotalMilliseconds:F3}");
                 if (copied != length || input.Length != length || File.GetLastWriteTimeUtc(source) != modified)
                     throw new IOException("복사 중 원본이 변경되어 기존 백업을 유지했습니다.");
             }

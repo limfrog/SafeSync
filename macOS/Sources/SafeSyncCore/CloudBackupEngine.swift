@@ -18,6 +18,7 @@ public actor CloudBackupEngine {
         // Once every copy has been content-verified, keep the exact set so an
         // unchanged remote poll does not hash the same files again.
         var verifiedDuplicates: [RemoteItem]?
+        var sourceSHA256: String? = nil
     }
     private struct State: Codable {
         var source: String
@@ -270,8 +271,13 @@ public actor CloudBackupEngine {
                 guard let verified = prior.verifiedDuplicates?.sorted(by: { $0.id < $1.id }) else { return false }
                 return currentGroup == verified && prior.verifiedRemote == currentGroup.first
             }
-            guard let verified = prior.verifiedRemote, let current = entry(path), current == verified else { return false }
-            return true
+            guard let verified = prior.verifiedRemote, let current = entry(path) else { return false }
+            if current == verified { return true }
+            guard current.id == verified.id, current.parent == verified.parent, current.name == verified.name,
+                  current.folder == verified.folder, current.size == verified.size,
+                  current.modified == verified.modified, current.created == verified.created else { return false }
+            if current.hashKind == "sha256", let hash = current.hash, !hash.isEmpty, hash == prior.sourceSHA256 { return true }
+            return current.hashKind == verified.hashKind && current.hash != nil && current.hash?.isEmpty == false && current.hash == verified.hash
         }
         let scannedFiles: [String: FileStamp]
         if let changedPaths, !fullScan, !legacy, !state.files.isEmpty { scannedFiles = try SourceScanner.reconcile(root: source, known: state.files.mapValues(\.source), changed: changedPaths) }
@@ -334,7 +340,8 @@ public actor CloudBackupEngine {
                         guard try FileStamp(file) == stamp else { throw BackupError.fileBusy("파일 비교 중 원본이 변경되었습니다.") }
                         try sourceGuard.verify()
                         state.files[path] = Record(source: stamp, remote: existing, verificationVersion: 1,
-                                                   sourceIdentity: try FileComparisons.identity(file), verifiedRemote: existing)
+                                                   sourceIdentity: try FileComparisons.identity(file), verifiedRemote: existing,
+                                                   sourceSHA256: existing.hashKind == "sha256" ? existing.hash : nil)
                         result.skipped += 1; continue
                     }
                     if existing.modified.timeIntervalSince(stamp.modified) >= -(storage.provider == .dropbox ? 1 : 0.001) {
@@ -381,7 +388,7 @@ public actor CloudBackupEngine {
                             progress(BackupProgress(path: candidate.path, completed: candidate.offset, total: total, size: candidate.stamp.size, transferred: bytes, stage: stage))
                         })
                         state.files[candidate.path] = Record(source: candidate.stamp, remote: uploaded, verificationVersion: 1,
-                                                             sourceIdentity: upload.sourceIdentity, verifiedRemote: uploaded)
+                                                             sourceIdentity: upload.sourceIdentity, verifiedRemote: uploaded, sourceSHA256: upload.digest)
                         result.copied += 1
                         try Storage.save(state, to: stateURL(job))
                     } catch is CancellationError { throw CancellationError() }

@@ -18,12 +18,22 @@ public final class OperationLog: @unchecked Sendable {
     private var output: FileHandle?
     private var summary: FileHandle?, summaryPart = 0, summarySize = 0
     private var disabled = false
-    public static func start(directory: URL, version: String) -> OperationLog {
+    private var recording = true
+    public static func start(directory: URL, version: String, enabled: Bool = true) -> OperationLog {
         let log = OperationLog(directory: directory)
+        log.recording = enabled
         configurationLock.lock(); configured = log; configurationLock.unlock()
         log.write("session.start", "application", detail: version); return log
     }
     private init(directory: URL) { self.directory = directory.appendingPathComponent("logs/operations") }
+    public static var isEnabled: Bool { current?.isRecording ?? false }
+    private var isRecording: Bool { lock.lock(); defer { lock.unlock() }; return recording }
+    public static func setEnabled(_ enabled: Bool) {
+        guard let log = current, log.isRecording != enabled else { return }
+        if !enabled { log.write("logging.disabled", "application") }
+        log.lock.lock(); log.recording = enabled; log.lock.unlock()
+        if enabled { log.write("logging.enabled", "application") }
+    }
     private static var current: OperationLog? {
         configurationLock.lock(); defer { configurationLock.unlock() }; return configured
     }
@@ -39,6 +49,7 @@ public final class OperationLog: @unchecked Sendable {
     private func write(_ event: String, _ operation: String, context: Run? = nil, path: String? = nil,
                        bytes: Int64? = nil, completed: Int? = nil, total: Int? = nil, status: Int? = nil,
                        ms: Double? = nil, error: Error? = nil, detail: String? = nil) {
+        guard isRecording else { return }
         var entry: [String: Any] = ["Schema": 1, "Utc": HTTP.dateString(Date(), fractional: true), "Session": session,
                                     "Event": event, "Operation": operation]
         if let context { entry["Run"] = context.id }
@@ -139,6 +150,7 @@ public final class OperationLog: @unchecked Sendable {
             return log.tag(relative.precomposedStringWithCanonicalMapping)
         }
         public func progress(_ p: BackupProgress) {
+            guard log.isRecording else { return }
             let known = Set(["이전 전송 복구 확인", "클라우드 변경 목록 확인", "양쪽 폴더 전체 목록 확인", "완료"])
             let label = p.stage ?? (known.contains(p.path) ? p.path : "file.compare")
             if label == "file.compare" { starting("file.begin") }

@@ -165,7 +165,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                             Report("전송용 안정 사본 및 체크섬 준비",relative,completed,work.Length);
                             snapshot=await publisher.StageAsync(path,token);
                         }
-                        Report("검증 전용 임시 위치로 분할 전송",relative,completed,work.Length);
+                        Report("파일 업로드 및 안전성 확인",relative,completed,work.Length);
                         var final=await publisher.PublishAsync(relative,snapshot,target,action==ConflictAction.KeepBoth,pause,token);
                         entries[relative]=new(){RelativePath=relative,Length=snapshot.Length,SourceFileId=sourceFileId,CreationTimeUtc=snapshot.CreatedUtc.ToString("O"),LastWriteTimeUtc=snapshot.ModifiedUtc.ToString("O"),Status="BackedUp",RemoteId=final.Id,LastAttemptUtc=DateTime.UtcNow.ToString("O"),DeletionSourceVerified=true};
                         entries[relative].VerifiedRemote=final;
@@ -229,7 +229,7 @@ public sealed class CloudBackupEngine(ConfigStore store,IRemoteStore remote)
                 if(forceFull || retryPaths.Contains(relative) || blocked.Contains(relative) || (catalog.IsAmbiguous(relative) && !catalog.IsStableAmbiguous(relative)) || resolutions?.ContainsKey(relative)==true ||
                     dirty.Any(p=>relative.Equals(p,StringComparison.OrdinalIgnoreCase)||relative.StartsWith(p+"/",StringComparison.OrdinalIgnoreCase)))return false;
                 if(!entries.TryGetValue(relative,out var prior) || prior.Status!="BackedUp" || prior.SourceFileId==0 || prior.VerifiedRemote is not {} verified ||
-                    tree?.GetValueOrDefault(relative) is not {} current || current!=verified)return false;
+                    tree?.GetValueOrDefault(relative) is not {} current || (remote.Provider=="GoogleDrive" ? !RemotePath.VerifiedSame(current,verified) : current!=verified))return false;
                 try
                 {
                     var local=PathPolicy.Combine(job.Source,relative);PathPolicy.RejectLinks(job.Source,local);
