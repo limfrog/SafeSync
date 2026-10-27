@@ -10,7 +10,7 @@ enum RecoveryProtectionChecks {
             for i in 0..<8 { let file = source.appendingPathComponent("\(i).txt"); try Data("old \(i)".utf8).write(to: file); try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1000)], ofItemAtPath: file.path) }
             let first = try await engine.run(job, storage: cloud); checkEqual(first.copied, 8)
             for i in 0..<4 { let file = source.appendingPathComponent("\(i).txt"); try Data("new \(i)".utf8).write(to: file); try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2000)], ofItemAtPath: file.path) }
-            do { _ = try await engine.run(job, storage: cloud); check(false, "Mass cloud change ran") } catch is MassChangeBlocked { }
+            do { _ = try await engine.run(job, storage: cloud); check(false) } catch is MassChangeBlocked { }
             checkEqual(await cloud.bytes(name: "0.txt", parent: job.cloudFolderID!), Data("old 0".utf8))
             guard let proposal = try MassChanges.pending(directory: directory, job: job) else { throw BackupError.unsafe("Missing mass proposal") }
             try MassChanges.approve(directory: directory, job: job, fingerprint: proposal.fingerprint)
@@ -18,7 +18,7 @@ enum RecoveryProtectionChecks {
             let items = try await engine.listTrash(job, storage: cloud); checkEqual(items.count, 4); checkEqual(Set(items.compactMap(\.batchID)).count, 1)
             check(try await engine.verifyTrash(items[0], job: job, storage: cloud))
             await cloud.setDigest(name: "payload", kind: "sha256", hash: "corrupt")
-            do { try await engine.restore([items[0]], job: job, storage: cloud); check(false,"Corrupt cloud archive restored") } catch { }
+            do { try await engine.restore([items[0]], job: job, storage: cloud); check(false) } catch { }
             checkEqual(await cloud.bytes(name: "0.txt", parent: job.cloudFolderID!), Data("new 0".utf8))
             print("PASS \(provider.title): mass change blocked before writes, exact approval, grouped archive, streamed restore verification and corrupt-copy refusal")
         }
