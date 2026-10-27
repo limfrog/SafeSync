@@ -113,7 +113,7 @@ public actor BackupEngine {
             try fm.removeItem(at: journal)
         }
     }
-    private func transfer(_ source: URL, to destination: URL, path: String, root: URL, expected: FileStamp, validate: () throws -> Void = {}) throws -> String {
+    private func transfer(_ source: URL, to destination: URL, path: String, root: URL, expected: FileStamp, expectedHash: String? = nil, validate: () throws -> Void = {}) throws -> String {
         let sourceLock = try FileAccess.readLock(source); defer { FileAccess.unlock(sourceLock) }
         try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         _ = try child(root, path)
@@ -129,6 +129,7 @@ public actor BackupEngine {
         try fm.copyItem(at: source, to: temp)
         let handle = try FileHandle(forWritingTo: temp); try handle.synchronize(); try handle.close()
         let digest = try Self.hash(source)
+        if let expectedHash, digest != expectedHash { throw BackupError.unsafe("복원 사본이 보관 당시 체크섬과 달라 기존 파일을 보존했습니다.") }
         guard try FileStamp(source) == before else { throw BackupError.fileBusy("복사 중 원본이 변경되어 사용 중 대기합니다. 기존 백업을 보존합니다.") }
         guard try Self.hash(temp) == digest else { throw BackupError.unsafe("복사 사본의 체크섬이 일치하지 않습니다. 기존 백업을 보존합니다.") }
         try Task.checkCancellation()
@@ -393,7 +394,7 @@ public actor BackupEngine {
             try fm.removeItem(at: dir.appendingPathComponent("\(item.id).json")); return
         }
         let stamp = try FileStamp(stored)
-        _ = try transfer(stored, to: dst, path: item.path, root: root, expected: stamp)
+        _ = try transfer(stored, to: dst, path: item.path, root: root, expected: stamp, expectedHash: item.expectedHash)
         try fm.removeItem(at: stored)
         try fm.removeItem(at: dir.appendingPathComponent("\(item.id).json"))
     }
