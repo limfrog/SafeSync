@@ -8,10 +8,10 @@
     "notes": "Horizon Entertainment · 설치·시작 화면의 오래된 개발 문구와 배포 자료를 정리했습니다. 기존 작업·계정·백업 기록과 안전 검증, 선택형 상세 로그는 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 관리 폴더로 이전해야 합니다. 이미 제한 권한을 사용하는 작업은 이어 사용할 수 있습니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
   },
   "macOS": {
-    "version": "0.3.25",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.25-universal.zip",
-    "sha256": "34de1f0ab71df6ee5ea787ace05dc88c7732ce46a8c38097bd193dc836e395d9",
-    "size": 4894240,
-    "notes": "Horizon Entertainment · 설치·시작 화면의 오래된 개발 문구와 배포 자료를 정리했습니다. 기존 작업·계정·백업 기록과 안전 검증, 선택형 상세 로그는 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 관리 폴더로 이전해야 합니다. 이미 제한 권한을 사용하는 작업은 이어 사용할 수 있습니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
+    "version": "0.3.26",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.26-universal.zip",
+    "sha256": "16eca12392baecb0621864e68923cd6ddee99e61cd1db16180be26b8149b2ae7",
+    "size": 4902969,
+    "notes": "Horizon Entertainment · macOS Google Drive 파일 이동·이름 변경 시 수정 시각을 보존합니다. 마지막 성공 기록과 정확히 일치하는 기존 사본의 잘못된 날짜로 인한 후속 백업 충돌을 보완합니다. 원격 변경·검증 기록 없음은 기존 보호를 유지합니다. 업데이트 후 연결 검증과 기존 작업 재시도를 실행하세요."
   }
 }

@@ -1,16 +1,19 @@
 # SafeSync
 
-SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.29 공개 프리뷰**, macOS는 **0.3.25 공개 프리뷰**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
+SafeSync는 Windows와 macOS용 자동 백업 프로그램입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. Windows는 **1.0.0-preview.29 공개 프리뷰**, macOS는 **0.3.26 공개 프리뷰**입니다. 정식 안정판이나 클라우드 공개 심사 완료를 뜻하지 않습니다.
 
 
 공개 프리뷰 29는 설치·시작 화면의 오래된 개발 문구와 배포 자료를 정리합니다. 설정·계정·스냅샷 호환, 백업 안전 검증, 선택형 상세 로그는 유지합니다. 로컬·NAS·Dropbox는 단방향/양방향, Google Drive는 제한 권한으로 앱 관리 폴더에 단방향 백업합니다.
 
+macOS 0.3.26은 Google Drive 파일 이동 시 수정 시각을 보존하고, 검증된 이전 사본의 잘못된 날짜 때문에 후속 백업이 막히는 문제를 보완합니다. Windows 프리뷰 29는 변경하지 않습니다.
+
+- [macOS 수정 검증](macOS/0.3.26-VALIDATION.md)
 - [버전별 Release Notes](https://www.horizonent.co.kr/apps/safesync/release-notes.php)
 - [보호·복원·검증·VSS 사용법](RECOVERY-GUIDE.md)
 - [이번 변경의 검증 결과](windows-v2/PREVIEW29-VALIDATION.md)
 - [상세 로그 켜기/끄기와 분석 기준](windows-v2/OPERATION-LOGS.md)
 
-- [macOS 0.3.25 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.25-universal.zip)
+- [macOS 0.3.26 다운로드 — Apple Silicon·Intel Universal ZIP](dist/SafeSync-macOS-0.3.26-universal.zip)
 - [macOS 사용 및 빌드 안내](macOS/README-ko.md)
 - [macOS 검증 현황과 남은 차이](macOS/STATUS.md)
 

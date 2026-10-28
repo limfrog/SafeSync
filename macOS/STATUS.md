@@ -1,3 +1,7 @@
+# macOS 0.3.26(35) — Google Drive 수정 시각 보존
+
+맥만 수정·빌드한다. Windows는 preview.29를 유지한다. 파일 이동/이름 변경 PATCH에 modifiedTime을 포함하며, 과거 게시 날짜 오류는 성공 당시 원격 메타데이터·내용 검증 기록이 정확히 같고 원본이 이후 수정된 경우에만 기존 사본을 보관하고 후속 백업한다. 기록 없음·원격 변경·원본 날짜 역행은 충돌 보호 유지. [검증](0.3.26-VALIDATION.md).
+
 # macOS 0.3.25(34) — 배포 안내 정리
 
 현재 기능 기준으로 사용 안내를 정리하고 오래된 개발 단계 설명은 Git 이력에 보존합니다. 런타임 백업 엔진·Keychain·설정 경로는 변경하지 않습니다. DEBUG 전용 주입은 release 빌드에서 제외되며 SafeSyncChecks는 앱에 복사하지 않습니다. [이번 검증](../windows-v2/PREVIEW29-VALIDATION.md).

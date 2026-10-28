@@ -21,7 +21,7 @@ function release(pattern){
   const size=existsSync(path) ? statSync(path).size : Number(/\bblob\s+[a-f0-9]+\s+(\d+)\t/.exec(tree)?.[1]);
   if(!Number.isSafeInteger(size)||size<=0||size>1024*1024*1024)throw new Error('Release file is missing or too large');
   return {version:chosen.version,url:`https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/${chosen.file}`,sha256:chosen.sha256,size,
-    notes:'Horizon Entertainment · 설치·시작 화면의 오래된 개발 문구와 배포 자료를 정리했습니다. 기존 작업·계정·백업 기록과 안전 검증, 선택형 상세 로그는 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 관리 폴더로 이전해야 합니다. 이미 제한 권한을 사용하는 작업은 이어 사용할 수 있습니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요.'};
+    notes:chosen.file.startsWith('SafeSync-macOS-') ? 'Horizon Entertainment · macOS Google Drive 파일 이동·이름 변경 시 수정 시각을 보존합니다. 마지막 성공 기록과 정확히 일치하는 기존 사본의 잘못된 날짜로 인한 후속 백업 충돌을 보완합니다. 원격 변경·검증 기록 없음은 기존 보호를 유지합니다. 업데이트 후 연결 검증과 기존 작업 재시도를 실행하세요.' : 'Horizon Entertainment · 설치·시작 화면의 오래된 개발 문구와 배포 자료를 정리했습니다. 기존 작업·계정·백업 기록과 안전 검증, 선택형 상세 로그는 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 관리 폴더로 이전해야 합니다. 이미 제한 권한을 사용하는 작업은 이어 사용할 수 있습니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요.'};
 }
 const feed={schemaVersion:1,windows:release(/^SafeSync-Setup-(\d+\.\d+\.\d+(?:-preview\.\d+)?)\.exe$/),macOS:release(/^SafeSync-macOS-(\d+\.\d+\.\d+)-universal\.zip$/)};
 mkdirSync(resolve(root,'updates'),{recursive:true});
