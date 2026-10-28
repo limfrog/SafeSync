@@ -144,6 +144,7 @@ func fail(_ value: String) { fatalError(value) }
         print("10 filesystem integration checks passed")
         try await CloudChecks.run()
         try await GoogleTrashChecks.run()
+        try await GoogleModifiedTimeChecks.run()
         try await RecoveryProtectionChecks.run()
         try await DropboxMetadataChecks.run()
         try await IncrementalChecks.run()

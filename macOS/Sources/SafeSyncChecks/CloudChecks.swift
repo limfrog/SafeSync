@@ -16,6 +16,8 @@ actor MemoryCloud: RemoteStorage {
     private var counter = 0
     private var rootIdentity: String?
     private var trashUploadHook: (@Sendable () -> Void)?
+    private var movedTime: Date?
+    func setMovedTime(_ value: Date?) { movedTime = value }
     func setRootIdentity(_ value: String) { rootIdentity = value }
     func onTrashUpload(_ action: @escaping @Sendable () -> Void) { trashUploadHook = action }
     var uploadDelay: UInt64 = 0
@@ -76,6 +78,7 @@ actor MemoryCloud: RemoteStorage {
         guard var updated = items[item.id] else { throw BackupError.unsafe("Missing mock item") }
         if provider == .dropbox, items.values.contains(where: { $0.parent == parent && $0.name == name && $0.id != item.id }) { throw BackupError.unsafe("Mock Dropbox target exists") }
         counter += 1; updated.name = name; updated.parent = parent; updated.revision = String(counter); updated.locator = location(name, parent: parent, id: item.id)
+        if !updated.folder, let movedTime { updated.modified = movedTime }
         items[item.id] = updated; return updated
     }
     func remove(_ item: RemoteItem) {

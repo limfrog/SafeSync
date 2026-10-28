@@ -352,7 +352,15 @@ public actor CloudBackupEngine {
                                                    sourceSHA256: existing.hashKind == "sha256" ? existing.hash : nil)
                         result.skipped += 1; continue
                     }
-                    if existing.modified.timeIntervalSince(stamp.modified) >= -(storage.provider == .dropbox ? 1 : 0.001) {
+                    // Older Mac builds let Drive stamp the publication time on a move.
+                    // Only trust an exact, content-verified successful remote record;
+                    // a changed remote ID/revision/hash or missing proof still conflicts.
+                    let prior = state.files[path]
+                    let unchangedPublishedCopy = storage.provider == .googleDrive &&
+                        prior?.verificationVersion == 1 && prior?.verifiedRemote == existing &&
+                        prior?.remote == existing && existing.hash?.isEmpty == false &&
+                        prior.map { existing.modified.timeIntervalSince($0.source.modified) > 0.001 && stamp.modified.timeIntervalSince($0.source.modified) > 0.001 } == true
+                    if !unchangedPublishedCopy && existing.modified.timeIntervalSince(stamp.modified) >= -(storage.provider == .dropbox ? 1 : 0.001) {
                         result.issues.append(BackupIssue(jobID: job.id, path: path, reason: existing.modified > stamp.modified ? "클라우드 백업이 원본보다 최신입니다." : "수정 시간이 같지만 내용이 다릅니다.", conflict: true, source: stamp, backup: existing.stamp, remoteRevision: existing.revision, remoteID: existing.id)); continue
                     }
                 }

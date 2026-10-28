@@ -131,7 +131,7 @@ public struct GoogleDriveStorage: RemoteStorage {
     public func move(_ item: RemoteItem, name: String, parent: String) async throws -> RemoteItem {
         var query = ["fields": fields]
         if item.parent != parent { query["addParents"] = parent; query["removeParents"] = item.parent }
-        let moved = try parse(await api("files/" + item.id, method: "PATCH", query: query, body: ["name": name]))
+        let moved = try parse(await api("files/" + item.id, method: "PATCH", query: query, body: item.folder ? ["name": name] : ["name": name, "modifiedTime": HTTP.dateString(item.modified, fractional: true)]))
         if item.folder { await folderIndex.invalidate(id: item.id) }
         return moved
     }
