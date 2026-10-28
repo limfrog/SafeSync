@@ -31,7 +31,7 @@ internal sealed partial class DesktopController
             grid.SelectedItem=grid.Items[0];var selected=describe((T)grid.Items[0]);
             Check(window.Find<TextBox>("SelectedOriginalPath").Text==selected.OriginalPath && window.Find<TextBox>("SelectedOriginalPath").IsReadOnly,"Full original path is missing or editable");
             Check(window.Find<TextBlock>("SelectionText").Text.Contains("1개") && window.Find<Button>("RestoreButton").IsEnabled,"Selected summary or restore state missing");
-            Check(window.Find<TextBlock>("DeletionPolicyText").Text.Contains(provider=="Dropbox" ? "Dropbox" : "되돌릴 수"),"Provider deletion policy missing");
+            Check(window.Find<TextBlock>("DeletionPolicyText").Text.Contains(provider=="GoogleDrive" ? "Google 휴지통" : provider=="Dropbox" ? "Dropbox" : "되돌릴 수"),"Provider deletion policy missing");
             window.Find<TextBox>("SearchBox").Text="TAKE.WAV";
             Check(grid.SelectedItems.Count==0 && !window.Find<Button>("DeleteButton").IsEnabled,"Typing a filter retained hidden destructive selection");
             await Task.Delay(350);
