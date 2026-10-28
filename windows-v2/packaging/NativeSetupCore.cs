@@ -102,6 +102,13 @@ internal static class NativeSetupCore
         if(seen.Count!=hashes.Count)throw new InvalidDataException("패키지 파일이 누락되었습니다.");
         AtomicWrite(Path.Combine(stage,Inventory),manifest);
     }
+    internal static void Verify(Stream zip,string manifest,string temporaryParent)
+    {
+        NoLinks(temporaryParent);
+        string stage=Path.Combine(temporaryParent,"SafeSync2.verify-"+Guid.NewGuid().ToString("N"));
+        try{Extract(zip,manifest,stage);}
+        finally{DeleteWork(stage,Path.Combine(temporaryParent,"SafeSync2.verify-root"),"verify");}
+    }
     private static string Journal(string root){return Path.Combine(Path.GetDirectoryName(root),"SafeSync2.install-transaction.txt");}
     private static void CheckTree(string folder)
     {NoLinks(folder);foreach(string child in Directory.GetFileSystemEntries(Long(folder))){NoLinks(child);if(Directory.Exists(child))CheckTree(child);}}

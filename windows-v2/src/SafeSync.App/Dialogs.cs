@@ -49,7 +49,7 @@ internal sealed partial class DesktopController
         BindUpdateSettings(window);
         window.Find<CheckBox>("AutoStartCheck").IsChecked=config.AutoStart;
         window.Find<CheckBox>("AutoStartCheck").IsEnabled=!smoke;
-        window.Find<CheckBox>("AutoStartCheck").ToolTip="저장하면 현재 사용자 로그인 시 이 실행 파일을 시작합니다. 표준 1.x 자동 시작 항목은 전환하며, 수동 등록 항목은 별도로 확인하세요.";
+        window.Find<CheckBox>("AutoStartCheck").ToolTip="저장하면 현재 사용자 로그인 시 이 실행 파일을 시작합니다. 이전 버전의 기본 자동 시작 항목도 함께 갱신합니다. 직접 등록한 항목은 별도로 확인하세요.";
         Click(window,"CloudAccountsButton",ShowCloudAccounts);
         window.Find<TextBox>("RetentionBox").Text=config.TrashRetentionDays.ToString();
         window.Find<CheckBox>("SoundOnMinimizeCheck").IsChecked=config.SoundOnMinimize;
@@ -175,7 +175,7 @@ internal sealed partial class DesktopController
         if(scheduler.RunningCount>0 || LegacyRunning()){Tell("백업이 끝나고 기존 1.x 앱을 종료한 뒤 가져오세요.");return;}
         var dialog=new Microsoft.Win32.OpenFileDialog {Title="1.x 작업 목록 또는 config.json 가져오기",Filter="JSON 작업/설정 파일|*.json"};
         if(dialog.ShowDialog(Main)!=true)return;
-        if(!Confirm("기존 목록을 가져온 목록으로 교체할까요? 가져온 작업은 모두 일시정지합니다. config.json과 함께 있는 계정·스냅샷은 복사 승계하고 첫 실행에서 한 번 재확인합니다. 원본 1.x 자료는 수정하지 않습니다. 작업 목록만 가져오면 스냅샷은 포함되지 않습니다."))return;
+        if(!Confirm("기존 목록을 가져온 목록으로 교체할까요? 가져온 작업은 모두 일시정지합니다. config.json과 함께 있는 계정·백업 기록은 복사해 가져오고 첫 실행에서 한 번 재확인합니다. 원본 1.x 자료는 수정하지 않습니다. 작업 목록만 가져오면 스냅샷은 포함되지 않습니다."))return;
         try
         {
             if(new FileInfo(dialog.FileName).Length>10*1024*1024)throw new InvalidDataException("파일은 10 MB 이하여야 합니다.");
@@ -428,7 +428,8 @@ internal sealed partial class DesktopController
         void Check(bool condition,string message){if(!condition)throw new InvalidOperationException(message);assertions++;}
         ShowMain();
         Check(Main.Find<TextBlock>("FooterText").Text=="Windows "+AppVersion,"Version footer still contains migration terminology");
-        Check(!Main.Find<TextBox>("ActivityBox").Text.Contains("이전 PowerShell 버전과 설정 공간을 분리했습니다"),"Startup log still exposes obsolete migration terminology");
+        foreach(var obsolete in new[]{"PowerShell", "검증본", "승계 기능", "클라우드 API"})
+            Check(!Main.Find<TextBox>("ActivityBox").Text.Contains(obsolete),"Startup log exposes obsolete implementation wording: "+obsolete);
         foreach(var mode in new[]{"Light","Dark"})
         {
             config.ThemeMode=mode;Theme.Apply(Main,mode);Main.UpdateLayout();

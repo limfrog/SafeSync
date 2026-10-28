@@ -49,8 +49,7 @@ internal static class NativeSetup
 #else
             if(args.Length==1 && args[0]=="/verify")
             {
-                string fixture=Path.Combine(Path.GetTempPath(),"SafeSync2.verify-"+Guid.NewGuid().ToString("N"));
-                using(var payload=Payload())NativeSetupCore.Extract(payload,Manifest(),fixture);return 0;
+                using(var payload=Payload())NativeSetupCore.Verify(payload,Manifest(),Path.GetTempPath());return 0;
             }
             if(args.Length!=0)return 2;bool remove=false;
 #endif
@@ -88,10 +87,10 @@ internal static class NativeSetup
         private bool working,complete;
         internal SetupWindow(bool remove)
         {
-            Text=remove ? "SafeSync Preview 제거" : "SafeSync 설치 · "+Version;
+            Text=remove ? "SafeSync 제거" : "SafeSync 설치 · "+Version;
             Font=new Font("Malgun Gothic",10);AutoScaleMode=AutoScaleMode.Dpi;ClientSize=new Size(650,370);MinimumSize=Size;StartPosition=FormStartPosition.CenterScreen;
-            var title=new Label{Text=remove ? "SafeSync Preview 프로그램 제거" : "SafeSync 1.0.0 Preview",Dock=DockStyle.Top,Height=65,Padding=new Padding(22,18,0,0),Font=new Font(Font.FontFamily,17,FontStyle.Bold)};
-            var details=new Label{Text="이전 PowerShell 버전과 별도로 설치합니다.\r\n설정·스냅샷·실제 백업 파일은 설치/제거 시 변경하지 않습니다.\r\n"+NativeSetupCore.DefaultRoot,Dock=DockStyle.Top,Height=100,Padding=new Padding(24,8,20,0)};
+            var title=new Label{Text=remove ? "SafeSync 프로그램 제거" : "SafeSync 설치",Dock=DockStyle.Top,Height=65,Padding=new Padding(22,18,0,0),Font=new Font(Font.FontFamily,17,FontStyle.Bold)};
+            var details=new Label{Text="설정·작업 목록·백업 기록과 실제 백업 파일은 보존합니다.\r\n설치 위치: "+NativeSetupCore.DefaultRoot,Dock=DockStyle.Top,Height=100,Padding=new Padding(24,8,20,0)};
             launch=new CheckBox{Text="설치 완료 후 SafeSync 실행",Checked=false,AutoSize=true,Dock=DockStyle.Top,Padding=new Padding(24,8,0,8),Visible=!remove};
             status=new Label{Text=remove ? "프로그램 파일만 제거합니다." : "프리뷰 버전입니다. 중요한 자료는 별도 백업 후 시험하세요.",Dock=DockStyle.Fill,Padding=new Padding(24,16,20,8)};
             progress=new ProgressBar{Dock=DockStyle.Bottom,Height=8,Style=ProgressBarStyle.Marquee,Visible=false};

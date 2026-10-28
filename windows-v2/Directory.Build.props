@@ -6,7 +6,7 @@
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>1.0.0-preview.28</Version>
+    <Version>1.0.0-preview.29</Version>
     <SafeSyncDropboxAppKey Condition="'$(SafeSyncDropboxAppKey)'==''">08al8ot9uye36k9</SafeSyncDropboxAppKey>
     <Authors>Horizon Entertainment</Authors>
     <Company>Horizon Entertainment</Company>

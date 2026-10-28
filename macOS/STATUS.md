@@ -1,3 +1,7 @@
+# macOS 0.3.25(34) — 배포 안내 정리
+
+현재 기능 기준으로 사용 안내를 정리하고 오래된 개발 단계 설명은 Git 이력에 보존합니다. 런타임 백업 엔진·Keychain·설정 경로는 변경하지 않습니다. DEBUG 전용 주입은 release 빌드에서 제외되며 SafeSyncChecks는 앱에 복사하지 않습니다. [이번 검증](../windows-v2/PREVIEW29-VALIDATION.md).
+
 # macOS 0.3.24(33) — Google 보관 사본의 휴지통 이동
 
 SafeSync 보관 종료·사용자 제거는 Google 휴지통 이동으로 분리했다. 실패 시 영구삭제로 대체하지 않는다. 기존 동기화 방향·삭제 반영 체크박스·작업 설정은 유지한다. [이번 검증](../windows-v2/PREVIEW28-VALIDATION.md)과 [사용법](../RECOVERY-GUIDE.md)을 우선한다.

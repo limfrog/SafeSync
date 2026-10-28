@@ -9,6 +9,11 @@ $fileVersion=$Matches[1]+'.'+$(if($Matches[2]){$Matches[2]}else{'0'})
 if(-not $PublishPath){$PublishPath=Join-Path $root ('artifacts/SafeSync-'+$version+'-Windows-x64')}
 $publish=(Resolve-Path -LiteralPath $PublishPath).Path
 if(-not $publish.StartsWith((Join-Path $root 'artifacts')+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'Publish folder must be in windows-v2/artifacts.'}
+# Reject stale developer artifacts instead of silently distributing them on a repeated build.
+$unexpected=@(Get-ChildItem -LiteralPath $publish -Recurse -File | Where-Object {
+    $_.Extension -in @('.pdb','.ps1','.cs','.swift') -or $_.Name -match '^(PREVIEW.+|TEST-RESULTS|MIGRATION|PARITY-AND-PERFORMANCE|RELEASE-VALIDATION|GOOGLE-LIVE-RESULTS|TWOWAY-AND-DROPBOX|DROPBOX-PRODUCTION)\.md$' -or $_.Name -match '^SafeSync\.(Tests|RestartProbe)'
+})
+if($unexpected.Count){throw 'Developer artifacts are present in the release folder. Use a clean release output directory.'}
 $stage=Join-Path $root ('artifacts/packaging-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($stage)
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'

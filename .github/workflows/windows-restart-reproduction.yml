@@ -2,7 +2,7 @@ name: Windows restart reproduction
 
 on:
   push:
-    branches: [main, 'codex/windows-restart-reproduction-*', 'codex/fix-restart-index-*', 'codex/drive-file-*', 'codex/recovery-vss-*', 'codex/cloud-trash-*']
+    branches: [main, 'codex/windows-restart-reproduction-*', 'codex/fix-restart-index-*', 'codex/drive-file-*', 'codex/recovery-vss-*', 'codex/cloud-trash-*', 'codex/release-cleanup-*']
     paths:
       - '.github/workflows/windows-restart-reproduction.yml'
       - 'windows-v2/tests/SafeSync.RestartProbe/**'
@@ -17,6 +17,8 @@ on:
       - 'windows-v2/scripts/Build.ps1'
       - 'windows-v2/scripts/Build-Vss.ps1'
       - 'windows-v2/native-vss/**'
+      - 'windows-v2/packaging/**'
+      - 'windows-v2/scripts/Build-Installer.ps1'
   workflow_dispatch:
   workflow_call:
 
@@ -102,10 +104,10 @@ jobs:
         if: success() && matrix.os == 'windows-2022'
         uses: actions/upload-artifact@v4
         with:
-          name: windows-preview28-package
+          name: windows-preview29-package
           path: |
-            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.28.exe
-            windows-v2/artifacts/SafeSync-1.0.0-preview.28-Windows-x64.zip
+            windows-v2/artifacts/SafeSync-Setup-1.0.0-preview.29.exe
+            windows-v2/artifacts/SafeSync-1.0.0-preview.29-Windows-x64.zip
           if-no-files-found: error
           retention-days: 7
       - name: Upload synthetic test reports even on failure

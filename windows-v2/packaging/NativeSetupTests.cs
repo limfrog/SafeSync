@@ -52,6 +52,12 @@ internal static class NativeSetupTests
             Check(NativeSetupCore.DisplayName=="SafeSync" && Path.GetFileName(NativeSetupCore.DefaultRoot)=="SafeSync2","Public name changed compatibility storage/install paths.");
             string home=Path.Combine(Path.GetFullPath(args[0]),"setup-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(home);File.WriteAllText(Path.Combine(home,".safesync2-test-sandbox"),"test");
             string root=Path.Combine(home,"app"),data=Path.Combine(home,"user-data");Directory.CreateDirectory(data);File.WriteAllText(Path.Combine(data,"config.json"),"keep-settings");
+            string verifyManifest;
+            using(var payload=Package("verified",out verifyManifest))NativeSetupCore.Verify(payload,verifyManifest,home);
+            Check(Directory.GetDirectories(home,"SafeSync2.verify-*").Length==0,"Successful verification left temporary payload");
+            using(var payload=Package("corrupt",out verifyManifest))
+            {verifyManifest=verifyManifest.Replace(verifyManifest.Substring(0,64),new string('0',64));Reject(delegate{NativeSetupCore.Verify(payload,verifyManifest,home);},"Verification accepted corrupt payload");}
+            Check(Directory.GetDirectories(home,"SafeSync2.verify-*").Length==0 && File.ReadAllText(Path.Combine(data,"config.json"))=="keep-settings","Failed verification cleanup leaked payload or touched unrelated data");
             Install(root,"one",null);Check(File.ReadAllText(Path.Combine(root,"SafeSync.exe"))=="one","First install failed");
             Directory.CreateDirectory(Path.Combine(root,"user-added"));File.WriteAllText(Path.Combine(root,"user-added","notes.txt"),"preserve");
             Install(root,"two",null);Check(File.ReadAllText(Path.Combine(root,"SafeSync.exe"))=="two","Upgrade failed");

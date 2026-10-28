@@ -102,7 +102,6 @@ internal sealed partial class DesktopController
         };
         WireMain();RestoreKnownProblems();RefreshJobs();
         Log("SafeSync "+AppVersion+" 시작");
-        Log("클라우드 API·승계 기능 검증본 — 실제 계정은 테스트용 백업 폴더부터 확인하세요. 변경 기록을 사용할 수 없는 위치는 안전한 메타데이터 확인으로 대체합니다.");
         if(!smoke && config.AutoStart){try{AutoStart.Set(true,Environment.ProcessPath!);}catch(Exception ex){Log("자동 시작 갱신 실패: "+ex.Message);}}
         if (!smoke) { scheduler.SetJobs(jobs);scheduler.Start();trayTimer.Start();TrackAuxiliary(LoadWaitingAsync());StartUpdates(); }
     }
@@ -252,7 +251,7 @@ internal sealed partial class DesktopController
     }
     private async Task RunAsync(BackupJob job,bool full=false,IReadOnlyDictionary<string,ConflictAction>? resolutions=null)
     {
-        if(!smoke && LegacyRunning()) {Tell("기존 PowerShell 버전 SafeSync를 종료한 뒤 이 프리뷰의 백업을 실행하세요. 같은 백업 위치를 두 프로그램이 동시에 변경하지 않도록 막았습니다.");return;}
+        if(!smoke && LegacyRunning()) {Tell("이전 버전의 SafeSync를 종료한 뒤 백업을 실행하세요. 같은 백업 위치를 두 프로그램이 동시에 변경하지 않도록 보호하고 있습니다.");return;}
         var prepared=PrepareCloudJob(job);if(prepared==null)return;
         // Decisions made for conflicts at the old endpoint are not authority
         // to overwrite/download files at a newly selected endpoint.

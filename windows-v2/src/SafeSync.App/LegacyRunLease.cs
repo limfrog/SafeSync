@@ -19,7 +19,7 @@ internal sealed class LegacyRunLease : IDisposable
             if(users==0)
             {
                 var candidate=new Mutex(false,"Local\\SafeSync.Launch",out var created);
-                if(!created){candidate.Dispose();throw new InvalidOperationException("기존 PowerShell 버전 SafeSync가 실행 중입니다. 완전히 종료한 뒤 이 프리뷰에서 백업하세요.");}
+                if(!created){candidate.Dispose();throw new InvalidOperationException("이전 버전의 SafeSync가 실행 중입니다. 완전히 종료한 뒤 백업을 실행하세요.");}
                 mutex=candidate;
             }
             users++;

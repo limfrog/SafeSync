@@ -24,7 +24,7 @@ internal static class Program
             var root = Argument(args,"--data-root") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"SafeSync2-Preview");
             var legacy = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"SafeSync");
             if (string.Equals(PathPolicy.Root(root),PathPolicy.Root(legacy),StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("전환 검증본은 기존 1.x 데이터 폴더를 직접 사용할 수 없습니다.");
+                throw new InvalidOperationException("이전 버전의 설정 폴더를 직접 사용할 수 없습니다. 기본 설정 폴더로 실행한 뒤 파일 메뉴에서 기존 작업을 가져오세요.");
             if (smoke && Argument(args,"--data-root") == null) throw new ArgumentException("검사는 격리된 데이터 폴더가 필요합니다.");
             var appStore=new ConfigStore(root);var startupConfig=appStore.Load();
             using var operationLog=OperationLog.Start(root,System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Program).Assembly)?.InformationalVersion ?? "unknown",startupConfig.OperationLogEnabled);

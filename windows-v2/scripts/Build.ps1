@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([string]$DotnetPath='dotnet',[switch]$RunTests,[switch]$BundleRuntime,[string]$DropboxAppKey='')
 $ErrorActionPreference='Stop'
 $root=Split-Path $PSScriptRoot -Parent
@@ -34,7 +34,7 @@ try {
     }
     if($BundleRuntime){
         $publish=Join-Path $root ('artifacts/SafeSync-'+$version+'-Windows-x64')
-        & $DotnetPath publish $app -c Release --no-restore --no-self-contained -p:AppHostRelativeDotNet=runtime -p:AppHostDotNetSearch=AppRelative -o $publish --nologo $appKeyArg
+        & $DotnetPath publish $app -c Release --no-restore --no-self-contained -p:AppHostRelativeDotNet=runtime -p:AppHostDotNetSearch=AppRelative -p:CopyOutputSymbolsToPublishDirectory=false -o $publish --nologo $appKeyArg
         if($LASTEXITCODE -ne 0){throw 'Native preview publish failed.'}
         # Use the official, checksum-verified SDK's redistributable runtimes.
         $dotnetRoot=Split-Path (Get-Command $DotnetPath).Source -Parent
@@ -48,12 +48,8 @@ try {
             Copy-Item -LiteralPath $version.FullName -Destination $target -Recurse -Force
         }
         foreach($notice in @('LICENSE.txt','ThirdPartyNotices.txt')){Copy-Item -LiteralPath (Join-Path $dotnetRoot $notice) -Destination $runtimeRoot -Force}
-        foreach($document in @('README-ko.md','MIGRATION.md','TEST-RESULTS.md','PARITY-AND-PERFORMANCE.md','RELEASE-VALIDATION.md','GOOGLE-LIVE-RESULTS.md','TWOWAY-AND-DROPBOX.md','DROPBOX-PRODUCTION.md','PREVIEW11-VALIDATION.md','PREVIEW12-VALIDATION.md','PREVIEW13-VALIDATION.md','PREVIEW14-VALIDATION.md','PREVIEW15-VALIDATION.md','PREVIEW16-VALIDATION.md','UPDATES.md')){Copy-Item -LiteralPath (Join-Path $root $document) -Destination (Join-Path $publish $document) -Force}
-        Copy-Item -LiteralPath (Join-Path $root 'PREVIEW17-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW17-VALIDATION.md') -Force
-        Copy-Item -LiteralPath (Join-Path $root 'PREVIEW18-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW18-VALIDATION.md') -Force
-        Copy-Item -LiteralPath (Join-Path $root 'PREVIEW19-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW19-VALIDATION.md') -Force
-        Copy-Item -LiteralPath (Join-Path $root 'PREVIEW20-VALIDATION.md') -Destination (Join-Path $publish 'PREVIEW20-VALIDATION.md') -Force
-        Copy-Item -LiteralPath (Join-Path $root 'PREVIEW20-PACKAGE-RESULT.md') -Destination (Join-Path $publish 'PREVIEW20-PACKAGE-RESULT.md') -Force
+        # Ship current user help only; historical engineering reports remain in source control.
+        Copy-Item -LiteralPath (Join-Path $root 'README-ko.md') -Destination (Join-Path $publish 'README-ko.md') -Force
         Copy-Item -LiteralPath (Join-Path $workspace 'RECOVERY-GUIDE.md') -Destination (Join-Path $publish 'RECOVERY-GUIDE.md') -Force
         Copy-Item -LiteralPath (Join-Path $root 'OPERATION-LOGS.md') -Destination (Join-Path $publish 'OPERATION-LOGS.md') -Force
         if($RunTests){& (Join-Path $PSScriptRoot 'Test-Desktop.ps1') -AppPath (Join-Path $publish 'SafeSync.exe') -Bundled}
