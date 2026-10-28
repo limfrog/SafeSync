@@ -1,17 +1,17 @@
 {
   "schemaVersion": 1,
   "windows": {
-    "version": "1.0.0-preview.28",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.28.exe",
-    "sha256": "1878b98506a6918487944d532172150157f3d6be4cf593d6b97d87db99e39d17",
-    "size": 77687808,
-    "notes": "Horizon Entertainment · Google Drive 보관 사본을 보관 종료·사용자 제거 후 Google 휴지통으로 보내도록 개선한 공개 프리뷰입니다. 단방향의 삭제 반영 체크박스와 기존 작업 설정은 유지합니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
+    "version": "1.0.0-preview.29",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-Setup-1.0.0-preview.29.exe",
+    "sha256": "e9a3046bc70c320e4c6556f433a499f830df8c95ed879e8df59b42d6669291df",
+    "size": 77519872,
+    "notes": "Horizon Entertainment · 설치·시작 화면의 오래된 개발 문구와 배포 자료를 정리했습니다. 기존 작업·계정·백업 기록과 안전 검증, 선택형 상세 로그는 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 관리 폴더로 이전해야 합니다. 이미 제한 권한을 사용하는 작업은 이어 사용할 수 있습니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
   },
   "macOS": {
-    "version": "0.3.24",
-    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.24-universal.zip",
-    "sha256": "c226455aafe75a846610d14b661f62fb3388e97259b00bd73871a0fe1c056a4a",
-    "size": 4894239,
-    "notes": "Horizon Entertainment · Google Drive 보관 사본을 보관 종료·사용자 제거 후 Google 휴지통으로 보내도록 개선한 공개 프리뷰입니다. 단방향의 삭제 반영 체크박스와 기존 작업 설정은 유지합니다. 로컬·NAS·Dropbox 작업은 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 앱 관리 폴더로 이전해야 합니다. 프리뷰 22~25의 제한 권한 작업은 이어 사용합니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
+    "version": "0.3.25",
+    "url": "https://raw.githubusercontent.com/limfrog/SafeSync/main/dist/SafeSync-macOS-0.3.25-universal.zip",
+    "sha256": "34de1f0ab71df6ee5ea787ace05dc88c7732ce46a8c38097bd193dc836e395d9",
+    "size": 4894240,
+    "notes": "Horizon Entertainment · 설치·시작 화면의 오래된 개발 문구와 배포 자료를 정리했습니다. 기존 작업·계정·백업 기록과 안전 검증, 선택형 상세 로그는 유지합니다. Google Drive 전체 권한 구버전은 제한 권한으로 다시 연결하고 새 관리 폴더로 이전해야 합니다. 이미 제한 권한을 사용하는 작업은 이어 사용할 수 있습니다. 자세한 내용은 홈페이지 Release Notes를 확인하세요."
   }
 }

@@ -24,5 +24,20 @@
 
 - 로컬 설치 엔진: 37개 통과(검증 성공/손상 실패 후 임시 폴더 정리, 관련 없는 설정 보존 포함).
 - 앱 빌드: 경고/오류 없음.
-- 전체 회귀·UI·macOS·최종 설치본: 진행 중. 완료 후 아래에 실제 결과 기록.
+- 로컬 전체 회귀 1,577개, UI 662개 통과. PowerShell 런타임 미로드, 격리 검사 프로세스 정상 종료.
+- 제한된 실행 환경에서는 Windows 사용자 암호화 보호 API 검사가 실패했으며, 사용자 실제 계정 대신 합성 자료로 일반 권한 환경에서 재실행해 전체 통과.
+- macOS CI [40641192046](https://github.com/limfrog/SafeSync/actions/runs/40641192046), 원본 b545fe3: 전체 핵심 시나리오, XCTest 29개, 실제 Store 합성 네트워크·처리 예약 24개 통과. Universal arm64/x86_64, 번들·ad-hoc 서명·ZIP 검증 통과. Apple 공증/Developer ID 서명은 아님.
+- 내려받은 macOS 0.3.25(34) 앱의 버전, OAuth 등록 리소스 존재, 시험용 데이터 경로 문자열/시험 실행 파일/소스 부재 확인.
+- Windows CI [40641192076](https://github.com/limfrog/SafeSync/actions/runs/40641192076), 원본 b545fe3: Windows 2025 전체 성공. 재시작·SMB 양방향·강제 종료 복구 및 핵심 1,577개, 격리 NTFS VHD의 VSS 2개 통과. Windows 2022도 핵심·VSS·번들 UI 검사를 통과했지만 패키지 혼입 차단에서 SafeSync.Core.pdb가 발견되어 배포를 중단.
+- 6a2d80b에서 참조 프로젝트 심벌 복사도 제외. 로컬 비교에서 SafeSync.dll/Core.dll/deps.json/runtimeconfig.json의 SHA-256은 수정 전후 동일하고 PDB만 제외됨. [최종 Windows CI](https://github.com/limfrog/SafeSync/actions/runs/40642264073) Windows 2022/2025 모두 성공. 핵심 1,577개, 격리 VSS 2개, UI 662개, 설치 37개, 설치된 파일 493개 해시, 설치 앱 UI 662개 및 제거·내장 패키지 검증 통과.
 - 사용자 실행 앱·작업·계정·클라우드 데이터는 변경하지 않음. 실제 클라우드 부하/장시간 실행을 새로 수행했다는 뜻이 아님.
+
+## 최종 패키지
+
+Windows 실제 ZIP에서 PDB·소스·이전 검증 보고서 부재, 실행 파일/백업 라이브러리/VSS/런타임/제거기/현재 사용자 안내 존재를 확인. 앱의 오래된 시작 문장과 설치기의 PowerShell 안내 부재도 확인.
+
+```text
+e9a3046bc70c320e4c6556f433a499f830df8c95ed879e8df59b42d6669291df  SafeSync-Setup-1.0.0-preview.29.exe
+8b92c22af0d472b88daa46eba3b7c42dad1f6155e518564dad14d995d4f8753f  SafeSync-Windows-1.0.0-preview.29.zip
+34de1f0ab71df6ee5ea787ace05dc88c7732ce46a8c38097bd193dc836e395d9  SafeSync-macOS-0.3.25-universal.zip
+```
