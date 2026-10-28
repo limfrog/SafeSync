@@ -1,6 +1,8 @@
-# SafeSync macOS 0.3.23(32) — 공개 프리뷰
+# SafeSync macOS 0.3.24(33) — 공개 프리뷰
 
 개발자 및 운영자: **Horizon Entertainment** · 문의: **apps@horizonent.co.kr**.
+
+Google Drive 사본은 SafeSync 보관 종료나 사용자 제거 후 Google 휴지통으로 이동하며, 보통 30일 더 복원할 수 있고 그동안 저장 공간을 사용합니다. 삭제 전파는 기존 작업 설정의 **원본에서 사라진 파일은 백업 위치의 SafeSync 휴지통으로 이동** 체크박스로 선택합니다. [검증 기록](../windows-v2/PREVIEW28-VALIDATION.md).
 
 현재 버전은 대량 변경 보호·실행별 휴지통 복원·복원 검증을 추가합니다. [사용법](../RECOVERY-GUIDE.md)을 확인하세요. 상세 로그를 환경설정에서 켜고 끌 수 있으며 기본으로 꺼져 있습니다. 문제가 있어 검증할 때만 켜세요. 요청별 DNS·연결·TLS·전송·서버 응답 대기·수신과 전송 진행을 기록합니다. 검증된 내용이 같고 버전 정보만 바뀌거나 업로드 후 SHA-256이 추가된 경우 재비교를 줄입니다. [이번 검증](../windows-v2/PREVIEW27-VALIDATION.md) · [로그 안내](../windows-v2/OPERATION-LOGS.md).
 

@@ -31,18 +31,19 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
     private long totalBytes;
     private TrashRowInfo[] selection=[];
     private readonly bool dropbox;
+    private readonly bool google;
     private bool refreshingBatches;
     private int batchItemCount=-1;
     private string BatchOf(T item)=>item is TrashItem local ? local.BatchId : item is CloudTrashItem cloud ? cloud.BatchId : "";
     public TrashBrowserPresentation(Window window,ObservableCollection<T> items,Func<T,TrashRowInfo> describe,BackupJob job,int retentionDays,bool dropbox=false)
     {
-        this.window=window;this.items=items;this.describe=describe;this.dropbox=dropbox;grid=window.Find<DataGrid>("TrashGrid");
+        this.window=window;this.items=items;this.describe=describe;this.dropbox=dropbox;google=job.DestinationType=="GoogleDrive";grid=window.Find<DataGrid>("TrashGrid");
         view=new ListCollectionView((IList)items);view.SortDescriptions.Add(new("DeletedAt",ListSortDirection.Descending));grid.ItemsSource=view;
         totalBytes=items.Sum(i=>Math.Max(0,describe(i).Length));
         window.Find<TextBlock>("JobText").Text=job.Name+" · "+(job.DestinationType=="GoogleDrive" ? "Google Drive" : job.DestinationType=="Dropbox" ? "Dropbox" : "로컬 / 네트워크");
         window.Find<TextBlock>("BackupLocationText").Text=job.Destination;
         window.Find<TextBlock>("RetentionText").Text=$"보관 기간 {retentionDays:N0}일 · 파일별 보기";
-        window.Find<TextBlock>("DeletionPolicyText").Text=dropbox ? "복구 후 작업은 일시정지됩니다. ‘휴지통에서 제거’ 후에도 Dropbox 자체 복구 정책이 적용될 수 있습니다." : "복구 후 작업은 일시정지됩니다. 완전 삭제는 되돌릴 수 없습니다.";
+        window.Find<TextBlock>("DeletionPolicyText").Text=google ? "제거한 사본은 Google 휴지통으로 이동합니다. Google에서 보통 30일 후 영구 삭제되며, 그동안 저장 공간을 사용합니다." : dropbox ? "복구 후 작업은 일시정지됩니다. ‘휴지통에서 제거’ 후에도 Dropbox 자체 복구 정책이 적용될 수 있습니다." : "복구 후 작업은 일시정지됩니다. 완전 삭제는 되돌릴 수 없습니다.";
         renderTimer=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(100)};renderTimer.Tick+=(_,_)=>{renderTimer.Stop();Update();};
         debounce=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(250)};debounce.Tick+=(_,_)=>{debounce.Stop();ApplyFilter();};
         window.Find<TextBox>("SearchBox").TextChanged+=(_,_)=>
@@ -113,11 +114,11 @@ internal sealed class TrashBrowserPresentation<T> : IDisposable
         window.Find<Button>("VerifyTrashButton").IsEnabled=!busy && canOperate && selected.Length>0;
         window.Find<ComboBox>("BatchBox").IsEnabled=!busy;
         window.Find<Button>("RestoreButton").Content=selected.Length==0 ? "선택 파일 복구" : $"선택 복구 ({selected.Length:N0})";
-        window.Find<Button>("DeleteButton").Content=(dropbox ? "휴지통에서 제거" : "완전 삭제")+(selected.Length==0 ? "" : $" ({selected.Length:N0})");
+        window.Find<Button>("DeleteButton").Content=(google ? "Google 휴지통으로 이동" : dropbox ? "휴지통에서 제거" : "완전 삭제")+(selected.Length==0 ? "" : $" ({selected.Length:N0})");
         window.Find<TextBox>("SearchBox").IsEnabled=!busy;
         window.Find<Button>("ClearSearchButton").IsEnabled=!busy && window.Find<TextBox>("SearchBox").Text.Length>0;
         window.Find<Button>("RestoreButton").ToolTip=!canOperate ? "백업 작업이 끝난 뒤 복구할 수 있습니다." : "선택한 파일을 원래 백업 위치로 복구";
-        window.Find<Button>("DeleteButton").ToolTip=!canOperate ? "백업 작업이 끝난 뒤 삭제할 수 있습니다." : dropbox ? "SafeSync 휴지통에서 제거 (Dropbox 복구 정책은 별도)" : "선택한 파일을 완전히 삭제 (되돌릴 수 없음)";
+        window.Find<Button>("DeleteButton").ToolTip=!canOperate ? "백업 작업이 끝난 뒤 삭제할 수 있습니다." : google ? "SafeSync에서 제거하고 Google 휴지통으로 이동 (보통 30일 추가 보관)" : dropbox ? "SafeSync 휴지통에서 제거 (Dropbox 복구 정책은 별도)" : "선택한 파일을 완전히 삭제 (되돌릴 수 없음)";
         window.Find<ProgressBar>("BusyProgress").Visibility=busy ? Visibility.Visible : Visibility.Collapsed;
     }
     public void Dispose(){if(disposed)return;disposed=true;debounce.Stop();renderTimer.Stop();items.CollectionChanged-=ItemsChanged;((INotifyCollectionChanged)view).CollectionChanged-=ViewChanged;grid.SelectionChanged-=SelectionChanged;}

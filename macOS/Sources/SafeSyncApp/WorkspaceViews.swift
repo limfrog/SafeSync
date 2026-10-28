@@ -217,6 +217,8 @@ struct ProblemWorkspace: View {
 private struct TrashBatchChoice: Identifiable { var id: String; var label: String; var date: Date }
 struct TrashView: View {
     @EnvironmentObject var store: Store
+    private var removalTitle: String { store.trashJob?.cloudProvider == .googleDrive ? "Google 휴지통으로 이동" : store.trashJob?.cloudProvider == .dropbox ? "SafeSync 휴지통에서 제거" : "선택 파일 완전 삭제" }
+    private var removalMessage: String { store.trashJob?.cloudProvider == .googleDrive ? "Google 휴지통으로 이동합니다. 보통 30일 동안 Google에서 복원할 수 있으며 그동안 저장 공간을 사용합니다." : store.trashJob?.cloudProvider == .dropbox ? "SafeSync 휴지통에서 제거합니다. Dropbox 자체 복구 정책은 별도로 적용됩니다." : "이 작업은 되돌릴 수 없습니다." }
     @ViewState private var selection: Set<UUID> = []
     @ViewState private var search = ""
     @ViewState private var sourceTrash = false
@@ -255,7 +257,7 @@ struct TrashView: View {
             if !store.trashCheckSummary.isEmpty { Text(store.trashCheckSummary).font(.caption).foregroundStyle(.secondary) }
             Text("복구하면 작업은 일시정지됩니다. 파일을 확인한 뒤 다시 시작하세요.").font(.caption).foregroundStyle(.secondary)
             HStack {
-                Button("선택 파일 완전 삭제", role: .destructive) { confirmDelete = true }.disabled(chosen.isEmpty)
+                Button(removalTitle, role: .destructive) { confirmDelete = true }.disabled(chosen.isEmpty).help(removalMessage)
                 Spacer(); Button("백업 작업으로") { store.navigate(.jobs) }
                 Button("선택 복원 검증") { store.verifyTrash(chosen) }.disabled(chosen.isEmpty)
                 Button("선택 파일 복구") { store.restore(chosen) }.buttonStyle(.borderedProminent).disabled(chosen.isEmpty)
@@ -264,7 +266,7 @@ struct TrashView: View {
         .onAppear { refresh(); refreshBatches() }
         .onChange(of: batch) { _, _ in selection = [] }
         .onChange(of: store.trash.map(\.id)) { _, _ in refreshBatches() }
-        .confirmationDialog("선택한 \(chosen.count)개 파일을 완전히 삭제할까요?", isPresented: $confirmDelete, titleVisibility: .visible) { Button("완전 삭제", role: .destructive) { store.deleteTrash(chosen) }; Button("취소", role: .cancel) {} } message: { Text("이 작업은 되돌릴 수 없습니다.") }
+        .confirmationDialog("선택한 \(chosen.count)개 파일 · \(removalTitle)", isPresented: $confirmDelete, titleVisibility: .visible) { Button(removalTitle, role: .destructive) { store.deleteTrash(chosen) }; Button("취소", role: .cancel) {} } message: { Text(removalMessage) }
     }
     func refreshBatches() {
         let groups = Dictionary(grouping: store.trash, by: { $0.batchID ?? "legacy" })

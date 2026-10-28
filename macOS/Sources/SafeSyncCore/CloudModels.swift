@@ -129,11 +129,16 @@ public protocol RemoteStorage: Sendable {
     func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String, progress: @Sendable (Int64, Int64) -> Void) async throws -> RemoteItem
     func move(_ item: RemoteItem, name: String, parent: String) async throws -> RemoteItem
     func remove(_ item: RemoteItem) async throws
+    func discardTrash(_ item: RemoteItem) async throws
     func download(_ item: RemoteItem, to file: URL) async throws
     func download(_ item: RemoteItem) async throws -> Data
     func inventory(root: String, previous: RemoteIndex?) async throws -> RemoteIndex
 }
 public extension RemoteStorage {
+    func discardTrash(_ item: RemoteItem) async throws {
+        guard provider != .googleDrive else { throw BackupError.unsafe("Google 휴지통 이동을 지원하지 않는 연결입니다. 보관 사본을 유지합니다.") }
+        try await remove(item)
+    }
     func download(_ item: RemoteItem, to file: URL) async throws { try await download(item).write(to: file, options: .atomic) }
     func upload(file: URL, name: String, parent: String, modified: Date, resumeKey: String) async throws -> RemoteItem { try await upload(file: file, name: name, parent: parent, modified: modified, resumeKey: resumeKey, progress: { _, _ in }) }
 

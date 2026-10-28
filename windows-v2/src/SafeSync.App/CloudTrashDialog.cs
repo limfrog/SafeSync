@@ -56,7 +56,7 @@ internal sealed partial class DesktopController
             using var batch=new RecoveryBatch();if(busy || selected.Length==0)return;
             if(!jobs.Any(j=>ReferenceEquals(j,job))){status.Text="작업 설정이 변경되었습니다. 백업 작업 탭에서 휴지통을 다시 여세요.";Buttons();return;}
             if(scheduler.RunningCount>0 || verifyingJobs.Contains(job.Id) || LegacyRunning()){status.Text="모든 백업·복원 검증이 끝나고 기존 앱을 종료한 뒤 처리하세요.";return;}
-            var notice=job.DestinationType=="Dropbox" ? "SafeSync 휴지통에서 제거합니다. Dropbox 자체 복구 정책은 별도로 적용됩니다." : "클라우드에서 완전히 삭제합니다. 되돌릴 수 없습니다.";
+            var notice=job.DestinationType=="Dropbox" ? "SafeSync 휴지통에서 제거합니다. Dropbox 자체 복구 정책은 별도로 적용됩니다." : "SafeSync에서 제거하고 Google 휴지통으로 이동합니다. 보통 30일 동안 Google에서 복원할 수 있으며 그동안 저장 공간을 사용합니다.";
             if(!restore && !Confirm($"선택한 {selected.Length}개 파일을 삭제할까요?\n"+notice))return;
             scheduler.SetPaused(job,true);Save();RefreshActions();Jobs.Items.Refresh();busy=true;trashWorkspaceOperating=true;Buttons();
             var gate=CloudBackupEngine.ScopeGate(remote);bool entered=false;int done=0,failed=0;

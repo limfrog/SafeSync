@@ -1,6 +1,8 @@
 # SafeSync Windows 1.0.0 Preview
 
-현재 Windows 수정본은 **1.0.0-preview.27**입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. 자동 백업·양방향 동기화를 제공하는 Windows 데스크톱 앱의 프리뷰이며, 정식 안정판·코드 서명·클라우드 공개 심사 완료를 뜻하지 않습니다. 중요한 자료는 별도 사본을 보관하고 테스트 폴더에서 먼저 확인하세요.
+현재 Windows 수정본은 **1.0.0-preview.28**입니다. 개발자 및 운영자는 **Horizon Entertainment**, 문의 이메일은 **apps@horizonent.co.kr**입니다. 자동 백업·양방향 동기화를 제공하는 Windows 데스크톱 앱의 프리뷰이며, 정식 안정판·코드 서명·클라우드 공개 심사 완료를 뜻하지 않습니다. 중요한 자료는 별도 사본을 보관하고 테스트 폴더에서 먼저 확인하세요.
+
+Google Drive 사본은 SafeSync 보관 종료나 사용자 제거 후 Google 휴지통으로 이동하며, 보통 30일 더 복원할 수 있고 그동안 저장 공간을 사용합니다. 삭제 전파는 기존 작업 설정의 **원본에서 사라진 파일은 백업 위치의 SafeSync 휴지통으로 이동** 체크박스로 선택합니다. [검증 기록](../windows-v2/PREVIEW28-VALIDATION.md).
 
 ## 보호·복원 기능 추가
 

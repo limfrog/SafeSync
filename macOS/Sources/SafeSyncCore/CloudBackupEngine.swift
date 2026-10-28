@@ -598,7 +598,7 @@ public actor CloudBackupEngine {
         let entries = try await trashEntries(job, storage: storage)
         for item in items {
             guard let entry = entries.first(where: { $0.0.id == item.id }) else { continue }
-            try await storage.remove(entry.2)
+            try await storage.discardTrash(entry.2)
         }
     }
     public func pruneTrash(_ job: BackupJob, storage: any RemoteStorage, retentionDays: Int, now: Date = Date()) async throws -> Int {
@@ -608,7 +608,7 @@ public actor CloudBackupEngine {
         try await recover(job, storage: storage)
         let cutoff = now.addingTimeInterval(-Double(retentionDays) * 86400)
         let old = try await trashEntries(job, storage: storage).filter { $0.0.deletedAt < cutoff }
-        for entry in old { try await storage.remove(entry.2) }
+        for entry in old { try await storage.discardTrash(entry.2) }
         return old.count
     }
 

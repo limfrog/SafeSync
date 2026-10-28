@@ -27,6 +27,7 @@ string Write(string root,string relative,string text,int age=0)
 }
 try
 {
+    if(args.Contains("--google-trash")){await GoogleTrashTests.RunAsync(Check);Console.WriteLine($"PASS: {passed} Google archive disposal assertions.");return;}
     if(args.Contains("--recovery")){await RecoveryProtectionTests.RunAsync(testRoot,Check);Console.WriteLine($"PASS: {passed} recovery/protection/VSS assertions. {testRoot}");return;}
     var realVss=Array.IndexOf(args,"--real-vss");
     if(realVss>=0){await RecoveryProtectionTests.RealVssAsync(args[realVss+1],args[realVss+2],Check);Console.WriteLine($"PASS: {passed} native VSS assertions.");return;}
@@ -221,6 +222,7 @@ try
     await OperationLogTests.RunAsync(testRoot,Check);
     await RecoveryProtectionTests.RunAsync(testRoot,Check);
     await GoogleInventoryTests.RunAsync(testRoot,Check);
+    await GoogleTrashTests.RunAsync(Check);
     await CloudTests.RunAsync(testRoot,Check);
     await TwoWayTests.RunAsync(testRoot,Check);
     await DropboxScopeTests.RunAsync(testRoot,Check);

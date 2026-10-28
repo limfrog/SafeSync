@@ -139,6 +139,11 @@ public struct GoogleDriveStorage: RemoteStorage {
         _ = try await api("files/" + item.id, method: "DELETE")
         if item.folder { await folderIndex.invalidate(id: item.id) }
     }
+    public func discardTrash(_ item: RemoteItem) async throws {
+        let result = try await api("files/" + item.id, method: "PATCH", query: ["fields":"id,trashed"], body: ["trashed":true])
+        guard result["id"] as? String == item.id, result["trashed"] as? Bool == true else { throw BackupError.unsafe("Google 휴지통 이동을 확인하지 못했습니다. 보관 항목을 다시 확인하세요.") }
+        if item.folder { await folderIndex.invalidate(id: item.id) }
+    }
     public func download(_ item: RemoteItem, to file: URL) async throws {
         if transport != nil { try await download(item).write(to: file, options: .atomic); return }
         try await CloudAuthorization.shared.download(account, url: HTTP.url("https://www.googleapis.com/drive/v3/files/" + item.id, query: ["alt": "media", "supportsAllDrives": "true"]), to: file)

@@ -256,7 +256,19 @@ public sealed partial class GoogleDriveStore(CloudHttp http,ISecretVault vault,s
         bool diagnostic=Regex.IsMatch(relative,"^SafeSync-test-(?:[a-f0-9]{32}|[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})$",RegexOptions.CultureInvariant|RegexOptions.IgnoreCase);
         if(!diagnostic && !relative.StartsWith(".safesync-trash/",StringComparison.Ordinal) && !relative.StartsWith(".safesync-staging/",StringComparison.Ordinal))throw new InvalidDataException("휴지통/검증용 임시 파일만 삭제할 수 있습니다.");
         var metadata=await Find(relative,token,true);if(metadata==null)return;var item=Parse(metadata.Value);
-        using var response=await http.SendAsync(()=>new HttpRequestMessage(HttpMethod.Delete,Api+"files/"+Id(item.Id)+"?supportsAllDrives=true"),token);
+        if(relative.StartsWith(".safesync-trash/",StringComparison.Ordinal))
+        {
+            // Archive disposal retains Google's own recovery window. Never fall
+            // back to permanent deletion if trashing fails or is not confirmed.
+            var result=await http.JsonAsync(HttpMethod.Patch,Api+"files/"+Id(item.Id)+"?supportsAllDrives=true&fields=id,trashed",new{trashed=true},token);
+            if(result.String("id")!=item.Id || !result.True("trashed"))throw new IOException("Google 휴지통 이동을 확인하지 못했습니다. SafeSync 보관 항목을 다시 확인하세요.");
+        }
+        else
+        {
+            // Incomplete staging objects and isolated connection-test folders
+            // contain no retained backup versions and keep explicit cleanup.
+            using var response=await http.SendAsync(()=>new HttpRequestMessage(HttpMethod.Delete,Api+"files/"+Id(item.Id)+"?supportsAllDrives=true"),token);
+        }
         if(item.Folder)InvalidateFolders(relative);
     }
     private static RemoteItem Parse(JsonElement metadata)

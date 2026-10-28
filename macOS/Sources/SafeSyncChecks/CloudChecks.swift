@@ -82,6 +82,8 @@ actor MemoryCloud: RemoteStorage {
         var pending = [item]
         while let current = pending.popLast() { pending += children(current.locator); items.removeValue(forKey: current.id); data.removeValue(forKey: current.id) }
     }
+    var discardedArchives: [String] = []
+    func discardTrash(_ item: RemoteItem) { discardedArchives.append(item.id); remove(item) }
     func download(_ item: RemoteItem) throws -> Data { guard let bytes = data[item.id] else { throw BackupError.unsafe("Missing mock bytes") }; return bytes }
     func inventory(root: String, previous: RemoteIndex?) -> RemoteIndex {
         var result = RemoteIndex(); result.root = root

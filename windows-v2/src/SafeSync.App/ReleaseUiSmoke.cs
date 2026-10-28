@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
@@ -7,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using SafeSync.Core;
 
 namespace SafeSync.App;
 
@@ -45,6 +47,18 @@ internal sealed partial class DesktopController
                 Check(button.ActualWidth>60 && button.IsVisible,"Settings buttons are unusable");
             }
             window.Close();
+            foreach(string provider in new[]{"Local","Dropbox","GoogleDrive"})
+            {
+                var trash=NewDialog("Trash",false);Theme.Apply(trash,mode);trash.Width=trash.MinWidth;trash.Height=trash.MinHeight;trash.Show();
+                var items=new ObservableCollection<TrashItem>{new("storage","file.txt",DateTime.Now,"original","file.txt",10)};
+                using var presentation=new TrashBrowserPresentation<TrashItem>(trash,items,item=>new(item.Name,item.OriginalPath,item.DeletedAt,item.Length),new BackupJob{DestinationType=provider},100,provider=="Dropbox");
+                presentation.SetState(false,true);trash.Find<DataGrid>("TrashGrid").SelectedItem=items[0];trash.UpdateLayout();
+                var remove=trash.Find<Button>("DeleteButton");Check(remove.IsEnabled,"Cloud trash action cannot be used: "+provider);
+                Check(remove.Content.ToString()!.Contains(provider=="GoogleDrive" ? "Google 휴지통" : provider=="Dropbox" ? "제거" : "완전 삭제"),"Wrong trash disposal label: "+provider);
+                if(provider=="GoogleDrive")Check(trash.Find<TextBlock>("DeletionPolicyText").Text.Contains("30일") && trash.Find<TextBlock>("DeletionPolicyText").Text.Contains("저장 공간"),"Google trash recovery/storage notice missing");
+                var point=remove.TranslatePoint(new Point(),trash);Check(point.X>=0 && point.Y+remove.ActualHeight<=trash.ActualHeight,"Trash removal button clipped: "+provider);
+                trash.Close();
+            }
             foreach(string view in new[]{"MassChangeReview","RestoreCheck"})
             {
                 var dialog=NewDialog(view,false);Theme.Apply(dialog,mode);dialog.Width=dialog.MinWidth;dialog.Height=dialog.MinHeight;dialog.Show();dialog.UpdateLayout();
