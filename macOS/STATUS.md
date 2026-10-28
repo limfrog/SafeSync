@@ -1,3 +1,7 @@
+# macOS 0.3.24(33) — Google 보관 사본의 휴지통 이동
+
+SafeSync 보관 종료·사용자 제거는 Google 휴지통 이동으로 분리했다. 실패 시 영구삭제로 대체하지 않는다. 기존 동기화 방향·삭제 반영 체크박스·작업 설정은 유지한다. [이번 검증](../windows-v2/PREVIEW28-VALIDATION.md)과 [사용법](../RECOVERY-GUIDE.md)을 우선한다.
+
 # macOS 0.3.23(32) — 보호·복원 기능
 
 공통 대량 변경 보호·실행별 복원·현재 백업 및 보관 사본 검증을 반영했습니다. 로그 선택은 환경설정 맨 아래입니다. VSS는 Windows 전용입니다. [사용법](../RECOVERY-GUIDE.md)과 [최종 검증](../windows-v2/PREVIEW27-VALIDATION.md)을 우선 참고하세요.
