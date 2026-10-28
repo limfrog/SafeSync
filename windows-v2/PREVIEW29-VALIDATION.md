@@ -41,3 +41,12 @@ e9a3046bc70c320e4c6556f433a499f830df8c95ed879e8df59b42d6669291df  SafeSync-Setup
 8b92c22af0d472b88daa46eba3b7c42dad1f6155e518564dad14d995d4f8753f  SafeSync-Windows-1.0.0-preview.29.zip
 34de1f0ab71df6ee5ea787ace05dc88c7732ce46a8c38097bd193dc836e395d9  SafeSync-macOS-0.3.25-universal.zip
 ```
+
+## 게시 후 확인
+
+- 공개 파일 커밋 dd483fa, 홈페이지 0936609. Windows 런타임 b545fe3, Windows 포장 수정 6a2d80b, macOS 원본 b545fe3.
+- 업데이트 카탈로그 workflow 40643432848 성공. 공개 feed의 양쪽 버전·크기·체크섬 일치.
+- 설치 EXE·Windows ZIP·macOS ZIP을 공개 URL에서 각각 다시 내려받아 위 SHA-256과 일치 확인.
+- 홈페이지 SafeSync 배포 40643488623 성공. 실제 상세페이지·Release Notes·Apps 페이지 HTTP 200, 프리뷰 29/macOS 0.3.25와 앱 카드 확인.
+- 홈페이지의 공통 디자인과 기존 배포 이력 유지. 정식 안정판·서명/공증 완료로 표시하지 않음.
+- 이번 작업의 격리 로컬 시험 폴더·다운로드·압축 해제 자료 정리. 기존 산출물·사용자 앱·설정·작업·계정·클라우드 자료 보존.
