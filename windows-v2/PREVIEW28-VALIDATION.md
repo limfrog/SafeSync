@@ -33,3 +33,11 @@ Windows: **메인창 → 작업 선택 → 작업 관리 → 작업 수정** 아
 | `SafeSync-Setup-1.0.0-preview.28.exe` | 77,687,808 | `1878b98506a6918487944d532172150157f3d6be4cf593d6b97d87db99e39d17` |
 | `SafeSync-Windows-1.0.0-preview.28.zip` | 77,485,119 | `d7b8a2fead1b961933ede508636b7c13b6411e674ea0097a9540d524aa57dba5` |
 | `SafeSync-macOS-0.3.24-universal.zip` | 4,894,239 | `c226455aafe75a846610d14b661f62fb3388e97259b00bd73871a0fe1c056a4a` |
+
+## 공개 게시 확인
+
+공개 배포 `3a16eb1`의 세 파일을 GitHub 공개 주소에서 다시 내려받아 위 크기·해시와 모두 일치함을 확인했다. 공개 업데이트 목록도 Windows preview.28 / macOS 0.3.24 및 같은 해시를 제공하며 [목록 게시 검사 40615029765](https://github.com/limfrog/SafeSync/actions/runs/40615029765)가 성공했다.
+
+홈페이지 `e1aa762`의 [SafeSync 페이지 배포 40615087390](https://github.com/limfrog/horizonent-site/actions/runs/40615087390)가 성공했다. 기존 페이지 디자인과 apps 카드는 유지한다. 실제 상세페이지·릴리스 노트·개인정보처리방침의 HTTP 200과 새 버전·Google 휴지통·체크박스 안내를 확인했다. 이번 작업의 검사·다운로드 임시 자료와 UI 검사 폴더 2개를 정리했고 최종 패키지·검증 문서는 보존했다.
+
+홈페이지 전체 [빌드·배포 40615086975](https://github.com/limfrog/horizonent-site/actions/runs/40615086975)도 성공했다. 정리 후 세 공개 패키지의 해시가 그대로임을 다시 확인했다.
