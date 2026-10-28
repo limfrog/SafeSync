@@ -13,7 +13,7 @@ if(-not $publish.StartsWith((Join-Path $root 'artifacts')+[IO.Path]::DirectorySe
 $unexpected=@(Get-ChildItem -LiteralPath $publish -Recurse -File | Where-Object {
     $_.Extension -in @('.pdb','.ps1','.cs','.swift') -or $_.Name -match '^(PREVIEW.+|TEST-RESULTS|MIGRATION|PARITY-AND-PERFORMANCE|RELEASE-VALIDATION|GOOGLE-LIVE-RESULTS|TWOWAY-AND-DROPBOX|DROPBOX-PRODUCTION)\.md$' -or $_.Name -match '^SafeSync\.(Tests|RestartProbe)'
 })
-if($unexpected.Count){throw 'Developer artifacts are present in the release folder. Use a clean release output directory.'}
+if($unexpected.Count){throw ('Developer artifacts are present in the release folder: '+(($unexpected | ForEach-Object {$_.Name}) -join ', ')+'. Use a clean release output directory.')}
 $stage=Join-Path $root ('artifacts/packaging-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($stage)
 $compiler=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'

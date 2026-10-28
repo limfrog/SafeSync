@@ -34,7 +34,7 @@ try {
     }
     if($BundleRuntime){
         $publish=Join-Path $root ('artifacts/SafeSync-'+$version+'-Windows-x64')
-        & $DotnetPath publish $app -c Release --no-restore --no-self-contained -p:AppHostRelativeDotNet=runtime -p:AppHostDotNetSearch=AppRelative -p:CopyOutputSymbolsToPublishDirectory=false -o $publish --nologo $appKeyArg
+        & $DotnetPath publish $app -c Release --no-restore --no-self-contained -p:AppHostRelativeDotNet=runtime -p:AppHostDotNetSearch=AppRelative -p:CopyOutputSymbolsToPublishDirectory=false -p:AllowedReferenceRelatedFileExtensions=.xml -o $publish --nologo $appKeyArg
         if($LASTEXITCODE -ne 0){throw 'Native preview publish failed.'}
         # Use the official, checksum-verified SDK's redistributable runtimes.
         $dotnetRoot=Split-Path (Get-Command $DotnetPath).Source -Parent
